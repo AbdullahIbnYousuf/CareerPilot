@@ -3,6 +3,9 @@ Hybrid Search Service — CareerPilot
 
 Always call the hybrid_search stored procedure via Supabase RPC.
 NEVER write raw SQL for search.
+
+Note: The supabase client from db.supabase is synchronous (supabase-py sync client).
+      These functions are defined as async for FastAPI compatibility but use sync calls.
 """
 
 from db.supabase import supabase
@@ -17,11 +20,11 @@ async def hybrid_search(
     """
     Run hybrid search (dense + BM25 + RRF) over cv_chunks for a given user.
 
-    Returns a list of matching chunk dicts with at least: content, section, similarity.
+    Returns a list of matching chunk dicts with: id, content, section, score.
     """
     query_embedding = embed_query(query)
 
-    result = await supabase.rpc(
+    result = supabase.rpc(
         "hybrid_search",
         {
             "query_embedding": query_embedding,
@@ -46,7 +49,7 @@ async def search_by_section(
     """
     query_embedding = embed_query(query)
 
-    result = await supabase.rpc(
+    result = supabase.rpc(
         "hybrid_search",
         {
             "query_embedding": query_embedding,
