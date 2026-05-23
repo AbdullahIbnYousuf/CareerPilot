@@ -11,7 +11,6 @@ NEVER use: pypdf, pdfplumber, pdfminer, docling, unstructured
 import io
 import os
 import json
-from typing import Dict
 from google import genai
 from google.genai import types
 from docx import Document
@@ -38,6 +37,8 @@ Rules:
 - For education: include certifications and online courses
 - For projects: include academic, personal, and professional projects"""
 
+_REQUIRED_KEYS = ("skills", "experience", "education", "projects")
+
 
 def _clean_json_response(text: str) -> str:
     """Remove markdown code blocks and clean JSON response."""
@@ -55,7 +56,32 @@ def _clean_json_response(text: str) -> str:
     return text.strip()
 
 
-def parse_pdf_cv(file_bytes: bytes) -> Dict[str, str]:
+def _parse_structured_response(response_text: str) -> dict[str, str]:
+    """Parse and normalize Gemini JSON into the four required CV sections."""
+    cleaned = _clean_json_response(response_text)
+
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Failed to parse Gemini response as JSON: {e}") from e
+
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini response must be a JSON object")
+
+    normalized: dict[str, str] = {}
+    for key in _REQUIRED_KEYS:
+        value = parsed.get(key, "")
+        if value is None:
+            normalized[key] = ""
+        elif isinstance(value, str):
+            normalized[key] = value.strip()
+        else:
+            normalized[key] = json.dumps(value, ensure_ascii=False)
+
+    return normalized
+
+
+def parse_pdf_cv(file_bytes: bytes) -> dict[str, str]:
     """
     Parse PDF CV using Gemini 2.0 Flash multimodal.
     Returns structured JSON with 4 sections.
@@ -67,23 +93,10 @@ def parse_pdf_cv(file_bytes: bytes) -> Dict[str, str]:
         contents=[_STRUCTURED_PROMPT, pdf_part],
     )
     
-    response_text = _clean_json_response(response.text or "")
-    
-    try:
-        parsed_data = json.loads(response_text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse Gemini response as JSON: {e}")
-    
-    # Validate required keys
-    required_keys = ["skills", "experience", "education", "projects"]
-    for key in required_keys:
-        if key not in parsed_data:
-            parsed_data[key] = ""
-    
-    return parsed_data
+    return _parse_structured_response(response.text or "")
 
 
-def parse_docx_cv(file_bytes: bytes) -> Dict[str, str]:
+def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     """
     Parse DOCX CV using python-docx + Gemini structuring.
     Returns structured JSON with 4 sections.
@@ -103,23 +116,10 @@ def parse_docx_cv(file_bytes: bytes) -> Dict[str, str]:
         contents=structuring_prompt,
     )
     
-    response_text = _clean_json_response(response.text or "")
-    
-    try:
-        parsed_data = json.loads(response_text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse Gemini response as JSON: {e}")
-    
-    # Validate required keys
-    required_keys = ["skills", "experience", "education", "projects"]
-    for key in required_keys:
-        if key not in parsed_data:
-            parsed_data[key] = ""
-    
-    return parsed_data
+    return _parse_structured_response(response.text or "")
 
 
-def parse_cv(file_bytes: bytes, filename: str) -> Dict[str, str]:
+def parse_cv(file_bytes: bytes, filename: str) -> dict[str, str]:
     """
     Route to correct parser based on file extension.
     Returns structured JSON with 4 sections: skills, experience, education, projects.

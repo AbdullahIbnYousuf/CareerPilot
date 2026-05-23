@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Briefcase } from "lucide-react";
 
 export default function Home() {
@@ -16,12 +16,12 @@ export default function Home() {
           Your agentic career co-pilot. Hunts jobs, scores CV fit, drafts cover letters, and tracks applications.
         </p>
         <div className="flex gap-4 pt-4">
-          <Button asChild size="lg">
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <Link href="/signup">Create Account</Link>
-          </Button>
+          <Link href="/login" className={buttonVariants({ size: "lg" })}>
+            Sign In
+          </Link>
+          <Link href="/signup" className={buttonVariants({ variant: "outline", size: "lg" })}>
+            Create Account
+          </Link>
         </div>
       </div>
     </div>
