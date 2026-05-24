@@ -1,11 +1,24 @@
-from fastapi import FastAPI, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from app.core.embedding import process_and_store_resume
-from app.agents.graph import CareerPilotAgent
-from typing import List
+"""
+CareerPilot — FastAPI Application Entry Point
 
-app = FastAPI()
+Routers (one per pillar, as per AGENTS.md):
+  /cv        → Pillar 2: CV Intelligence
+  /jobs      → Pillar 1: Job Hunter Agent
+  /chat      → Pillar 3: AI Assistant (Groq streaming SSE)
+  /tracker   → Pillar 4: Kanban Tracker
+  /dashboard → Pillar 4: Progress Dashboard + Nudges
+"""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from routers import cv, jobs, chat, tracker, dashboard
+
+app = FastAPI(
+    title="CareerPilot API",
+    description="AI-powered career co-pilot — job hunting, CV intelligence, streaming chat, and productivity tracking.",
+    version="1.0.0",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -15,40 +28,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class ChatRequest(BaseModel):
-    user_id: str
-    message: str
-    history: List[dict] = []
+# Register pillar routers
+app.include_router(cv.router)
+app.include_router(jobs.router)
+app.include_router(chat.router)
+app.include_router(tracker.router)
+app.include_router(dashboard.router)
 
-class JobRequest(BaseModel):
-    user_id: str
-    query: str
 
-@app.post("/upload-resume")
-async def upload_resume(user_id: str, file: UploadFile = File(...)):
-    try:
-        contents = await file.read()
-        result = process_and_store_resume(user_id, contents, file.filename)
-        return result
-    except Exception as e:
-        return {"status": "error", "detail": str(e)}
-
-@app.post("/chat")
-async def chat(req: ChatRequest):
-    try:
-        agent = CareerPilotAgent(req.user_id)
-        from langchain_core.messages import HumanMessage, AIMessage
-        history_mapped = [HumanMessage(content=h['content']) if h['role']=='user' else AIMessage(content=h['content']) for h in req.history]
-        response = await agent.chat(req.message, history_mapped)
-        return {"response": response}
-    except Exception as e:
-        return {"response": f"Sorry, I encountered an error: {str(e)}"}
-
-@app.post("/hunt-jobs")
-async def hunt_jobs(req: JobRequest):
-    try:
-        agent = CareerPilotAgent(req.user_id)
-        jobs = await agent.hunt_jobs(req.query)
-        return {"jobs": jobs}
-    except Exception as e:
-        return {"jobs": [], "error": str(e)}
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "careerpilot-api"}
