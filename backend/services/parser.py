@@ -1,8 +1,8 @@
 """
 CV Parser Service - CareerPilot
 
-PDF  -> Gemini 2.0 Flash multimodal (handles multi-column Canva/Figma CVs)
-DOCX -> python-docx text extraction + Gemini structuring
+PDF  -> PyMuPDF text extraction + Groq Llama structuring
+DOCX -> python-docx text extraction + Groq Llama structuring
 
 Returns structured JSON with 4 sections: skills, experience, education, projects
 NEVER use: pypdf, pdfplumber, pdfminer, docling, unstructured
@@ -11,12 +11,13 @@ NEVER use: pypdf, pdfplumber, pdfminer, docling, unstructured
 import io
 import os
 import json
-from google import genai
-from google.genai import types
+import fitz  # PyMuPDF
+from groq import Groq
 from docx import Document
 
-# Initialize Gemini client
-_client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+# Initialize Groq client
+_groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+_MODEL = "llama-3.3-70b-versatile"
 
 # Structured parsing prompt
 _STRUCTURED_PROMPT = """You are a CV parsing assistant. Extract information from this CV and return ONLY a valid JSON object with these exact keys:
@@ -57,16 +58,16 @@ def _clean_json_response(text: str) -> str:
 
 
 def _parse_structured_response(response_text: str) -> dict[str, str]:
-    """Parse and normalize Gemini JSON into the four required CV sections."""
+    """Parse and normalize LLM JSON into the four required CV sections."""
     cleaned = _clean_json_response(response_text)
 
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse Gemini response as JSON: {e}") from e
+        raise ValueError(f"Failed to parse LLM response as JSON: {e}") from e
 
     if not isinstance(parsed, dict):
-        raise ValueError("Gemini response must be a JSON object")
+        raise ValueError("LLM response must be a JSON object")
 
     normalized: dict[str, str] = {}
     for key in _REQUIRED_KEYS:
@@ -83,22 +84,33 @@ def _parse_structured_response(response_text: str) -> dict[str, str]:
 
 def parse_pdf_cv(file_bytes: bytes) -> dict[str, str]:
     """
-    Parse PDF CV using Gemini 2.0 Flash multimodal.
+    Parse PDF CV using PyMuPDF text extraction + Groq structuring.
     Returns structured JSON with 4 sections.
     """
-    pdf_part = types.Part.from_bytes(data=file_bytes, mime_type="application/pdf")
-    
-    response = _client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=[_STRUCTURED_PROMPT, pdf_part],
+    doc = fitz.open(stream=file_bytes, filetype="pdf")
+    full_text = ""
+    for page in doc:
+        full_text += page.get_text()
+    doc.close()
+
+    if not full_text.strip():
+        raise ValueError("PDF file appears to be empty or unreadable")
+
+    structuring_prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
+
+    response = _groq.chat.completions.create(
+        model=_MODEL,
+        messages=[{"role": "user", "content": structuring_prompt}],
+        temperature=0.1,
+        response_format={"type": "json_object"},
     )
-    
-    return _parse_structured_response(response.text or "")
+
+    return _parse_structured_response(response.choices[0].message.content or "")
 
 
 def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     """
-    Parse DOCX CV using python-docx + Gemini structuring.
+    Parse DOCX CV using python-docx + Groq structuring.
     Returns structured JSON with 4 sections.
     """
     # Extract text with python-docx
@@ -108,15 +120,17 @@ def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     if not full_text.strip():
         raise ValueError("DOCX file appears to be empty")
     
-    # Use Gemini to structure the extracted text
+    # Use Groq to structure the extracted text
     structuring_prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
     
-    response = _client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=structuring_prompt,
+    response = _groq.chat.completions.create(
+        model=_MODEL,
+        messages=[{"role": "user", "content": structuring_prompt}],
+        temperature=0.1,
+        response_format={"type": "json_object"},
     )
     
-    return _parse_structured_response(response.text or "")
+    return _parse_structured_response(response.choices[0].message.content or "")
 
 
 def parse_cv(file_bytes: bytes, filename: str) -> dict[str, str]:

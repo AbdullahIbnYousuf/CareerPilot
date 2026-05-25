@@ -22,12 +22,13 @@ from langgraph.graph import StateGraph, END
 from services.cache import get_cached_jobs, cache_jobs
 from services.fit_score import compute_fit_score
 from services.searcher import hybrid_search
-from google import genai
+from groq import Groq
 
 # Setup API keys and clients
 JSEARCH_API_KEY: str = os.environ.get("JSEARCH_API_KEY", "")
 TAVILY_API_KEY: str  = os.environ.get("TAVILY_API_KEY", "")
-_client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+_groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+_MODEL = "llama-3.3-70b-versatile"
 
 
 # ---------------------------------------------------------------------------
@@ -179,11 +180,12 @@ def draft_cover_letter_tool(job_description: str, cv_context: str) -> str:
         "Keep it concise, elegant, and ready for submission."
     )
     try:
-        resp = _client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
+        resp = _groq.chat.completions.create(
+            model=_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
         )
-        return (resp.text or "").strip()
+        return (resp.choices[0].message.content or "").strip()
     except Exception as e:
         return f"Failed to generate cover letter: {e}"
 

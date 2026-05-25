@@ -19,7 +19,7 @@ filetype==1.2.0
 frozenlist==1.8.0
 fsspec==2026.4.0
 google-auth==2.53.0
-google-genai==1.75.0
+pymupdf>=1.24.0
 greenlet==3.5.1
 h11==0.16.0
 h2==4.3.0
