@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/lib/supabase";
+import type { Application, ApplicationStatus } from "@/types";
 import {
   Loader2,
   GripVertical,
@@ -18,36 +20,45 @@ import {
 const STATUSES = [
   { key: "saved", label: "Saved", icon: Briefcase, color: "bg-slate-500" },
   { key: "applied", label: "Applied", icon: Send, color: "bg-blue-500" },
-  { key: "interviewing", label: "Interviewing", icon: Users, color: "bg-amber-500" },
+  {
+    key: "interviewing",
+    label: "Interviewing",
+    icon: Users,
+    color: "bg-amber-500",
+  },
   { key: "offer", label: "Offer", icon: Trophy, color: "bg-emerald-500" },
   { key: "rejected", label: "Rejected", icon: XCircle, color: "bg-red-500" },
 ] as const;
-
-type ApplicationStatus = (typeof STATUSES)[number]["key"];
-
-interface Application {
-  id: string;
-  user_id: string;
-  job_id: string;
-  status: ApplicationStatus;
-  applied_at: string;
-}
 
 export function KanbanBoard() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   useEffect(() => {
-    fetchApplications();
+    const loadUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error) {
+        setUserId(data.user?.id ?? null);
+      }
+    };
+    loadUser();
   }, []);
 
-  const fetchApplications = async () => {
+  useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    fetchApplications(userId);
+  }, [userId]);
+
+  const fetchApplications = async (activeUserId: string) => {
     try {
-      const res = await fetch(`${baseUrl}/tracker/test-user-id`);
+      const res = await fetch(`${baseUrl}/tracker/${activeUserId}`);
       if (res.ok) {
         const data = await res.json();
         setApplications(data.applications || []);
@@ -61,7 +72,7 @@ export function KanbanBoard() {
 
   const moveApplication = async (
     appId: string,
-    newStatus: ApplicationStatus
+    newStatus: ApplicationStatus,
   ) => {
     setUpdatingId(appId);
     try {
@@ -72,7 +83,7 @@ export function KanbanBoard() {
       });
       if (res.ok) {
         setApplications((prev) =>
-          prev.map((a) => (a.id === appId ? { ...a, status: newStatus } : a))
+          prev.map((a) => (a.id === appId ? { ...a, status: newStatus } : a)),
         );
       }
     } catch {
@@ -103,9 +114,7 @@ export function KanbanBoard() {
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
       {STATUSES.map((status) => {
         const Icon = status.icon;
-        const columnApps = applications.filter(
-          (a) => a.status === status.key
-        );
+        const columnApps = applications.filter((a) => a.status === status.key);
 
         return (
           <div key={status.key} className="space-y-3">

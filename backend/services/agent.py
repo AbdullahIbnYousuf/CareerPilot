@@ -116,56 +116,46 @@ async def _search_tavily(query: str, location: str = "") -> list[dict]:
 # ---------------------------------------------------------------------------
 
 @tool
-def search_jobs_tool(query: str, location: str = "") -> List[dict]:
+async def search_jobs_tool(query: str, location: str = "") -> List[dict]:
     """Search for jobs using the priority fallback pipeline: JSearch -> Remotive -> Tavily."""
-    # Since tools are usually run synchronously in LangChain, we run this inside an event loop if async
-    import asyncio
-    
-    async def _async_search():
-        # JSearch
-        try:
-            jobs = await _search_jsearch(query, location)
-            if jobs:
-                return jobs
-        except Exception:
-            pass
-
-        # Remotive
-        try:
-            jobs = await _search_remotive(query)
-            if jobs:
-                return jobs
-        except Exception:
-            pass
-
-        # Tavily
-        try:
-            jobs = await _search_tavily(query, location)
+    # JSearch
+    try:
+        jobs = await _search_jsearch(query, location)
+        if jobs:
             return jobs
-        except Exception:
-            return []
-            
-    return asyncio.run(_async_search())
+    except Exception:
+        pass
+
+    # Remotive
+    try:
+        jobs = await _search_remotive(query)
+        if jobs:
+            return jobs
+    except Exception:
+        pass
+
+    # Tavily
+    try:
+        jobs = await _search_tavily(query, location)
+        return jobs
+    except Exception:
+        return []
 
 
 @tool
-def compute_fit_score_tool(job_description: str, user_id: str) -> dict:
+async def compute_fit_score_tool(job_description: str, user_id: str) -> dict:
     """Programmatically compute a matching fit score (0-100) and get a detailed one-sentence explanation."""
-    import asyncio
-    return asyncio.run(compute_fit_score(job_description, user_id))
+    return await compute_fit_score(job_description, user_id)
 
 
 @tool
-def get_cv_context_tool(user_id: str) -> str:
+async def get_cv_context_tool(user_id: str) -> str:
     """Retrieve highly relevant section chunks from a user's CV via hybrid vector search."""
-    import asyncio
-    async def _async_get():
-        try:
-            chunks = await hybrid_search(query="", user_id=user_id, match_count=5)
-            return "\n\n".join(f"[{c['section']}] {c['content']}" for c in chunks)
-        except Exception:
-            return "No CV context available."
-    return asyncio.run(_async_get())
+    try:
+        chunks = await hybrid_search(query="", user_id=user_id, match_count=5)
+        return "\n\n".join(f"[{c['section']}] {c['content']}" for c in chunks)
+    except Exception:
+        return "No CV context available."
 
 
 @tool

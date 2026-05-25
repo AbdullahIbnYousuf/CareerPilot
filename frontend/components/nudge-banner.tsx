@@ -24,7 +24,7 @@ export function NudgeBanner({ message }: NudgeBannerProps) {
             {message}
           </p>
         </div>
-        <button 
+        <button
           onClick={() => setIsVisible(false)}
           className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
         >

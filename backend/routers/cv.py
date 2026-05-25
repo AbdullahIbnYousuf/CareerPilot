@@ -142,7 +142,7 @@ async def upload_cv(
 
     # ── 5. Replace old CV for this user (cascade removes old cv_chunks) ───────
     try:
-        supabase.table("cvs").delete().eq("user_id", user_id).execute()
+        await supabase.table("cvs").delete().eq("user_id", user_id).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to remove previous CV: {str(e)}")
 
@@ -151,7 +151,7 @@ async def upload_cv(
     parsed_at = datetime.utcnow().isoformat()
 
     try:
-        result = supabase.table("cvs").insert({
+        result = await supabase.table("cvs").insert({
             "id": cv_id,
             "user_id": user_id,
             "file_name": filename,
@@ -192,7 +192,7 @@ async def upload_cv(
         ]
 
         try:
-            supabase.table("cv_chunks").insert(rows).execute()
+            await supabase.table("cv_chunks").insert(rows).execute()
             chunks_stored = len(rows)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to store CV chunks: {str(e)}")
@@ -217,7 +217,7 @@ async def list_cvs(
 ):
     """List all CVs for a user, newest first."""
     try:
-        result = supabase.table("cvs") \
+        result = await supabase.table("cvs") \
             .select("id, user_id, file_name, file_url, parsed_at, created_at") \
             .eq("user_id", user_id) \
             .order("created_at", desc=True) \
@@ -260,7 +260,7 @@ async def get_cv(
 ):
     """Get a specific CV by ID."""
     try:
-        result = supabase.table("cvs") \
+        result = await supabase.table("cvs") \
             .select("id, user_id, file_name, file_url, parsed_at, created_at") \
             .eq("id", cv_id) \
             .eq("user_id", user_id) \

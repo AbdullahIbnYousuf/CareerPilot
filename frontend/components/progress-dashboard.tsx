@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/lib/supabase";
+import type { Snapshot, StatusCounts, Nudge } from "@/types";
 import {
   Loader2,
   TrendingUp,
@@ -16,43 +18,37 @@ import {
   Bell,
 } from "lucide-react";
 
-interface Snapshot {
-  applications_sent: number;
-  streak_days: number;
-  roadmap_pct: number;
-}
-
-interface StatusCounts {
-  saved: number;
-  applied: number;
-  interviewing: number;
-  offer: number;
-  rejected: number;
-}
-
-interface Nudge {
-  id: string;
-  message: string;
-  seen: boolean;
-}
-
 export function ProgressDashboard() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [statusCounts, setStatusCounts] = useState<StatusCounts | null>(null);
   const [nudges, setNudges] = useState<Nudge[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   useEffect(() => {
-    fetchDashboard();
-    fetchNudges();
+    const loadUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error) {
+        setUserId(data.user?.id ?? null);
+      }
+    };
+    loadUser();
   }, []);
 
-  const fetchDashboard = async () => {
+  useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    fetchDashboard(userId);
+    fetchNudges(userId);
+  }, [userId]);
+
+  const fetchDashboard = async (activeUserId: string) => {
     try {
-      const res = await fetch(`${baseUrl}/dashboard/test-user-id`);
+      const res = await fetch(`${baseUrl}/dashboard/${activeUserId}`);
       if (res.ok) {
         const data = await res.json();
         setSnapshot(data.snapshot);
@@ -65,9 +61,9 @@ export function ProgressDashboard() {
     }
   };
 
-  const fetchNudges = async () => {
+  const fetchNudges = async (activeUserId: string) => {
     try {
-      const res = await fetch(`${baseUrl}/dashboard/test-user-id/nudges`);
+      const res = await fetch(`${baseUrl}/dashboard/${activeUserId}/nudges`);
       if (res.ok) {
         const data = await res.json();
         setNudges(data.nudges || []);
@@ -99,9 +95,19 @@ export function ProgressDashboard() {
   const statusItems = [
     { key: "saved", label: "Saved", icon: Briefcase, color: "text-slate-500" },
     { key: "applied", label: "Applied", icon: Send, color: "text-blue-500" },
-    { key: "interviewing", label: "Interview", icon: Users, color: "text-amber-500" },
+    {
+      key: "interviewing",
+      label: "Interview",
+      icon: Users,
+      color: "text-amber-500",
+    },
     { key: "offer", label: "Offer", icon: Trophy, color: "text-emerald-500" },
-    { key: "rejected", label: "Rejected", icon: XCircle, color: "text-red-500" },
+    {
+      key: "rejected",
+      label: "Rejected",
+      icon: XCircle,
+      color: "text-red-500",
+    },
   ] as const;
 
   return (
@@ -146,9 +152,7 @@ export function ProgressDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
-              Daily Streak
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Daily Streak</CardTitle>
             <Flame className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
@@ -192,8 +196,7 @@ export function ProgressDashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             {statusItems.map((item) => {
               const Icon = item.icon;
-              const count =
-                statusCounts?.[item.key as keyof StatusCounts] ?? 0;
+              const count = statusCounts?.[item.key as keyof StatusCounts] ?? 0;
               return (
                 <div
                   key={item.key}

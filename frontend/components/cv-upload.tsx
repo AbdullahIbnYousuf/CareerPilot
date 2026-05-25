@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { UploadCloud, Loader2, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/lib/supabase";
 
 interface CvUploadProps {
   onUploadSuccess: (data: any) => void;
@@ -13,7 +14,18 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data, error: authError } = await supabase.auth.getUser();
+      if (!authError) {
+        setUserId(data.user?.id ?? null);
+      }
+    };
+    loadUser();
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -47,6 +59,11 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
       return;
     }
 
+    if (!userId) {
+      setError("Please sign in to upload your CV.");
+      return;
+    }
+
     setError("");
     setFileName(file.name);
     setIsUploading(true);
@@ -57,7 +74,7 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
     try {
       const baseUrl =
         process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const url = `${baseUrl}/api/cv/upload?user_id=test-user-id`;
+      const url = `${baseUrl}/api/cv/upload?user_id=${encodeURIComponent(userId)}`;
 
       const response = await fetch(url, {
         method: "POST",

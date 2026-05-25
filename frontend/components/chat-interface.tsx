@@ -5,16 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Send, Loader2, Bot, User } from "lucide-react";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
+import { supabase } from "@/lib/supabase";
+import type { ChatMessage } from "@/types";
 
 export function ChatInterface() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -24,11 +22,29 @@ export function ChatInterface() {
     });
   }, [messages]);
 
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error) {
+        setUserId(data.user?.id ?? null);
+      }
+    };
+    loadUser();
+  }, []);
+
   const handleSend = async () => {
     const text = input.trim();
     if (!text || isStreaming) return;
 
-    const userMsg: Message = { role: "user", content: text };
+    if (!userId) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Please sign in to start chatting." },
+      ]);
+      return;
+    }
+
+    const userMsg: ChatMessage = { role: "user", content: text };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsStreaming(true);
@@ -37,13 +53,11 @@ export function ChatInterface() {
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     try {
-      const baseUrl =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const res = await fetch(`${baseUrl}/chat/`, {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: "test-user-id",
+          user_id: userId,
           session_id: "default-session",
           message: text,
         }),

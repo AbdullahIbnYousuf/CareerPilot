@@ -26,7 +26,7 @@ async def upload_cv_file(file_bytes: bytes, filename: str, user_id: str, content
     storage_path = f"{user_id}/{uuid.uuid4()}.{extension}"
 
     try:
-        supabase.storage.from_(BUCKET_NAME).upload(
+        await supabase.storage.from_(BUCKET_NAME).upload(
             path=storage_path,
             file=file_bytes,
             file_options={"content-type": content_type or "application/octet-stream"},

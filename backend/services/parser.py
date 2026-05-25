@@ -1,26 +1,34 @@
 """
 CV Parser Service - CareerPilot
 
-PDF  -> PyMuPDF text extraction + Groq Llama structuring
-DOCX -> python-docx text extraction + Groq Llama structuring
+PDF  -> Gemini 2.0 Flash multimodal (types.Part.from_bytes)
+DOCX -> python-docx text extraction -> Gemini 2.0 Flash structuring
 
 Returns structured JSON with 4 sections: skills, experience, education, projects
-NEVER use: pypdf, pdfplumber, pdfminer, docling, unstructured
+NEVER use: pypdf, pdfplumber, pdfminer, docling, unstructured, PyMuPDF
 """
 
 import io
 import os
 import json
-import fitz  # PyMuPDF
-from groq import Groq
 from docx import Document
+from google import genai
+from google.genai import types
 
-# Initialize Groq client
-_groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
-_MODEL = "llama-3.3-70b-versatile"
+# Initialize Gemini client
+_GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
+_gemini_client = None
+
+
+def _get_gemini_client():
+    global _gemini_client
+    if _gemini_client is None:
+        _gemini_client = genai.Client(api_key=_GOOGLE_API_KEY)
+    return _gemini_client
+
 
 # Structured parsing prompt
-_STRUCTURED_PROMPT = """You are a CV parsing assistant. Extract information from this CV and return ONLY a valid JSON object with these exact keys:
+_STRUCTURED_PROMPT = """Extract information from this CV and return ONLY a valid JSON object with these exact keys:
 
 {
   "skills": "comma-separated list of technical skills, tools, programming languages, frameworks",
@@ -84,33 +92,44 @@ def _parse_structured_response(response_text: str) -> dict[str, str]:
 
 def parse_pdf_cv(file_bytes: bytes) -> dict[str, str]:
     """
-    Parse PDF CV using PyMuPDF text extraction + Groq structuring.
+    Parse PDF CV using Gemini 2.0 Flash multimodal.
+    Raw bytes are passed as types.Part.from_bytes.
     Returns structured JSON with 4 sections.
     """
-    doc = fitz.open(stream=file_bytes, filetype="pdf")
-    full_text = ""
-    for page in doc:
-        full_text += page.get_text()
-    doc.close()
-
-    if not full_text.strip():
-        raise ValueError("PDF file appears to be empty or unreadable")
-
-    structuring_prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
-
-    response = _groq.chat.completions.create(
-        model=_MODEL,
-        messages=[{"role": "user", "content": structuring_prompt}],
+    client = _get_gemini_client()
+    
+    # Build multimodal prompt with PDF bytes
+    contents = [
+        types.Content(
+            role="user",
+            parts=[
+                types.Part.from_text(text=_STRUCTURED_PROMPT),
+                types.Part.from_bytes(data=file_bytes, mime_type="application/pdf"),
+            ],
+        )
+    ]
+    
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
         temperature=0.1,
-        response_format={"type": "json_object"},
     )
-
-    return _parse_structured_response(response.choices[0].message.content or "")
+    
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=contents,
+        config=config,
+    )
+    
+    response_text = response.text or ""
+    if not response_text.strip():
+        raise ValueError("PDF file appears to be empty or unreadable")
+    
+    return _parse_structured_response(response_text)
 
 
 def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     """
-    Parse DOCX CV using python-docx + Groq structuring.
+    Parse DOCX CV using python-docx + Gemini 2.0 Flash structuring.
     Returns structured JSON with 4 sections.
     """
     # Extract text with python-docx
@@ -120,17 +139,23 @@ def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     if not full_text.strip():
         raise ValueError("DOCX file appears to be empty")
     
-    # Use Groq to structure the extracted text
-    structuring_prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
+    # Use Gemini to structure the extracted text
+    client = _get_gemini_client()
     
-    response = _groq.chat.completions.create(
-        model=_MODEL,
-        messages=[{"role": "user", "content": structuring_prompt}],
+    prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
+    
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
         temperature=0.1,
-        response_format={"type": "json_object"},
     )
     
-    return _parse_structured_response(response.choices[0].message.content or "")
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
+        config=config,
+    )
+    
+    return _parse_structured_response(response.text or "")
 
 
 def parse_cv(file_bytes: bytes, filename: str) -> dict[str, str]:

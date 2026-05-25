@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { JobCard, Job } from "@/components/job-card";
+import { useEffect, useState } from "react";
+import { JobCard } from "@/components/job-card";
+import { supabase } from "@/lib/supabase";
+import type { Job } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search } from "lucide-react";
@@ -13,10 +15,26 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data, error: authError } = await supabase.auth.getUser();
+      if (!authError) {
+        setUserId(data.user?.id ?? null);
+      }
+    };
+    loadUser();
+  }, []);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
+
+    if (!userId) {
+      setError("Please sign in to search for jobs.");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -30,7 +48,7 @@ export default function JobsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          user_id: "test-user-id",
+          user_id: userId,
           query: query.trim(),
           location: location.trim(),
         }),

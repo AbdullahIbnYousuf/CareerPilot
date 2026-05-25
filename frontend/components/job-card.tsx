@@ -9,18 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FitScoreBadge } from "./fit-score-badge";
 import { MapPin, Building, ExternalLink } from "lucide-react";
-
-export interface Job {
-  id?: string;
-  title: string;
-  company: string;
-  location: string;
-  url: string;
-  description: string;
-  source: string;
-  fit_score?: number;
-  fit_explanation?: string;
-}
+import type { Job } from "@/types";
 
 export function JobCard({ job }: { job: Job }) {
   return (
