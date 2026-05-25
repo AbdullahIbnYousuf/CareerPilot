@@ -22,19 +22,30 @@ async def test_voyage():
         return False
 
 
-async def test_gemini():
-    print("Testing Gemini 2.0 Flash...")
+async def test_groq():
+    print("Testing Groq Llama 3.3...")
     try:
-        from google import genai
-        client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
-        resp = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents="Say 'Gemini is online!' in one word."
+        from groq import Groq
+        groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+        chat_completion = groq_client.chat.completions.create(
+            messages=[{"role": "user", "content": "Say hello in one word."}],
+            model="llama-3.3-70b-versatile",
         )
-        print(f"  [SUCCESS] Gemini works! Response: '{resp.text.strip()}'")
+        print(f"  [SUCCESS] Groq works! Response: '{chat_completion.choices[0].message.content.strip()}'")
         return True
     except Exception as e:
-        print(f"  [ERROR] Gemini failed: {e}")
+        print(f"  [ERROR] Groq failed: {e}")
+        return False
+
+
+async def test_pymupdf():
+    print("Testing PyMuPDF...")
+    try:
+        import fitz
+        print(f"  [SUCCESS] PyMuPDF imported successfully, version: {fitz.VersionBind}")
+        return True
+    except Exception as e:
+        print(f"  [ERROR] PyMuPDF failed: {e}")
         return False
 
 
@@ -53,22 +64,6 @@ async def test_redis():
             return False
     except Exception as e:
         print(f"  [ERROR] Upstash Redis failed: {e}")
-        return False
-
-
-async def test_groq():
-    print("Testing Groq Llama 3.3...")
-    try:
-        from groq import Groq
-        groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
-        chat_completion = groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": "Say hello in one word."}],
-            model="llama-3.3-70b-versatile",
-        )
-        print(f"  [SUCCESS] Groq works! Response: '{chat_completion.choices[0].message.content.strip()}'")
-        return True
-    except Exception as e:
-        print(f"  [ERROR] Groq failed: {e}")
         return False
 
 
@@ -115,7 +110,7 @@ async def main():
     
     results = {}
     results["Voyage AI"] = await test_voyage()
-    results["Gemini"] = await test_gemini()
+    results["PyMuPDF"] = await test_pymupdf()
     results["Upstash Redis"] = await test_redis()
     results["Groq"] = await test_groq()
     results["JSearch"] = await test_jsearch()

@@ -8,18 +8,19 @@ Algorithm (from AGENTS.md):
   3. Compute cosine similarity between JD embedding and each chunk
   4. Weighted average across sections
   5. Multiply by 100 → integer 0–100
-  6. Pass score + evidence to Gemini for one-sentence explanation
+  6. Pass score + evidence to Groq for one-sentence explanation
 
 NEVER ask the LLM to guess a score.
 """
 
 import os
 import numpy as np
-from google import genai
+from groq import Groq
 from services.embedder import embed_query, embed_documents
 from services.searcher import search_by_section_preembedded
 
-_client = genai.Client(api_key=os.environ.get("GOOGLE_API_KEY", ""))
+_groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+_MODEL = "llama-3.3-70b-versatile"
 
 SECTION_WEIGHTS: dict[str, float] = {
     "skills":     0.40,
@@ -48,7 +49,7 @@ async def compute_fit_score(
     Returns:
         {
             "score": int,           # 0–100
-            "explanation": str,     # one-sentence from Gemini
+            "explanation": str,     # one-sentence from Groq
             "section_scores": dict  # per-section cosine scores
         }
     """
@@ -94,7 +95,7 @@ async def compute_fit_score(
         sims = [_cosine(jd_embedding, emb) for emb in chunk_embeddings]
         section_scores[section] = float(np.mean(sims))
 
-        # Collect best snippet for Gemini explanation
+        # Collect best snippet for explanation
         best_idx = int(np.argmax(sims))
         evidence_snippets.append(f"[{section}] {chunk_texts[best_idx][:200]}")
 
@@ -105,7 +106,7 @@ async def compute_fit_score(
     )
     score_int = min(100, max(0, round(weighted_score * 100)))
 
-    # Gemini one-sentence explanation
+    # Groq one-sentence explanation
     evidence_text = "\n".join(evidence_snippets) if evidence_snippets else "No CV data available."
     explanation_prompt = (
         f"Job description excerpt: {job_description[:500]}\n\n"
@@ -115,13 +116,14 @@ async def compute_fit_score(
         "highlighting the strongest match or biggest gap."
     )
     
-    # Simple fallback in case Gemini rate limit hits
+    # Simple fallback in case Groq rate limit hits
     try:
-        gemini_response = _client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=explanation_prompt,
+        groq_response = _groq.chat.completions.create(
+            model=_MODEL,
+            messages=[{"role": "user", "content": explanation_prompt}],
+            temperature=0.3,
         )
-        explanation = (gemini_response.text or "").strip()
+        explanation = (groq_response.choices[0].message.content or "").strip()
     except Exception as e:
         explanation = f"Fit score computed programmatically is {score_int}/100. (AI explanation temporarily unavailable due to rate limits)"
 
