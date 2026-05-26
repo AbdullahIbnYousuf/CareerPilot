@@ -15,19 +15,15 @@ NEVER ask the LLM to guess a score.
 
 import os
 import numpy as np
-from google import genai
+import google.generativeai as genai
 from services.embedder import embed_query, embed_documents
 from services.searcher import search_by_section_preembedded
 
 _GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-_gemini_client = None
-
 
 def _get_gemini_client():
-    global _gemini_client
-    if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=_GOOGLE_API_KEY)
-    return _gemini_client
+    genai.configure(api_key=_GOOGLE_API_KEY)
+    return genai.GenerativeModel('gemini-2.0-flash-exp')
 
 SECTION_WEIGHTS: dict[str, float] = {
     "skills":     0.40,
@@ -125,11 +121,8 @@ async def compute_fit_score(
     
     # Simple fallback in case Gemini rate limit hits
     try:
-        client = _get_gemini_client()
-        gemini_response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=explanation_prompt,
-        )
+        model = _get_gemini_client()
+        gemini_response = model.generate_content(explanation_prompt)
         explanation = (gemini_response.text or "").strip()
     except Exception as e:
         explanation = f"Fit score computed programmatically is {score_int}/100. (AI explanation temporarily unavailable due to rate limits)"

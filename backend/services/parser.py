@@ -12,19 +12,14 @@ import io
 import os
 import json
 from docx import Document
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
 # Initialize Gemini client
 _GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-_gemini_client = None
-
 
 def _get_gemini_client():
-    global _gemini_client
-    if _gemini_client is None:
-        _gemini_client = genai.Client(api_key=_GOOGLE_API_KEY)
-    return _gemini_client
+    genai.configure(api_key=_GOOGLE_API_KEY)
+    return genai.GenerativeModel('gemini-2.0-flash-exp')
 
 
 # Structured parsing prompt
@@ -96,28 +91,18 @@ def parse_pdf_cv(file_bytes: bytes) -> dict[str, str]:
     Raw bytes are passed as types.Part.from_bytes.
     Returns structured JSON with 4 sections.
     """
-    client = _get_gemini_client()
+    model = _get_gemini_client()
     
     # Build multimodal prompt with PDF bytes
-    contents = [
-        types.Content(
-            role="user",
-            parts=[
-                types.Part.from_text(text=_STRUCTURED_PROMPT),
-                types.Part.from_bytes(data=file_bytes, mime_type="application/pdf"),
-            ],
+    response = model.generate_content(
+        [
+            _STRUCTURED_PROMPT,
+            {"mime_type": "application/pdf", "data": file_bytes}
+        ],
+        generation_config=genai.GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.1,
         )
-    ]
-    
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        temperature=0.1,
-    )
-    
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=contents,
-        config=config,
     )
     
     response_text = response.text or ""
@@ -140,19 +125,16 @@ def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
         raise ValueError("DOCX file appears to be empty")
     
     # Use Gemini to structure the extracted text
-    client = _get_gemini_client()
+    model = _get_gemini_client()
     
     prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
     
-    config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        temperature=0.1,
-    )
-    
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
-        config=config,
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.1,
+        )
     )
     
     return _parse_structured_response(response.text or "")
