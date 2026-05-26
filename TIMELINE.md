@@ -28,32 +28,32 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (3–4 hours)
 
-- [ ] Create Supabase project at supabase.com
-- [ ] Run all SQL migrations from `CareerPilot_Stack_Final.md` Section 8
+- [x] Create Supabase project at supabase.com
+- [x] Run all SQL migrations from `CareerPilot_Stack_Final.md` Section 8
   - Enable pgvector extension
   - Create all tables: cvs, cv_chunks, jobs, applications, chat_messages, goals, todos, nudges, progress_snapshots
   - Create indexes (HNSW for embeddings, GIN for full-text search)
   - Create `hybrid_search` stored procedure
-- [ ] Enable Supabase Realtime on `applications` and `nudges` tables (Database → Replication)
-- [ ] Set up Supabase Auth (Email + Password provider)
+- [x] Enable Supabase Realtime on `applications` and `nudges` tables (Database → Replication)
+- [x] Set up Supabase Auth (Email + Password provider)
 
 #### Afternoon (3–4 hours)
 
-- [ ] Get all API keys:
+- [x] Get all API keys:
   - Groq (groq.com) — free, no credit card
   - Google AI Studio (aistudio.google.com) — free, no credit card
   - Voyage AI (voyageai.com) — free, no credit card
   - Upstash Redis (upstash.com) — free, no credit card
   - JSearch via RapidAPI (rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) — free tier
   - Tavily (tavily.com) — free tier
-- [ ] Create GitHub repos:
+- [x] Create GitHub repos:
   - Option A: Monorepo `careerpilot` with `/frontend` and `/backend` folders
   - Option B: Two repos `careerpilot-frontend` and `careerpilot-backend`
-- [ ] Create `backend/.env` with all keys (see AGENTS.md)
-- [ ] Create `frontend/.env.local` with Supabase public keys
-- [ ] Initialize backend: `cd backend && python -m venv venv && pip install -r requirements.txt`
-- [ ] Initialize frontend: `cd frontend && npm install`
-- [ ] Test Supabase connection from both frontend and backend
+- [x] Create `backend/.env` with all keys (see AGENTS.md)
+- [x] Create `frontend/.env.local` with Supabase public keys
+- [x] Initialize backend: `cd backend && python -m venv venv && pip install -r requirements.txt`
+- [x] Initialize frontend: `cd frontend && npm install`
+- [x] Test Supabase connection from both frontend and backend
 
 **Deliverable:** All services accessible, environment variables working, repos initialized
 
@@ -66,29 +66,29 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (3–4 hours)
 
-- [ ] Create `backend/services/parser.py`:
+- [x] Create `backend/services/parser.py`:
   - `parse_pdf_cv(file: UploadFile) -> dict` — uses Gemini 2.0 Flash multimodal
   - `parse_docx_cv(file: UploadFile) -> dict` — uses python-docx + Gemini for structuring
   - Both return: `{"skills": str, "experience": str, "education": str, "projects": str}`
-- [ ] Create `backend/routers/cv.py`:
+- [x] Create `backend/routers/cv.py`:
   - `POST /api/cv/upload` — accepts PDF or DOCX, routes to correct parser
   - Saves file metadata to `cvs` table
   - Returns parsed JSON
-- [ ] Test with 3 sample CVs:
+- [x] Test with 3 sample CVs:
   - Single-column PDF
   - Multi-column Canva PDF
   - DOCX file
 
 #### Afternoon (3–4 hours)
 
-- [ ] Add error handling:
+- [x] Add error handling:
   - File size limit (5 MB)
   - File type validation
   - Parsing failures → return 400 with clear message
-- [ ] Add Supabase Storage integration:
+- [x] Add Supabase Storage integration:
   - Upload original file to Supabase Storage bucket `cv-files`
   - Store `file_url` in `cvs` table
-- [ ] Memory profiling:
+- [x] Memory profiling:
   - Add `psutil` to requirements.txt
   - Log memory usage after parsing: `psutil.Process().memory_info().rss / 1024 / 1024`
   - Verify stays under 512 MB (Railway limit)
@@ -104,29 +104,29 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (3–4 hours)
 
-- [ ] Create `backend/services/embedder.py`:
+- [x] Create `backend/services/embedder.py`:
   - `embed_chunks(chunks: list[str]) -> list[list[float]]` — Voyage AI with `input_type="document"`
   - `embed_query(query: str) -> list[float]` — Voyage AI with `input_type="query"`
   - Add fallback to Gemini embeddings if Voyage fails
-- [ ] Create chunking logic in `backend/services/parser.py`:
+- [x] Create chunking logic in `backend/services/parser.py`:
   - `chunk_cv(parsed: dict, cv_id: str, user_id: str) -> list[dict]`
   - One chunk per section: skills, experience, education, projects
   - Each chunk: `{"section": str, "content": str, "cv_id": str, "user_id": str}`
-- [ ] Update `POST /api/cv/upload` to:
+- [x] Update `POST /api/cv/upload` to:
   - Parse CV → chunk by section → embed each chunk → store in `cv_chunks` table
   - Store embedding as `vector(1024)` type
 
 #### Afternoon (3–4 hours)
 
-- [ ] Test hybrid search:
+- [x] Test hybrid search:
   - Insert 3 test CVs with different skill sets
   - Query: "Python FastAPI PostgreSQL"
   - Verify `hybrid_search` RPC returns relevant chunks
   - Verify BM25 catches exact keyword matches
-- [ ] Create `backend/services/searcher.py`:
+- [x] Create `backend/services/searcher.py`:
   - `search_cv_chunks(query: str, user_id: str, top_k: int) -> list[dict]`
   - Wraps Supabase RPC call to `hybrid_search`
-- [ ] Add endpoint `GET /api/cv/search?q=Python` for testing
+- [x] Add endpoint `GET /api/cv/search?q=Python` for testing
 
 **Deliverable:** CV chunks stored with embeddings, hybrid search working, test endpoint returns results
 
@@ -139,7 +139,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (4–5 hours)
 
-- [ ] Create `backend/services/fit_score.py`:
+- [x] Create `backend/services/fit_score.py`:
   - `compute_fit_score(job_description: str, user_id: str) -> dict`
   - Algorithm:
     1. Embed JD
@@ -149,7 +149,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
     5. Multiply by 100 → integer score
     6. Pass score + evidence to Gemini for explanation
   - Return: `{"score": int, "explanation": str, "breakdown": dict}`
-- [ ] Test with 5 job descriptions:
+- [x] Test with 5 job descriptions:
   - Senior role + junior CV → expect score < 40
   - Junior role + senior CV → expect score > 70
   - Exact skill match → expect score > 80
@@ -158,19 +158,19 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Afternoon (4–5 hours)
 
-- [ ] Create `backend/services/job_search.py`:
+- [x] Create `backend/services/job_search.py`:
   - `search_jsearch(query: str, location: str) -> list[dict]`
   - `search_remotive(query: str) -> list[dict]`
   - `search_tavily(query: str, location: str) -> list[dict]`
   - `search_jobs(query: str, location: str) -> list[dict]` — three-tier fallback
-- [ ] Create `backend/services/cache.py`:
+- [x] Create `backend/services/cache.py`:
   - `cached_job_search(query: str, location: str) -> list[dict]`
   - Cache key: `jobs:{md5(query+location)}`
   - TTL: 7200 seconds
-- [ ] Create `backend/routers/jobs.py`:
+- [x] Create `backend/routers/jobs.py`:
   - `POST /api/jobs/search` — body: `{"query": str, "location": str}`
   - Returns: `[{"id": str, "title": str, "company": str, "location": str, "salary_range": str, "description": str, "source": str}]`
-- [ ] Test job search with: "ML engineer Dhaka", "Python developer remote", "Data analyst Bangladesh"
+- [x] Test job search with: "ML engineer Dhaka", "Python developer remote", "Data analyst Bangladesh"
 
 **Deliverable:** Fit score algorithm tested and working, job search returning results from all three APIs
 
@@ -183,31 +183,31 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (4–5 hours)
 
-- [ ] Install LangGraph: `pip install langgraph==0.2.28 langchain-core==0.3.15 langchain-groq==0.2.0`
-- [ ] Create `backend/services/agent.py`:
+- [x] Install LangGraph: `pip install langgraph==0.2.28 langchain-core==0.3.15 langchain-groq==0.2.0`
+- [x] Create `backend/services/agent.py`:
   - Define `AgentState` TypedDict
   - Create nodes: `search_node`, `score_node`, `filter_node`
   - Create conditional edge: `should_retry`
   - Compile graph
   - `run_job_hunter_agent(query: str, user_id: str) -> dict`
-- [ ] Create LangChain tools:
+- [x] Create LangChain tools:
   - `@tool search_jobs_tool(query: str, location: str) -> List[dict]`
   - `@tool compute_fit_score_tool(job_description: str, user_id: str) -> dict`
   - `@tool get_cv_context_tool(user_id: str) -> str`
   - `@tool draft_cover_letter_tool(job_description: str, cv_context: str) -> str`
-- [ ] Test agent with: "Find me ML internships in Dhaka"
+- [x] Test agent with: "Find me ML internships in Dhaka"
   - Verify it searches → scores → filters → returns top 10
 
 #### Afternoon (4–5 hours)
 
-- [ ] Create `backend/services/chat.py`:
+- [x] Create `backend/services/chat.py`:
   - `get_chat_history(user_id: str, session_id: str) -> list[dict]` — fetch last 10 messages
   - `save_message(user_id: str, session_id: str, role: str, content: str)`
   - `stream_chat(user_id: str, session_id: str, message: str, cv_context: str) -> AsyncGenerator`
-- [ ] Create `backend/routers/chat.py`:
+- [x] Create `backend/routers/chat.py`:
   - `POST /api/chat` — SSE streaming endpoint
   - Fetch history → RAG query for CV context → stream Groq response → save to DB
-- [ ] Test streaming:
+- [x] Test streaming:
   - Send "Am I ready for this data engineer role?" with a JD
   - Verify response references actual CV content
   - Send follow-up "What skills am I missing?" — verify memory works
@@ -225,8 +225,8 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (3–4 hours)
 
-- [ ] Create Next.js project: `npx create-next-app@latest frontend --typescript --tailwind --app`
-- [ ] Install dependencies:
+- [x] Create Next.js project: `npx create-next-app@latest frontend --typescript --tailwind --app`
+- [x] Install dependencies:
   ```bash
   npm install @supabase/supabase-js @supabase/ssr
   npm install @tanstack/react-query
@@ -235,31 +235,31 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   npm install recharts
   npm install lucide-react
   ```
-- [ ] Initialize shadcn: `npx shadcn-ui@latest init`
-- [ ] Add shadcn components: `npx shadcn-ui@latest add card button input textarea badge progress calendar`
-- [ ] Create Supabase clients:
+- [x] Initialize shadcn: `npx shadcn-ui@latest init`
+- [x] Add shadcn components: `npx shadcn-ui@latest add card button input textarea badge progress calendar`
+- [x] Create Supabase clients:
   - `lib/supabase.ts` — browser client
   - `lib/supabase-server.ts` — server component client
-- [ ] Create auth pages:
+- [x] Create auth pages:
   - `app/(auth)/login/page.tsx`
   - `app/(auth)/signup/page.tsx`
   - Use Supabase Auth with email/password
 
 #### Afternoon (3–4 hours)
 
-- [ ] Create dashboard layout:
+- [x] Create dashboard layout:
   - `app/(dashboard)/layout.tsx` — sidebar with navigation
   - Links: Jobs, CV, Chat, Tracker
   - User menu with logout
-- [ ] Create placeholder pages:
+- [x] Create placeholder pages:
   - `app/(dashboard)/jobs/page.tsx` — "Jobs coming soon"
   - `app/(dashboard)/cv/page.tsx` — "CV upload coming soon"
   - `app/(dashboard)/chat/page.tsx` — "Chat coming soon"
   - `app/(dashboard)/tracker/page.tsx` — "Tracker coming soon"
-- [ ] Add protected route middleware:
+- [x] Add protected route middleware:
   - Check Supabase session
   - Redirect to /login if not authenticated
-- [ ] Test auth flow: signup → login → dashboard → logout
+- [x] Test auth flow: signup → login → dashboard → logout
 
 **Deliverable:** Frontend scaffold with working auth, navigation, placeholder pages
 
