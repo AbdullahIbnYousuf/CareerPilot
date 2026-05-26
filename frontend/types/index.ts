@@ -8,6 +8,8 @@ export interface Job {
   source: string;
   fit_score?: number;
   fit_explanation?: string;
+  salary_range?: string;
+  deadline?: string;
 }
 
 export interface ChatMessage {

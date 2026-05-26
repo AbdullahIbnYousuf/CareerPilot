@@ -272,7 +272,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (2–3 hours) — DEPLOY FIRST
 
-- [ ] Backend deployment (Render):
+- [x] Backend deployment (Render):
   - Create `backend/Dockerfile` (if not exists)
   - Push to GitHub
   - Connect repo at render.com → New → Web Service
@@ -281,7 +281,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
   - Add all environment variables in Render dashboard
   - Get Render URL: `https://your-app.onrender.com`
-- [ ] Frontend deployment (Vercel):
+- [x] Frontend deployment (Vercel):
   - Push to GitHub
   - Connect repo at vercel.com
   - Add environment variables:
@@ -289,29 +289,29 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
     - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
     - `NEXT_PUBLIC_API_URL=https://your-app.onrender.com`
   - Get Vercel URL: `https://your-app.vercel.app`
-- [ ] Test deployed endpoints:
+- [x] Test deployed endpoints:
   - `curl https://your-app.onrender.com/api/cv/upload`
   - `curl https://your-app.onrender.com/api/jobs/search`
 
 #### Afternoon (4–5 hours) — Job Cards UI
 
-- [ ] Create `components/job-card.tsx`:
+- [x] Create `components/job-card.tsx`:
   - Display: title, company, location, salary range, deadline
   - Fit score badge with color coding: <40 red, 40-70 yellow, >70 green
   - "View Details" button
-- [ ] Create `components/fit-score-badge.tsx`:
+- [x] Create `components/fit-score-badge.tsx`:
   - Circular progress indicator
   - Score percentage
   - Tooltip with explanation
-- [ ] Update `app/(dashboard)/jobs/page.tsx`:
+- [x] Update `app/(dashboard)/jobs/page.tsx`:
   - Search bar with location filter
   - Grid of job cards
   - Loading state
   - Empty state: "No jobs found"
-- [ ] Connect to backend:
+- [x] Connect to backend:
   - `POST /api/jobs/search` on search submit
   - Display results as job cards
-- [ ] Test with real searches: "Python developer Dhaka", "ML engineer remote"
+- [x] Test with real searches: "Python developer Dhaka", "ML engineer remote"
 
 **Deliverable:** 🚀 App deployed and accessible, job search UI working with fit scores
 
