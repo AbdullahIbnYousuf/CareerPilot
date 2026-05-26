@@ -69,9 +69,6 @@ source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Install additional required packages
-pip install google-generativeai langgraph langchain langchain-groq
 ```
 
 #### Configure Environment Variables
