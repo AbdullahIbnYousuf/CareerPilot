@@ -103,10 +103,10 @@ careerpilot/                        ← repo root
 | File type | Parser                                                             | Why                                                           |
 | --------- | ------------------------------------------------------------------ | ------------------------------------------------------------- |
 | `.pdf`    | Gemini 2.0 Flash multimodal — raw bytes as `types.Part.from_bytes` | Handles multi-column Canva/Figma CVs. No local memory needed. |
-| `.docx`   | python-docx                                                        | Pure Python, no ML, safe for Railway free tier.               |
+| `.docx`   | python-docx                                                        | Pure Python, no ML, safe for Render free tier.                |
 
 **NEVER use:** docling, pypdf, pdfplumber, pdfminer, unstructured.
-Docling requires 1.5–2 GB RAM and will OOM-kill the Railway container.
+Docling requires 1.5–2 GB RAM and will OOM-kill the Render container.
 
 ### Embeddings
 
@@ -229,7 +229,7 @@ TAVILY_API_KEY=
 ```
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_API_URL=https://your-railway-url.railway.app
+NEXT_PUBLIC_API_URL=https://your-render-url.onrender.com
 ```
 
 **NEVER hardcode API keys. NEVER commit .env files.**
@@ -402,7 +402,7 @@ useEffect(() => {
 | 4   | Fit score algorithm returning 0–100 with explanation, job search APIs working |
 | 5   | Agent loop working (LangGraph or Python tool loop)                            |
 | 6   | Frontend scaffold, auth pages, basic navigation                               |
-| 7   | 🚀 Deployed (Vercel + Railway) — frontend shows job cards                     |
+| 7   | 🚀 Deployed (Vercel + Render) — frontend shows job cards                      |
 | 8   | Streaming chat working end-to-end with RAG and memory                         |
 | 9   | Kanban working with drag-and-drop and Realtime updates                        |
 | 10  | Calendar, todos, progress dashboard, AI nudges via pg_cron                    |

@@ -1512,9 +1512,9 @@ allow_origins=["https://careerpilot.vercel.app"]
 
 ## Deployment Considerations
 
-### Railway Deployment
+### Render Deployment
 
-**Memory Constraints**: Railway free tier provides 512MB RAM.
+**Memory Constraints**: Render free tier provides 512MB RAM.
 
 **Library Choices**:
 
@@ -1524,9 +1524,9 @@ allow_origins=["https://careerpilot.vercel.app"]
 - ❌ docling (requires 1.5-2GB RAM, will OOM)
 - ❌ pypdf (poor multi-column handling)
 
-**Environment Variables**: Set in Railway dashboard, not in code.
+**Environment Variables**: Set in Render dashboard, not in code.
 
-**Health Check**: `/health` endpoint for Railway monitoring.
+**Health Check**: `/health` endpoint for Render monitoring.
 
 ### Dockerfile
 

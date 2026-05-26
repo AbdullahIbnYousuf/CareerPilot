@@ -28,7 +28,7 @@
 | Backend         | FastAPI (Python 3.11)                        | ✅ Locked |
 | CV Scope        | Upload only — PDF and DOCX                   | ✅ Locked |
 | Frontend Deploy | Vercel                                       | ✅ Locked |
-| Backend Deploy  | Railway                                      | ✅ Locked |
+| Backend Deploy  | Render                                       | ✅ Locked |
 | Total Cost      | $0                                           | ✅        |
 
 ---
@@ -56,7 +56,7 @@ Groq is fast but has a smaller context window. Gemini has a massive context wind
 
 - OpenAI GPT-4o — requires credit card
 - Claude API — paid
-- Ollama local — Railway free tier cannot run 70B models
+- Ollama local — Render free tier cannot run 70B models
 
 ---
 
@@ -69,7 +69,7 @@ The problem statement requires PDF and DOCX support. These need different parser
 Gemini accepts raw PDF bytes natively via the Google GenAI SDK. The entire parsing computation happens on Google's infrastructure. Your FastAPI backend uses near-zero RAM — it only handles text strings and network I/O.
 
 **Why not Docling:**
-Docling requires 1.5–2 GB RAM to initialise its PyTorch and OCR models. Railway free tier caps containers at 512 MB–1 GB. Your app would OOM-kill on the first PDF upload.
+Docling requires 1.5–2 GB RAM to initialise its PyTorch and OCR models. Render free tier caps containers at 512 MB. Your app would OOM-kill on the first PDF upload.
 
 **Why not pypdf:**
 pypdf reads PDFs left-to-right across the byte stream. On multi-column CVs (Canva exports, Figma templates, design-heavy layouts) it scrambles text into gibberish. Gemini understands layout.
@@ -112,7 +112,7 @@ async def parse_pdf_cv(file: UploadFile) -> dict:
 
 ### DOCX → python-docx
 
-Pure Python. No ML models. No PyTorch. No OCR. Runs comfortably within Railway's memory limits.
+Pure Python. No ML models. No PyTorch. No OCR. Runs comfortably within Render's memory limits.
 
 ```python
 from docx import Document
@@ -897,7 +897,7 @@ TAVILY_API_KEY=
 # Next.js frontend (.env.local)
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-NEXT_PUBLIC_API_URL=https://your-railway-url.railway.app
+NEXT_PUBLIC_API_URL=https://your-render-url.onrender.com
 ```
 
 ---
@@ -913,7 +913,7 @@ NEXT_PUBLIC_API_URL=https://your-railway-url.railway.app
 3. Add all `NEXT_PUBLIC_*` environment variables in Vercel dashboard
 4. Every `git push` to `main` auto-deploys
 
-### Backend — Railway
+### Backend — Render
 
 ```dockerfile
 # Dockerfile
@@ -922,15 +922,19 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "$PORT"]
 ```
 
 1. Push backend to GitHub (separate repo or `/backend` subfolder)
-2. Connect at railway.app → New Project → Deploy from GitHub
-3. Add all environment variables in Railway dashboard
-4. Railway auto-detects Dockerfile and builds
+2. Connect at render.com → New → Web Service
+3. Select `backend` as root directory
+4. Build command: `pip install -r requirements.txt`
+5. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+6. Add all environment variables in Render dashboard
+7. Render auto-detects Dockerfile and builds
 
-**Free credit:** Railway gives $5/month free. A FastAPI container with minimal load costs ~$0.50–1.50/month. The $5 credit covers the entire 14-day hackathon.
+**Free tier:** Render provides 750 hours/month free. Services spin down after 15 minutes of inactivity (cold start ~30-60s). For a 14-day hackathon with demo traffic, this is more than sufficient.
 
 ---
 
@@ -948,7 +952,7 @@ Day 5   ✅ LangGraph agent setup · Tool integration · Chat memory
 PHASE 2 — Features + Integration (Days 6–10)
 ────────────────────────────────────────────────────────────
 Day 6   Next.js project setup · Auth UI · CV upload UI
-Day 7   🚀 DEPLOY (Vercel + Railway) · Job cards UI · Fit score display
+Day 7   🚀 DEPLOY (Vercel + Render) · Job cards UI · Fit score display
 Day 8   Streaming chat UI · RAG-grounded assistant · Cover letter generation
 Day 9   Kanban board · dnd-kit drag and drop · Supabase Realtime
 Day 10  Calendar + To-do · Goals module · Progress dashboard · AI nudges
@@ -1041,7 +1045,7 @@ Cover: data flow diagram, scaling analysis to 10,000 users, cost per user per mo
 | Vector DB    | Supabase free (500 MB)       | Supabase Pro — ~2–4 GB         | $25              |
 | Job Search   | JSearch free (200/day)       | RapidAPI paid + Redis cache    | ~$10             |
 | Cache        | Upstash free                 | Upstash paid                   | ~$10             |
-| Backend      | Railway free credit          | Railway Pro or AWS ECS         | ~$20–50          |
+| Backend      | Render free tier             | Render Standard or AWS ECS     | ~$20–50          |
 | Frontend     | Vercel free                  | Vercel Pro                     | $20              |
 | **Total**    | **$0**                       |                                | **~$135–315/mo** |
 | **Per user** | **$0**                       |                                | **~$0.01–0.03**  |
@@ -1066,7 +1070,7 @@ Key bottleneck: LLM rate limits and JSearch API quotas. Mitigation: Upstash Redi
 │                         BACKEND                              │
 │                   FastAPI · Python 3.11                      │
 │              SSE Streaming · Agent (TBD)                     │
-│                     Deployed: Railway                        │
+│                     Deployed: Render                         │
 └────┬──────────────┬───────────────┬───────────────┬──────────┘
      │              │               │               │
 ┌────▼────┐   ┌─────▼──────┐ ┌─────▼──────┐ ┌─────▼──────────┐

@@ -1,4 +1,5 @@
 # CareerPilot — Product Requirements Document
+
 **Codesprint 2026 · Version 1.0 · Status: Active**
 
 ---
@@ -18,17 +19,22 @@ No agent ever hallucinates the user's background.
 ## Pillar 1 — Job Hunter Agent
 
 ### User Story
+
 As a job seeker, I want to describe what I'm looking for in plain English and get
 structured job cards that match my actual profile — not generic results.
 
 ### Input
+
 Natural language query. Examples:
+
 - "Find me ML internships in Dhaka open this month"
 - "Show me remote backend engineering jobs paying above 50k BDT"
 - "Find data engineering roles at product companies in Bangladesh"
 
 ### Output — Job Card
+
 Each result must contain:
+
 ```
 title         string    Job title
 company       string    Company name
@@ -42,6 +48,7 @@ apply_url     string    Direct application link
 ```
 
 ### Agent Behaviour
+
 1. Parse the user's query for role, location, seniority, salary intent
 2. Call job search APIs in priority order (JSearch → Remotive → Tavily)
 3. For each result, compute fit score against user's CV chunks
@@ -50,6 +57,7 @@ apply_url     string    Direct application link
 6. Return minimum 3, maximum 10 job cards
 
 ### Acceptance Criteria
+
 - [ ] Returns structured cards (not raw text) for any natural language query
 - [ ] Fit score is an integer 0–100, computed via cosine similarity (not LLM guess)
 - [ ] At least one live API call to a real job board per query
@@ -62,10 +70,12 @@ apply_url     string    Direct application link
 ## Pillar 2 — Profile & Resume Intelligence (RAG Core)
 
 ### User Story
+
 As a job seeker, I want to upload my CV once and have the platform understand
 everything about me — so every recommendation is personalised to my actual background.
 
 ### CV Upload Flow
+
 ```
 User uploads PDF or DOCX
     ↓
@@ -88,6 +98,7 @@ Show parsed sections to user for confirmation
 ```
 
 ### Acceptance Criteria
+
 - [ ] Accepts PDF and DOCX files (both required)
 - [ ] Handles multi-column CV layouts without scrambling text order
 - [ ] Parsed sections shown to user after upload (confirmation step)
@@ -96,6 +107,7 @@ Show parsed sections to user for confirmation
 - [ ] Uploading a new CV replaces the old one (user has one active CV at a time)
 
 ### Fit Score Algorithm
+
 ```python
 WEIGHTS = {"skills": 0.40, "experience": 0.35, "education": 0.15, "projects": 0.10}
 
@@ -112,26 +124,29 @@ final_score = round(weighted_score * 100)  # integer 0–100
 ## Pillar 3 — Personal AI Assistant
 
 ### User Story
+
 As a job seeker, I want a chat assistant that already knows my background and can
 give me personalised advice — without me having to explain myself every time.
 
 ### Required Query Types (all must work in the demo)
 
-| Query | Expected behaviour |
-|-------|--------------------|
-| "Am I ready for this data engineer role?" | Verdict (yes/partial/no) + reasoning grounded in CV + specific gaps identified |
-| "What skills am I missing for a Google internship?" | Gap analysis comparing user CV to benchmark profile for the role |
-| "Build me a 3-month roadmap to become job-ready" | Week-by-week plan with specific learning resources (courses, docs, projects) |
-| "Draft a cover letter for this job posting" | Full cover letter referencing user's actual experience, tailored to the JD |
-| Follow-up: "Make it more concise" | Response acknowledges previous message — proves session memory works |
+| Query                                               | Expected behaviour                                                             |
+| --------------------------------------------------- | ------------------------------------------------------------------------------ |
+| "Am I ready for this data engineer role?"           | Verdict (yes/partial/no) + reasoning grounded in CV + specific gaps identified |
+| "What skills am I missing for a Google internship?" | Gap analysis comparing user CV to benchmark profile for the role               |
+| "Build me a 3-month roadmap to become job-ready"    | Week-by-week plan with specific learning resources (courses, docs, projects)   |
+| "Draft a cover letter for this job posting"         | Full cover letter referencing user's actual experience, tailored to the JD     |
+| Follow-up: "Make it more concise"                   | Response acknowledges previous message — proves session memory works           |
 
 ### Technical Requirements
+
 - Streaming responses — user sees tokens as they arrive, never waits for full response
 - Session memory — last 10 messages from `chat_messages` table included in every request
 - RAG grounding — relevant CV chunks retrieved and injected into system prompt
 - No hallucination — assistant must only reference experience that exists in the CV
 
 ### System Prompt Structure
+
 ```
 You are CareerPilot, an expert career assistant.
 The user's CV context:
@@ -151,6 +166,7 @@ Rules:
 ```
 
 ### Acceptance Criteria
+
 - [ ] Streaming works — tokens appear progressively in the UI
 - [ ] All five query types above return relevant, grounded responses
 - [ ] Follow-up questions work correctly (memory demonstrated)
@@ -163,18 +179,22 @@ Rules:
 ## Pillar 4 — Productivity & Progress Tracker
 
 ### User Story
+
 As a job seeker, I want to track every application, set goals, and see my
 progress at a glance — so I stay accountable and never miss a deadline.
 
 ### Application Tracker (Kanban)
 
 Four columns, in order:
+
 ```
 Applied → Interviewing → Offer → Rejected
 ```
+
 Plus a hidden `saved` state (job saved but not yet applied).
 
 Behaviour:
+
 - Drag a card between columns → immediate Supabase update → Realtime reflects across all open tabs
 - Each card shows: job title, company, fit score badge, date applied
 - Clicking a card shows full history and notes field
@@ -189,6 +209,7 @@ Behaviour:
 ### Goal Setting
 
 User can create goals:
+
 ```
 "Apply to 5 jobs this week"     → target: 5, unit: applications, deadline: Sunday
 "Finish DSA course by Friday"   → target: 1, unit: completion, deadline: Friday
@@ -200,6 +221,7 @@ Progress bar shows completion percentage.
 ### Progress Dashboard
 
 Live stats displayed as metric cards:
+
 ```
 Applications sent (this week)   integer
 Skills added (total)            integer
@@ -208,16 +230,19 @@ Current streak                  integer (days with at least 1 action)
 ```
 
 Charts using Recharts:
+
 - Bar chart: applications per week (last 4 weeks)
 - Donut chart: Kanban status breakdown
 
 ### AI Nudges
 
 Proactive reminders triggered by pg_cron (runs weekly, Monday 9 AM UTC):
+
 - If user has 0 applications this week → nudge with 3 matching job suggestions
 - Nudge appears as a dismissible banner via Supabase Realtime
 
 ### Acceptance Criteria
+
 - [ ] Drag and drop between all Kanban columns works
 - [ ] Kanban updates are reflected in real time (Supabase Realtime)
 - [ ] Calendar shows deadlines and todos
@@ -230,13 +255,13 @@ Proactive reminders triggered by pg_cron (runs weekly, Monday 9 AM UTC):
 
 ## Non-Functional Requirements
 
-| Requirement | Target | How |
-|-------------|--------|-----|
-| Chat response start | < 1 second to first token | Groq streaming |
-| Job search response | < 3 seconds | Redis cache + parallel API calls |
-| CV processing | < 10 seconds end-to-end | Gemini cloud parsing |
-| Fit score computation | < 2 seconds | pgvector HNSW index |
-| Uptime during judging | 100% | Deploy Day 7, freeze config |
+| Requirement           | Target                    | How                              |
+| --------------------- | ------------------------- | -------------------------------- |
+| Chat response start   | < 1 second to first token | Groq streaming                   |
+| Job search response   | < 3 seconds               | Redis cache + parallel API calls |
+| CV processing         | < 10 seconds end-to-end   | Gemini cloud parsing             |
+| Fit score computation | < 2 seconds               | pgvector HNSW index              |
+| Uptime during judging | 100%                      | Deploy Day 7, freeze config      |
 
 ---
 
@@ -255,11 +280,13 @@ Proactive reminders triggered by pg_cron (runs weekly, Monday 9 AM UTC):
 ## Bonus Deliverables
 
 ### Live Deployment
+
 - Frontend: Vercel — public URL available on Day 7
-- Backend: Railway — public API URL available on Day 7
+- Backend: Render — public API URL available on Day 7
 - Both must be stable and functional during judging
 
 ### System Design Document (`system-design.md`)
+
 - Data flow diagram (CV upload through to agent response)
 - Scale analysis to 10,000 users
 - Cost per user per month (~$0.01–$0.03)
@@ -267,15 +294,16 @@ Proactive reminders triggered by pg_cron (runs weekly, Monday 9 AM UTC):
 - Mitigations: Redis caching (already in stack), HNSW index (already configured)
 
 ### Evaluation Suite (`eval.md`)
+
 Minimum 5 test cases:
 
-| # | Input CV | Input JD | Expected score range | Pass condition |
-|---|----------|----------|---------------------|----------------|
-| 1 | Python ML engineer, 3 years | ML Engineer role requiring Python, TensorFlow | 75–90% | Score in range |
-| 2 | Fresh graduate, no experience | Senior backend engineer, 5 years required | 10–30% | Score in range |
-| 3 | Full-stack dev, React + Node | Frontend React engineer role | 60–80% | Score in range |
-| 4 | Data analyst, SQL + Excel | Data engineer, Python + Spark | 30–55% | Score in range |
-| 5 | DevOps engineer, AWS + Docker | Backend Python engineer | 40–65% | Score in range |
+| #   | Input CV                      | Input JD                                      | Expected score range | Pass condition |
+| --- | ----------------------------- | --------------------------------------------- | -------------------- | -------------- |
+| 1   | Python ML engineer, 3 years   | ML Engineer role requiring Python, TensorFlow | 75–90%               | Score in range |
+| 2   | Fresh graduate, no experience | Senior backend engineer, 5 years required     | 10–30%               | Score in range |
+| 3   | Full-stack dev, React + Node  | Frontend React engineer role                  | 60–80%               | Score in range |
+| 4   | Data analyst, SQL + Excel     | Data engineer, Python + Spark                 | 30–55%               | Score in range |
+| 5   | DevOps engineer, AWS + Docker | Backend Python engineer                       | 40–65%               | Score in range |
 
 Each test case must show: actual score output, actual explanation, pass/fail verdict.
 
@@ -304,12 +332,13 @@ Each test case must show: actual score output, actual explanation, pass/fail ver
 ## Definition of Done
 
 A feature is done when:
+
 1. The happy path works end-to-end
 2. An unfamiliar CV (not the one you tested with) returns reasonable results
-3. It works on the deployed version (Vercel + Railway), not just locally
+3. It works on the deployed version (Vercel + Render), not just locally
 4. There are no console errors in the browser during the demo flow
 
 ---
 
-*CareerPilot · PRD v1.0 · Codesprint 2026*
-*Related: AGENTS.md · CareerPilot_Stack_Final.md · eval.md · system-design.md*
+_CareerPilot · PRD v1.0 · Codesprint 2026_
+_Related: AGENTS.md · CareerPilot_Stack_Final.md · eval.md · system-design.md_

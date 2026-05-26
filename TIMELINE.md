@@ -91,7 +91,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 - [x] Memory profiling:
   - Add `psutil` to requirements.txt
   - Log memory usage after parsing: `psutil.Process().memory_info().rss / 1024 / 1024`
-  - Verify stays under 512 MB (Railway limit)
+  - Verify stays under 512 MB (Render free tier limit)
 
 **Deliverable:** `POST /api/cv/upload` working end-to-end, files stored, JSON returned
 
@@ -272,23 +272,26 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Morning (2–3 hours) — DEPLOY FIRST
 
-- [ ] Backend deployment (Railway):
-  - Create `backend/Dockerfile`
+- [ ] Backend deployment (Render):
+  - Create `backend/Dockerfile` (if not exists)
   - Push to GitHub
-  - Connect repo at railway.app
-  - Add all environment variables in Railway dashboard
-  - Get Railway URL: `https://your-app.railway.app`
+  - Connect repo at render.com → New → Web Service
+  - Select `backend` as root directory
+  - Build command: `pip install -r requirements.txt`
+  - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+  - Add all environment variables in Render dashboard
+  - Get Render URL: `https://your-app.onrender.com`
 - [ ] Frontend deployment (Vercel):
   - Push to GitHub
   - Connect repo at vercel.com
   - Add environment variables:
     - `NEXT_PUBLIC_SUPABASE_URL`
     - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-    - `NEXT_PUBLIC_API_URL=https://your-app.railway.app`
+    - `NEXT_PUBLIC_API_URL=https://your-app.onrender.com`
   - Get Vercel URL: `https://your-app.vercel.app`
 - [ ] Test deployed endpoints:
-  - `curl https://your-app.railway.app/api/cv/upload`
-  - `curl https://your-app.railway.app/api/jobs/search`
+  - `curl https://your-app.onrender.com/api/cv/upload`
+  - `curl https://your-app.onrender.com/api/jobs/search`
 
 #### Afternoon (4–5 hours) — Job Cards UI
 
@@ -553,7 +556,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
     - Total: ~$135–315/mo → $0.01–0.03 per user
   - **Bottlenecks:**
     1. LLM rate limits → Mitigation: Redis caching, queue system
-    2. Railway memory → Mitigation: Stateless containers, horizontal scaling
+    2. Render cold starts → Mitigation: Keep-alive pings, upgrade to paid tier for always-on
     3. Supabase connections → Mitigation: pgBouncer (built-in)
   - **Cost optimization:**
     - Redis caching reduces API calls by 80%
@@ -616,6 +619,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   - Environment variables list
   - Live demo link
   - Demo video link
+
 - [ ] Create architecture diagram (if not done on Day 13)
 - [ ] Final checks:
   - All links in README work
@@ -701,7 +705,7 @@ If you fall behind schedule:
 By end of Day 14, you should have:
 
 - [x] All four pillars implemented
-- [x] Live deployment (Vercel + Railway)
+- [x] Live deployment (Vercel + Render)
 - [x] 5-minute demo video
 - [x] Evaluation suite (5 test cases)
 - [x] System design document
