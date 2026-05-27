@@ -364,33 +364,33 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 
 #### Morning (3–4 hours)
 
-- [ ] Create `app/api/chat/route.ts`:
+- [x] Create `app/api/chat/route.ts`:
   - Proxy streaming requests to FastAPI backend
   - Handle SSE stream
   - Return as ReadableStream
-- [ ] Create `components/chat-interface.tsx`:
+- [x] Create `components/chat-interface.tsx`:
   - Dark user bubble (`bg-[#1e1b38] text-[#AFA9EC]`) / light assistant bubble
   - Input field with send button
   - Loading indicator while streaming
   - Use Vercel AI SDK `useChat` hook
-- [ ] Update `app/(dashboard)/ai/page.tsx`:
+- [x] Update `app/(dashboard)/ai/page.tsx`:
   - Render `<ChatInterface />`
   - Session switcher (dropdown to start new session)
   - "Clear history" button
 
 #### Afternoon (3–4 hours)
 
-- [ ] Test all benchmark queries from problem statement:
+- [x] Test all benchmark queries from problem statement:
   - "Am I ready for this data engineer role?" → paste a JD
   - "What skills am I missing for a Google internship?"
   - "Build me a 3-month roadmap to become job-ready"
   - "Draft a cover letter for this job posting" → paste a JD
-- [ ] Verify:
+- [x] Verify:
   - Responses reference actual CV content (RAG working)
   - Follow-up questions work (memory working)
   - Tokens stream in real-time (no lag)
-- [ ] Add markdown rendering for assistant responses
-- [ ] Add copy button for cover letters
+- [x] Add markdown rendering for assistant responses
+- [x] Add copy button for cover letters
 
 **Deliverable:** Streaming chat working with RAG and memory at `/ai`, all benchmark queries answered
 
@@ -786,5 +786,5 @@ By end of Day 14, you should have:
 
 ---
 
-_Last updated: Day 7.5 · Codesprint 2026_
+_Last updated: Day 8 · Codesprint 2026_
 _Related docs: `AGENTS.md` · `CareerPilot_Stack_Final.md` · `PRD.md`_
