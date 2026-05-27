@@ -19,7 +19,7 @@ _GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
 def _get_gemini_client():
     genai.configure(api_key=_GOOGLE_API_KEY)
-    return genai.GenerativeModel('gemini-2.0-flash-exp')
+    return genai.GenerativeModel('gemini-2.0-flash')
 
 
 # Structured parsing prompt
