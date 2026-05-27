@@ -110,6 +110,12 @@ async def upload_cv(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"CV parsing failed: {str(e)}")
     except Exception as e:
+        err_str = str(e).lower()
+        if "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource exhausted" in err_str:
+            raise HTTPException(
+                status_code=429,
+                detail="The AI parser is temporarily rate-limited by Gemini API. Please wait a few seconds and try again."
+            )
         raise HTTPException(status_code=500, detail=f"Unexpected error during parsing: {str(e)}")
 
     if not any([

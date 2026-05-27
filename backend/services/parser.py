@@ -11,8 +11,12 @@ NEVER use: pypdf, pdfplumber, pdfminer, docling, unstructured, PyMuPDF
 import io
 import os
 import json
+import logging
 from docx import Document
 import google.generativeai as genai
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception, before_sleep_log
+
+logger = logging.getLogger(__name__)
 
 # Initialize Gemini client
 _GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
@@ -20,6 +24,24 @@ _GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 def _get_gemini_client():
     genai.configure(api_key=_GOOGLE_API_KEY)
     return genai.GenerativeModel('gemini-2.0-flash')
+
+
+def _is_rate_limit(exception):
+    err_str = str(exception).lower()
+    return "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource exhausted" in err_str
+
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    retry=retry_if_exception(_is_rate_limit),
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    reraise=True
+)
+def _generate_content_with_retry(model, contents, generation_config=None):
+    if generation_config:
+        return model.generate_content(contents, generation_config=generation_config)
+    return model.generate_content(contents)
 
 
 # Structured parsing prompt
@@ -94,7 +116,8 @@ def parse_pdf_cv(file_bytes: bytes) -> dict[str, str]:
     model = _get_gemini_client()
     
     # Build multimodal prompt with PDF bytes
-    response = model.generate_content(
+    response = _generate_content_with_retry(
+        model,
         [
             _STRUCTURED_PROMPT,
             {"mime_type": "application/pdf", "data": file_bytes}
@@ -129,7 +152,8 @@ def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     
     prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
     
-    response = model.generate_content(
+    response = _generate_content_with_retry(
+        model,
         prompt,
         generation_config=genai.GenerationConfig(
             response_mime_type="application/json",
