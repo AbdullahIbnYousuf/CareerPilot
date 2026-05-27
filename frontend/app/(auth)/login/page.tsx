@@ -4,10 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Briefcase } from "lucide-react";
+import { Briefcase, ArrowRight, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,80 +20,100 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/jobs");
+      router.push("/");
       router.refresh();
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="rounded-full bg-primary/10 p-3">
-              <Briefcase className="h-6 w-6 text-primary" />
-            </div>
+    <div className="relative flex min-h-screen items-center justify-center bg-[#08080C] overflow-hidden p-4">
+      {/* Background glows */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-[400px] h-[300px] bg-[#AFA9EC]/5 rounded-full blur-[100px] pointer-events-none" />
+
+      <div className="relative w-full max-w-md">
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#534AB7] to-[#7C74DB] shadow-lg shadow-primary/30 mb-4">
+            <Briefcase className="h-6 w-6 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
-          <CardDescription>Enter your email below to login to your account</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleLogin}>
-          <CardContent className="space-y-4">
+          <h1 className="text-2xl font-bold text-white tracking-tight">CareerPilot</h1>
+          <p className="text-sm text-white/40 mt-1">Your agentic career co-pilot</p>
+        </div>
+
+        {/* Card */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12]/80 backdrop-blur-md p-8 shadow-2xl shadow-black/60">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold text-white">Welcome back</h2>
+            <p className="text-sm text-white/40 mt-1">Sign in to your account to continue</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="space-y-4">
             {error && (
-              <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+              <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
                 {error}
               </div>
             )}
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+
+            <div className="space-y-1.5">
+              <label htmlFor="login-email" className="text-xs font-medium text-white/50 uppercase tracking-wider">
                 Email
               </label>
               <Input
-                id="email"
+                id="login-email"
                 type="email"
-                placeholder="m@example.com"
+                placeholder="you@example.com"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus-visible:border-primary/60 focus-visible:ring-primary/20 rounded-xl"
               />
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                  Password
-                </label>
-              </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="login-password" className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                Password
+              </label>
               <Input
-                id="password"
+                id="login-password"
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus-visible:border-primary/60 focus-visible:ring-primary/20 rounded-xl"
               />
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in..." : "Sign in"}
+
+            <Button
+              type="submit"
+              className="w-full h-11 mt-2 bg-gradient-to-r from-[#534AB7] to-[#6B63CC] hover:from-[#5E55CC] hover:to-[#7A73DD] text-white font-medium rounded-xl shadow-lg shadow-primary/20 transition-all duration-200 group"
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
+                </>
+              )}
             </Button>
-            <div className="text-center text-sm">
-              Don&apos;t have an account?{" "}
-              <Link href="/signup" className="underline underline-offset-4 hover:text-primary">
-                Sign up
-              </Link>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-white/30">
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="text-[#AFA9EC] hover:text-white transition-colors font-medium">
+              Sign up
+            </Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

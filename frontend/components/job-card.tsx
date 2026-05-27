@@ -1,48 +1,50 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FitScoreBadge } from "./fit-score-badge";
-import { MapPin, Building, ExternalLink, Calendar, DollarSign, X, Briefcase } from "lucide-react";
+import {
+  MapPin,
+  Building2,
+  ExternalLink,
+  Calendar,
+  DollarSign,
+  X,
+  Briefcase,
+  ChevronRight,
+} from "lucide-react";
 import type { Job } from "@/types";
 
 export function JobCard({ job }: { job: Job }) {
   const [showModal, setShowModal] = useState(false);
 
-  // Fallbacks for optional fields
   const salary = job.salary_range || "Not Disclosed";
   const deadline = job.deadline || "Rolling / Open";
 
   return (
     <>
-      <Card className="flex flex-col h-full hover:border-primary/50 transition-all duration-300 hover:shadow-md relative overflow-hidden group">
-        {/* Glow effect on hover */}
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+      {/* ── Card ── */}
+      <div className="group relative flex flex-col rounded-2xl border border-white/[0.06] bg-[#0E0E12] overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+        {/* Hover glow strip */}
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-        <CardHeader className="pb-3 relative">
+        {/* Header */}
+        <div className="p-5 pb-4">
           <div className="flex justify-between items-start gap-3">
             <div className="flex-1 min-w-0">
-              <CardTitle className="text-lg leading-tight line-clamp-2 font-bold group-hover:text-primary transition-colors duration-200">
+              <h3 className="text-base font-semibold text-white leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-200">
                 {job.title}
-              </CardTitle>
-              <CardDescription className="flex flex-col gap-1 mt-2">
+              </h3>
+              <div className="flex flex-col gap-1 mt-2">
                 <span className="flex items-center gap-1.5 text-sm">
-                  <Building className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="truncate font-medium text-foreground">{job.company || "Unknown"}</span>
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-white/30" />
+                  <span className="truncate font-medium text-white/70">{job.company || "Unknown"}</span>
                 </span>
-                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5 text-xs text-white/30">
                   <MapPin className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{job.location || "N/A"}</span>
                 </span>
-              </CardDescription>
+              </div>
             </div>
             {job.fit_score !== undefined && job.fit_score > 0 && (
               <div className="shrink-0">
@@ -50,151 +52,137 @@ export function JobCard({ job }: { job: Job }) {
               </div>
             )}
           </div>
-        </CardHeader>
+        </div>
 
-        <CardContent className="flex-1 pt-0 pb-4 relative">
-          {/* Salary and Deadline Row */}
-          <div className="flex items-center gap-4 text-xs text-muted-foreground mb-3 bg-muted/30 p-2 rounded-md">
-            <span className="flex items-center gap-1">
-              <DollarSign className="h-3.5 w-3.5 shrink-0 text-primary/70" />
-              <span>{salary}</span>
-            </span>
-            <span className="flex items-center gap-1 border-l pl-4">
-              <Calendar className="h-3.5 w-3.5 shrink-0 text-primary/70" />
-              <span>{deadline}</span>
-            </span>
-          </div>
+        {/* Meta row */}
+        <div className="mx-5 mb-4 flex items-center gap-3 rounded-xl bg-white/[0.03] border border-white/[0.04] px-3 py-2 text-xs text-white/30">
+          <span className="flex items-center gap-1.5">
+            <DollarSign className="h-3.5 w-3.5 text-primary/60" />
+            {salary}
+          </span>
+          <span className="h-3 w-px bg-white/10" />
+          <span className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5 text-primary/60" />
+            {deadline}
+          </span>
+        </div>
 
-          <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
-            {job.description}
-          </p>
-        </CardContent>
+        {/* Description */}
+        <div className="px-5 flex-1">
+          <p className="text-sm text-white/40 line-clamp-3 leading-relaxed">{job.description}</p>
+        </div>
 
-        <CardFooter className="flex gap-2 items-center border-t pt-4 mt-auto">
-          <span className="text-[10px] text-muted-foreground bg-muted/60 px-2 py-0.5 rounded font-mono uppercase tracking-wider">
+        {/* Footer */}
+        <div className="px-5 pb-5 pt-4 mt-3 border-t border-white/[0.04] flex items-center gap-2">
+          <span className="text-[10px] text-white/20 bg-white/[0.04] px-2 py-0.5 rounded-md font-mono uppercase tracking-wider">
             {job.source}
           </span>
           <div className="flex gap-2 ml-auto">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => setShowModal(true)}
-              className="text-xs transition-transform duration-200 active:scale-95"
+              className="text-xs text-white/40 hover:text-white hover:bg-white/[0.06] rounded-lg gap-1"
             >
-              View Details
+              Details <ChevronRight className="h-3 w-3" />
             </Button>
             <a
               href={job.url}
               target="_blank"
               rel="noopener noreferrer"
-              className={buttonVariants({ variant: "default", size: "sm" }) + " text-xs flex items-center gap-1 transition-transform duration-200 active:scale-95"}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary/90 hover:bg-primary text-white text-xs font-medium px-3 py-1.5 transition-colors duration-150"
             >
               Apply <ExternalLink className="h-3 w-3" />
             </a>
           </div>
-        </CardFooter>
-      </Card>
+        </div>
+      </div>
 
-      {/* Premium Detail Modal Overlay */}
+      {/* ── Detail Modal ── */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-background border border-border/80 shadow-2xl rounded-xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 relative">
-            
-            {/* Modal Header */}
-            <div className="flex justify-between items-start p-5 border-b bg-muted/10">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
+        >
+          <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 overflow-hidden">
+            {/* Modal header */}
+            <div className="flex justify-between items-start p-6 border-b border-white/[0.06] bg-white/[0.02]">
               <div className="flex-1 min-w-0 pr-4">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded font-mono uppercase">
-                    {job.source}
-                  </span>
-                </div>
-                <h2 className="text-xl font-bold leading-snug text-foreground">
-                  {job.title}
-                </h2>
-                <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1.5 text-foreground font-medium">
-                    <Building className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    {job.company}
+                <span className="text-[10px] text-white/20 bg-white/[0.05] px-2 py-0.5 rounded font-mono uppercase tracking-wider">
+                  {job.source}
+                </span>
+                <h2 className="text-xl font-bold text-white mt-2 leading-snug">{job.title}</h2>
+                <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-white/40">
+                  <span className="flex items-center gap-1.5 text-white/70 font-medium">
+                    <Building2 className="h-4 w-4 text-white/30" /> {job.company}
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <MapPin className="h-4 w-4 shrink-0" />
-                    {job.location}
+                    <MapPin className="h-4 w-4" /> {job.location}
                   </span>
                 </div>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
+              <button
                 onClick={() => setShowModal(false)}
-                className="h-8 w-8 rounded-full border border-border/40 hover:bg-muted"
+                className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors"
               >
                 <X className="h-4 w-4" />
-              </Button>
+              </button>
             </div>
 
-            {/* Modal Content (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              
-              {/* Fit Score Spotlight */}
+            {/* Modal body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Fit score */}
               {job.fit_score !== undefined && job.fit_score > 0 && (
-                <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 flex flex-col md:flex-row gap-4 items-center md:items-start">
-                  <div className="shrink-0 flex items-center justify-center">
-                    <FitScoreBadge score={job.fit_score} />
-                  </div>
-                  <div className="space-y-1.5 text-center md:text-left">
-                    <h3 className="font-semibold text-sm text-primary">Personalized Fit Match Explanation</h3>
-                    <p className="text-xs font-medium leading-relaxed text-foreground italic">
-                      &ldquo;{job.fit_explanation}&rdquo;
-                    </p>
+                <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
+                  <div className="shrink-0"><FitScoreBadge score={job.fit_score} /></div>
+                  <div className="space-y-1 text-center md:text-left">
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">Fit Match</p>
+                    <p className="text-sm text-white/60 italic leading-relaxed">&ldquo;{job.fit_explanation}&rdquo;</p>
                   </div>
                 </div>
               )}
 
-              {/* Quick Info Grid */}
-              <div className="grid grid-cols-2 gap-4 bg-muted/20 p-3.5 rounded-lg border border-border/40 text-xs">
+              {/* Quick info */}
+              <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.03] border border-white/[0.05] p-4 text-xs">
                 <div className="space-y-1">
-                  <span className="text-muted-foreground block font-medium">Salary Range</span>
-                  <span className="text-foreground font-bold flex items-center gap-1.5">
-                    <DollarSign className="h-4.5 w-4.5 text-primary" />
-                    {salary}
+                  <span className="text-white/30 block">Salary Range</span>
+                  <span className="text-white font-semibold flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-primary" /> {salary}
                   </span>
                 </div>
-                <div className="space-y-1 pl-4 border-l">
-                  <span className="text-muted-foreground block font-medium">Application Deadline</span>
-                  <span className="text-foreground font-bold flex items-center gap-1.5">
-                    <Calendar className="h-4.5 w-4.5 text-primary" />
-                    {deadline}
+                <div className="space-y-1 pl-4 border-l border-white/[0.05]">
+                  <span className="text-white/30 block">Deadline</span>
+                  <span className="text-white font-semibold flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-primary" /> {deadline}
                   </span>
                 </div>
               </div>
 
-              {/* Job Description section */}
+              {/* Description */}
               <div className="space-y-2">
-                <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
-                  <Briefcase className="h-4 w-4 text-primary" /> Job Description
+                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5" /> Job Description
                 </h3>
-                <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto pr-2 bg-muted/10 p-4 rounded-md border">
+                <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-sm text-white/50 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
                   {job.description}
                 </div>
               </div>
-
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t flex justify-end gap-2.5 bg-muted/10">
-              <Button variant="outline" size="sm" onClick={() => setShowModal(false)}>
+            {/* Modal footer */}
+            <div className="p-4 border-t border-white/[0.06] flex justify-end gap-2 bg-white/[0.02]">
+              <Button variant="ghost" size="sm" onClick={() => setShowModal(false)} className="text-white/40 hover:text-white">
                 Close
               </Button>
               <a
                 href={job.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={buttonVariants({ variant: "default", size: "sm" }) + " flex items-center gap-1.5"}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
               >
                 Apply Now <ExternalLink className="h-3.5 w-3.5" />
               </a>
             </div>
-
           </div>
         </div>
       )}

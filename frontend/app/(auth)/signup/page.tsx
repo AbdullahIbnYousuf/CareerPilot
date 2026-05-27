@@ -4,16 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Briefcase } from "lucide-react";
+import { Briefcase, ArrowRight, Loader2 } from "lucide-react";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const router = useRouter();
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -33,73 +33,103 @@ export default function SignupPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      // For testing without email confirmation, Supabase might log them in directly
-      // Or they might need to confirm email depending on settings.
-      router.push("/jobs");
+      setSuccess(true);
+      setLoading(false);
+      router.push("/");
       router.refresh();
     }
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="rounded-full bg-primary/10 p-3">
-              <Briefcase className="h-6 w-6 text-primary" />
-            </div>
+    <div className="relative flex min-h-screen items-center justify-center bg-[#08080C] overflow-hidden p-4">
+      {/* Background glows */}
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[700px] h-[400px] bg-primary/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-[400px] h-[300px] bg-[#AFA9EC]/5 rounded-full blur-[100px] pointer-events-none" />
+
+      <div className="relative w-full max-w-md">
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#534AB7] to-[#7C74DB] shadow-lg shadow-primary/30 mb-4">
+            <Briefcase className="h-6 w-6 text-white" />
           </div>
-          <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-          <CardDescription>Enter your email below to create your account</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSignup}>
-          <CardContent className="space-y-4">
-            {error && (
-              <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-                {error}
-              </div>
-            )}
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="m@example.com"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
+          <h1 className="text-2xl font-bold text-white tracking-tight">CareerPilot</h1>
+          <p className="text-sm text-white/40 mt-1">Your agentic career co-pilot</p>
+        </div>
+
+        {/* Card */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12]/80 backdrop-blur-md p-8 shadow-2xl shadow-black/60">
+          <div className="mb-6">
+            <h2 className="text-xl font-semibold text-white">Create your account</h2>
+            <p className="text-sm text-white/40 mt-1">Start your AI-powered career journey</p>
+          </div>
+
+          {success ? (
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-4 py-6 text-center">
+              <p className="text-emerald-400 font-medium">Account created!</p>
+              <p className="text-sm text-white/40 mt-1">Check your email to confirm your account.</p>
             </div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          ) : (
+            <form onSubmit={handleSignup} className="space-y-4">
+              {error && (
+                <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+                  {error}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label htmlFor="signup-email" className="text-xs font-medium text-white/50 uppercase tracking-wider">
+                  Email
+                </label>
+                <Input
+                  id="signup-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus-visible:border-primary/60 focus-visible:ring-primary/20 rounded-xl"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="signup-password" className="text-xs font-medium text-white/50 uppercase tracking-wider">
                   Password
                 </label>
+                <Input
+                  id="signup-password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus-visible:border-primary/60 focus-visible:ring-primary/20 rounded-xl"
+                />
               </div>
-              <Input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating account..." : "Sign up"}
-            </Button>
-            <div className="text-center text-sm">
-              Already have an account?{" "}
-              <Link href="/login" className="underline underline-offset-4 hover:text-primary">
-                Sign in
-              </Link>
-            </div>
-          </CardFooter>
-        </form>
-      </Card>
+
+              <Button
+                type="submit"
+                className="w-full h-11 mt-2 bg-gradient-to-r from-[#534AB7] to-[#6B63CC] hover:from-[#5E55CC] hover:to-[#7A73DD] text-white font-medium rounded-xl shadow-lg shadow-primary/20 transition-all duration-200 group"
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    Create account
+                    <ArrowRight className="h-4 w-4 ml-2 group-hover:translate-x-0.5 transition-transform" />
+                  </>
+                )}
+              </Button>
+            </form>
+          )}
+
+          <p className="mt-6 text-center text-sm text-white/30">
+            Already have an account?{" "}
+            <Link href="/login" className="text-[#AFA9EC] hover:text-white transition-colors font-medium">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   Briefcase,
   GraduationCap,
   FolderKanban,
+  User2,
 } from "lucide-react";
 
 interface CVUploadResult {
@@ -39,9 +40,16 @@ export default function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
-        <p className="text-muted-foreground mt-2">
+      {/* Page header */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="h-6 w-6 rounded-md bg-primary/20 flex items-center justify-center">
+            <User2 className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <span className="text-xs font-semibold text-primary uppercase tracking-widest">Workspace</span>
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight text-white">Profile</h1>
+        <p className="text-white/40 text-sm mt-1">
           Upload your CV to enable AI-powered job matching and chat features.
         </p>
       </div>
@@ -51,13 +59,13 @@ export default function ProfilePage() {
       ) : (
         <div className="space-y-6">
           {/* Success banner */}
-          <div className="p-4 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded-lg flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 shrink-0" />
+          <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
             <div>
-              <p className="font-medium">
+              <p className="font-semibold text-white">
                 {result.file_name} — parsed successfully!
               </p>
-              <p className="text-sm opacity-80">
+              <p className="text-sm text-white/50">
                 {result.chunks_stored} chunks embedded and stored for semantic
                 search.
               </p>
@@ -69,15 +77,15 @@ export default function ProfilePage() {
             {sectionConfig.map(({ key, label, icon: Icon }) => {
               const content = result.parsed_data[key];
               return (
-                <Card key={key}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Icon className="h-4 w-4 text-primary" />
+                <Card key={key} className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
+                  <CardHeader className="pb-3 border-b border-white/[0.04] mb-3">
+                    <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
+                      <Icon className="h-4 w-4 text-[#7C74DB]" />
                       {label}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+                    <p className="text-sm text-white/70 whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                       {content || `No ${label.toLowerCase()} extracted.`}
                     </p>
                   </CardContent>
@@ -86,8 +94,11 @@ export default function ProfilePage() {
             })}
           </div>
 
-          <div className="flex justify-center">
-            <Button variant="ghost" onClick={() => setResult(null)}>
+          <div className="flex justify-center pt-2">
+            <Button
+              className="bg-[#1E1B3A]/40 border border-white/[0.06] text-white hover:bg-[#1E1B3A]/80 hover:text-white rounded-xl h-10 px-6 transition-colors"
+              onClick={() => setResult(null)}
+            >
               Upload a different CV
             </Button>
           </div>

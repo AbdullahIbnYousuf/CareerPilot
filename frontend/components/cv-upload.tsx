@@ -98,10 +98,10 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
   return (
     <div className="w-full">
       <div
-        className={`border-2 border-dashed rounded-xl p-12 flex flex-col items-center justify-center text-center transition-all duration-200 cursor-pointer ${
+        className={`border border-dashed rounded-2xl p-16 flex flex-col items-center justify-center text-center transition-all duration-300 cursor-pointer bg-[#0E0E12]/80 backdrop-blur-md shadow-xl shadow-black/20 ${
           isDragging
-            ? "border-primary bg-primary/5 scale-[1.01]"
-            : "border-muted-foreground/25 hover:border-muted-foreground/50"
+            ? "border-[#7C74DB] bg-[#7C74DB]/5 scale-[1.01]"
+            : "border-white/[0.08] hover:border-white/[0.15] hover:shadow-black/30"
         }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -110,23 +110,30 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
       >
         {isUploading ? (
           <>
-            <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
-            <p className="text-sm font-medium">Parsing {fileName}...</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Extracting skills, experience, education, and projects
+            <div className="h-14 w-14 rounded-2xl bg-[#0E0E12] flex items-center justify-center border border-white/[0.06] mb-4">
+              <Loader2 className="h-6 w-6 text-[#7C74DB] animate-spin" />
+            </div>
+            <p className="text-sm font-semibold text-white">Parsing {fileName}...</p>
+            <p className="text-xs text-white/40 mt-1 max-w-xs leading-relaxed">
+              Extracting skills, experience, education, and projects via AI
             </p>
           </>
         ) : (
           <>
-            <UploadCloud className="h-10 w-10 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-1">
+            <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-[#534AB7]/20 to-[#7C74DB]/10 flex items-center justify-center border border-white/[0.04] mb-4 shadow-lg shadow-[#534AB7]/5">
+              <UploadCloud className="h-6 w-6 text-[#7C74DB]" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-1">
               Drag &amp; drop your CV here
             </h3>
-            <p className="text-sm text-muted-foreground mb-4">
+            <p className="text-sm text-white/40 mb-5">
               Supports PDF and DOCX — max 5 MB
             </p>
-            <Button variant="outline" size="sm" type="button">
-              <FileUp className="mr-2 h-4 w-4" /> Browse Files
+            <Button
+              type="button"
+              className="bg-[#1E1B3A]/40 border border-white/[0.06] text-white hover:bg-[#1E1B3A]/80 hover:text-white rounded-xl h-10 px-4 transition-colors"
+            >
+              <FileUp className="mr-2 h-4 w-4 text-[#AFA9EC]" /> Browse Files
             </Button>
           </>
         )}
@@ -141,7 +148,7 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
       </div>
 
       {error && (
-        <div className="mt-4 p-3 bg-destructive/10 text-destructive rounded-md text-sm">
+        <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm">
           {error}
         </div>
       )}

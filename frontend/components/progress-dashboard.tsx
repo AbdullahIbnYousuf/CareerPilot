@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/lib/supabase";
 import type { Snapshot, StatusCounts, Nudge } from "@/types";
 import {
@@ -87,26 +86,26 @@ export function ProgressDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-6 w-6 animate-spin text-[#7C74DB]" />
       </div>
     );
   }
 
   const statusItems = [
-    { key: "saved", label: "Saved", icon: Briefcase, color: "text-slate-500" },
-    { key: "applied", label: "Applied", icon: Send, color: "text-blue-500" },
+    { key: "saved", label: "Saved", icon: Briefcase, color: "text-slate-400" },
+    { key: "applied", label: "Applied", icon: Send, color: "text-blue-400" },
     {
       key: "interviewing",
       label: "Interview",
       icon: Users,
-      color: "text-amber-500",
+      color: "text-amber-400",
     },
-    { key: "offer", label: "Offer", icon: Trophy, color: "text-emerald-500" },
+    { key: "offer", label: "Offer", icon: Trophy, color: "text-emerald-400" },
     {
       key: "rejected",
       label: "Rejected",
       icon: XCircle,
-      color: "text-red-500",
+      color: "text-red-400",
     },
   ] as const;
 
@@ -118,12 +117,12 @@ export function ProgressDashboard() {
           {nudges.map((nudge) => (
             <div
               key={nudge.id}
-              className="flex items-start gap-3 p-4 rounded-lg bg-primary/5 border border-primary/20"
+              className="flex items-start gap-3 p-4 rounded-xl bg-[#534AB7]/10 border border-[#534AB7]/20 shadow-md text-white/90"
             >
-              <Bell className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+              <Bell className="h-4 w-4 text-[#AFA9EC] mt-0.5 shrink-0" />
               <p className="text-sm flex-1">{nudge.message}</p>
               <button
-                className="text-xs text-muted-foreground hover:text-foreground underline shrink-0"
+                className="text-xs text-white/40 hover:text-white transition-colors shrink-0 underline"
                 onClick={() => dismissNudge(nudge.id)}
               >
                 Dismiss
@@ -134,52 +133,52 @@ export function ProgressDashboard() {
       )}
 
       {/* Stats cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-sm font-semibold text-white/60">
               Applications Sent
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-white/30" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-white tracking-tight">
               {snapshot?.applications_sent ?? 0}
             </div>
-            <p className="text-xs text-muted-foreground">This week</p>
+            <p className="text-xs text-white/30 mt-1">This week</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Daily Streak</CardTitle>
-            <Flame className="h-4 w-4 text-orange-500" />
+            <CardTitle className="text-sm font-semibold text-white/60">Daily Streak</CardTitle>
+            <Flame className="h-4 w-4 text-orange-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-white tracking-tight">
               {snapshot?.streak_days ?? 0}{" "}
-              <span className="text-sm font-normal text-muted-foreground">
+              <span className="text-sm font-normal text-white/40">
                 days
               </span>
             </div>
-            <p className="text-xs text-muted-foreground">Keep it going!</p>
+            <p className="text-xs text-white/30 mt-1">Keep it going!</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-sm font-semibold text-white/60">
               Roadmap Progress
             </CardTitle>
-            <Target className="h-4 w-4 text-muted-foreground" />
+            <Target className="h-4 w-4 text-white/30" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-white tracking-tight">
               {snapshot?.roadmap_pct ?? 0}%
             </div>
-            <div className="mt-2 h-2 rounded-full bg-muted overflow-hidden">
+            <div className="mt-3.5 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
               <div
-                className="h-full rounded-full bg-primary transition-all"
+                className="h-full rounded-full bg-gradient-to-r from-[#534AB7] to-[#7C74DB] transition-all"
                 style={{ width: `${snapshot?.roadmap_pct ?? 0}%` }}
               />
             </div>
@@ -188,9 +187,9 @@ export function ProgressDashboard() {
       </div>
 
       {/* Pipeline overview */}
-      <Card>
+      <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
         <CardHeader>
-          <CardTitle className="text-base">Application Pipeline</CardTitle>
+          <CardTitle className="text-base font-bold text-white">Application Pipeline</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
@@ -200,11 +199,11 @@ export function ProgressDashboard() {
               return (
                 <div
                   key={item.key}
-                  className="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-muted/40"
+                  className="flex flex-col items-center gap-1.5 p-4 rounded-xl bg-white/[0.02] border border-white/[0.04] transition-all hover:bg-white/[0.04]"
                 >
                   <Icon className={`h-5 w-5 ${item.color}`} />
-                  <span className="text-2xl font-bold">{count}</span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-2xl font-bold text-white tracking-tight">{count}</span>
+                  <span className="text-xs text-white/40 font-medium">
                     {item.label}
                   </span>
                 </div>

@@ -1,9 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { supabase } from "@/lib/supabase";
 import type { Application, ApplicationStatus } from "@/types";
 import {
@@ -18,16 +16,16 @@ import {
 } from "lucide-react";
 
 const STATUSES = [
-  { key: "saved", label: "Saved", icon: Briefcase, color: "bg-slate-500" },
-  { key: "applied", label: "Applied", icon: Send, color: "bg-blue-500" },
+  { key: "saved", label: "Saved", icon: Briefcase, color: "bg-slate-400" },
+  { key: "applied", label: "Applied", icon: Send, color: "bg-blue-400" },
   {
     key: "interviewing",
     label: "Interviewing",
     icon: Users,
-    color: "bg-amber-500",
+    color: "bg-amber-400",
   },
-  { key: "offer", label: "Offer", icon: Trophy, color: "bg-emerald-500" },
-  { key: "rejected", label: "Rejected", icon: XCircle, color: "bg-red-500" },
+  { key: "offer", label: "Offer", icon: Trophy, color: "bg-emerald-400" },
+  { key: "rejected", label: "Rejected", icon: XCircle, color: "bg-red-400" },
 ] as const;
 
 export function KanbanBoard() {
@@ -105,7 +103,7 @@ export function KanbanBoard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-6 w-6 animate-spin text-[#7C74DB]" />
       </div>
     );
   }
@@ -113,62 +111,57 @@ export function KanbanBoard() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
       {STATUSES.map((status) => {
-        const Icon = status.icon;
         const columnApps = applications.filter((a) => a.status === status.key);
 
         return (
           <div key={status.key} className="space-y-3">
             <div className="flex items-center gap-2 px-1">
-              <div className={`h-2.5 w-2.5 rounded-full ${status.color}`} />
-              <h3 className="text-sm font-semibold">{status.label}</h3>
-              <Badge variant="secondary" className="ml-auto text-xs">
+              <div className={`h-2 w-2 rounded-full ${status.color}`} />
+              <h3 className="text-sm font-bold text-white">{status.label}</h3>
+              <div className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/70">
                 {columnApps.length}
-              </Badge>
+              </div>
             </div>
 
-            <div className="space-y-2 min-h-[120px] p-2 rounded-lg bg-muted/30 border border-dashed">
+            <div className="space-y-2.5 min-h-[200px] p-2.5 rounded-2xl bg-[#0E0E12]/80 backdrop-blur-md border border-white/[0.04]">
               {columnApps.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-6">
+                <p className="text-xs text-white/20 text-center py-10">
                   No applications
                 </p>
               )}
 
               {columnApps.map((app) => (
-                <Card key={app.id} className="p-3 text-sm">
+                <Card key={app.id} className="bg-[#141418] border border-white/[0.06] rounded-xl p-3 shadow-md shadow-black/20 hover:border-white/[0.12] transition-all">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <GripVertical className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className="truncate font-medium text-xs">
+                      <GripVertical className="h-3.5 w-3.5 text-white/20 shrink-0" />
+                      <span className="truncate font-bold text-xs text-white/95">
                         {app.job_id.slice(0, 8)}...
                       </span>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 shrink-0"
+                    <button
                       onClick={() => deleteApplication(app.id)}
+                      className="h-6 w-6 text-white/40 hover:text-red-400 hover:bg-red-500/10 rounded-lg flex items-center justify-center shrink-0 transition-all"
                     >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
 
                   {/* Move buttons */}
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex flex-wrap gap-1 mt-2.5">
                     {STATUSES.filter((s) => s.key !== app.status).map((s) => (
-                      <Button
+                      <button
                         key={s.key}
-                        variant="outline"
-                        size="sm"
-                        className="h-6 text-[10px] px-1.5"
                         disabled={updatingId === app.id}
                         onClick={() => moveApplication(app.id, s.key)}
+                        className="h-5 text-[9px] px-1.5 rounded-md border border-white/[0.04] bg-[#1E1B3A]/30 text-white/60 hover:text-white hover:bg-[#1E1B3A]/70 disabled:opacity-40 transition-all font-semibold"
                       >
                         {updatingId === app.id ? (
-                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <Loader2 className="h-3 w-3 animate-spin text-[#7C74DB]" />
                         ) : (
                           s.label
                         )}
-                      </Button>
+                      </button>
                     ))}
                   </div>
                 </Card>
