@@ -2,7 +2,7 @@
 
 import { ChatInterface } from "@/components/chat-interface";
 
-export default function ChatPage() {
+export default function AiPage() {
   return (
     <div className="space-y-4 flex flex-col h-[calc(100vh-100px)]">
       <div>

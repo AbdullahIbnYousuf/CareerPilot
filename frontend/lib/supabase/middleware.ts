@@ -49,14 +49,15 @@ export async function updateSession(request: NextRequest) {
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/signup");
   
-  if (!user && !isAuthRoute && request.nextUrl.pathname !== "/") {
-    // no user, potentially respond by redirecting the user to the login page
+  if (!user && !isAuthRoute) {
+    // No session — redirect to login for all protected routes (including /)
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
-  } else if (user && (isAuthRoute || request.nextUrl.pathname === "/")) {
+  } else if (user && isAuthRoute) {
+    // Already authenticated — send to home dashboard
     const url = request.nextUrl.clone();
-    url.pathname = "/jobs";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 

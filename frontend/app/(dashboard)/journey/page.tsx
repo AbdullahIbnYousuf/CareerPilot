@@ -11,18 +11,16 @@ import { LayoutGrid, BarChart3, Calendar, ListTodo } from "lucide-react";
 
 type View = "kanban" | "dashboard" | "calendar" | "tasks";
 
-export default function TrackerPage() {
+export default function JourneyPage() {
   const [view, setView] = useState<View>("kanban");
 
   return (
     <div className="space-y-6">
       <NudgeBanner message="You've got 2 new job matches based on your updated skills. Check them out!" />
-      
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">
-            Productivity Tracker
-          </h1>
+          <h1 className="text-3xl font-bold tracking-tight">My Journey</h1>
           <p className="text-muted-foreground mt-2">
             Manage your job applications, goals, and track your daily progress.
           </p>
@@ -43,7 +41,7 @@ export default function TrackerPage() {
             onClick={() => setView("dashboard")}
             className="gap-1.5"
           >
-            <BarChart3 className="h-4 w-4" /> Dashboard
+            <BarChart3 className="h-4 w-4" /> Stats
           </Button>
           <Button
             variant={view === "calendar" ? "secondary" : "ghost"}

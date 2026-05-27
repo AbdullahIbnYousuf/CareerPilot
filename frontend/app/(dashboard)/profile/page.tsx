@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle2,
-  FileText,
   Code2,
   Briefcase,
   GraduationCap,
@@ -35,13 +34,13 @@ const sectionConfig = [
   { key: "projects", label: "Projects", icon: FolderKanban },
 ] as const;
 
-export default function CVPage() {
+export default function ProfilePage() {
   const [result, setResult] = useState<CVUploadResult | null>(null);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">CV Intelligence</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Profile</h1>
         <p className="text-muted-foreground mt-2">
           Upload your CV to enable AI-powered job matching and chat features.
         </p>

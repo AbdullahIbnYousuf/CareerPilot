@@ -10,9 +10,9 @@
 ## Timeline Overview
 
 ```
-PHASE 1 — Infrastructure (Days 1–5)     Foundation · No UI yet
-PHASE 2 — Features + Integration (Days 6–10)   Build all four pillars
-PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
+PHASE 1 — Infrastructure (Days 1–5)              Foundation · No UI yet
+PHASE 2 — Features + Integration (Days 6–10)     Build all four pillars
+PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 ```
 
 **Critical Path:** Days 1→2→3→4→5→7 must complete on time. Any delay cascades.
@@ -247,15 +247,14 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 #### Afternoon (3–4 hours)
 
-- [x] Create dashboard layout:
-  - `app/(dashboard)/layout.tsx` — sidebar with navigation
-  - Links: Jobs, CV, Chat, Tracker
+- [x] Create dashboard layout with old nav (temporary):
+  - `app/(dashboard)/layout.tsx` — sidebar with 4 links: Jobs, CV, Chat, Tracker
   - User menu with logout
 - [x] Create placeholder pages:
-  - `app/(dashboard)/jobs/page.tsx` — "Jobs coming soon"
-  - `app/(dashboard)/cv/page.tsx` — "CV upload coming soon"
-  - `app/(dashboard)/chat/page.tsx` — "Chat coming soon"
-  - `app/(dashboard)/tracker/page.tsx` — "Tracker coming soon"
+  - `app/(dashboard)/jobs/page.tsx`
+  - `app/(dashboard)/cv/page.tsx`
+  - `app/(dashboard)/chat/page.tsx`
+  - `app/(dashboard)/tracker/page.tsx`
 - [x] Add protected route middleware:
   - Check Supabase session
   - Redirect to /login if not authenticated
@@ -265,12 +264,12 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 ---
 
-### Day 7 — DEPLOYMENT + Job Cards UI
+### Day 7 — Deployment + Job Cards UI
 
 **Goal:** 🚀 Live deployment, job search UI working
 **Time:** 6–8 hours
 
-#### Morning (2–3 hours) — DEPLOY FIRST
+#### Morning (2–3 hours) — Deploy first
 
 - [x] Backend deployment (Render):
   - Create `backend/Dockerfile` (if not exists)
@@ -293,11 +292,11 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   - `curl https://your-app.onrender.com/api/cv/upload`
   - `curl https://your-app.onrender.com/api/jobs/search`
 
-#### Afternoon (4–5 hours) — Job Cards UI
+#### Afternoon (4–5 hours) — Job cards UI
 
 - [x] Create `components/job-card.tsx`:
   - Display: title, company, location, salary range, deadline
-  - Fit score badge with color coding: <40 red, 40-70 yellow, >70 green
+  - Fit score badge with color coding: <40 red, 40–70 yellow, >70 green
   - "View Details" button
 - [x] Create `components/fit-score-badge.tsx`:
   - Circular progress indicator
@@ -317,9 +316,50 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 
 ---
 
+### Day 7.5 — Nav Restructure *(one short session before Day 8)*
+
+**Goal:** Rename routes and sidebar to match new navigation structure. 5 file touches, zero new component logic.
+**Time:** 1–2 hours
+
+> **Why now:** Restructuring routing after Day 10 risks breaking live features during the polish phase. One session now saves a long debugging session later.
+
+#### The only 5 files to touch
+
+- [ ] `app/(dashboard)/layout.tsx` — update sidebar:
+  - Replace 4-item nav (Jobs, CV, Chat, Tracker) with 5-item nav:
+    - Home → `/` (icon: `LayoutDashboard`)
+    - Jobs → `/jobs` (icon: `Briefcase`) — unchanged
+    - My journey → `/journey` (icon: `Map`)
+    - AI assistant → `/ai` (icon: `MessageCircle`)
+    - Profile → `/profile` (icon: `UserCircle`)
+  - Apply dark sidebar styling: `bg-[#111110]` for sidebar, white for content area
+  - Active state: `bg-[#1e1b38] text-[#AFA9EC]` — no underlines, no highlight bars
+  - Keep user avatar + logout in sidebar footer
+  - Add mobile bottom tab bar (5 items, same order) — stub only, style on Day 11
+- [ ] `app/(dashboard)/journey/page.tsx` — create file, copy content from `tracker/page.tsx`, delete `tracker/` folder
+- [ ] `app/(dashboard)/ai/page.tsx` — create file, copy content from `chat/page.tsx`, delete `chat/` folder
+- [ ] `app/(dashboard)/profile/page.tsx` — create file, copy content from `cv/page.tsx`, delete `cv/` folder
+- [ ] `app/(dashboard)/page.tsx` — create Home page stub:
+  ```tsx
+  export default function HomePage() {
+    return <div className="p-6 text-muted-foreground">Home dashboard — coming Day 10</div>
+  }
+  ```
+
+#### After the 5 file touches
+
+- [ ] Verify all 5 routes load without 404: `/`, `/jobs`, `/journey`, `/ai`, `/profile`
+- [ ] Verify `/jobs` still works end-to-end (job search + fit scores)
+- [ ] Push to GitHub → confirm Vercel redeploys cleanly
+- [ ] Update any internal `router.push()` or `<Link href>` references that pointed to old routes
+
+**Deliverable:** New 5-item dark sidebar live on Vercel, all old routes redirected, no broken functionality
+
+---
+
 ### Day 8 — Streaming Chat UI
 
-**Goal:** Chat interface with streaming, RAG, and memory
+**Goal:** Chat interface with streaming, RAG, and memory — built at `/ai`
 **Time:** 6–8 hours
 
 #### Morning (3–4 hours)
@@ -329,11 +369,11 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   - Handle SSE stream
   - Return as ReadableStream
 - [ ] Create `components/chat-interface.tsx`:
-  - Message list with user/assistant bubbles
+  - Dark user bubble (`bg-[#1e1b38] text-[#AFA9EC]`) / light assistant bubble
   - Input field with send button
   - Loading indicator while streaming
   - Use Vercel AI SDK `useChat` hook
-- [ ] Update `app/(dashboard)/chat/page.tsx`:
+- [ ] Update `app/(dashboard)/ai/page.tsx`:
   - Render `<ChatInterface />`
   - Session switcher (dropdown to start new session)
   - "Clear history" button
@@ -352,13 +392,13 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 - [ ] Add markdown rendering for assistant responses
 - [ ] Add copy button for cover letters
 
-**Deliverable:** Streaming chat working with RAG and memory, all benchmark queries answered
+**Deliverable:** Streaming chat working with RAG and memory at `/ai`, all benchmark queries answered
 
 ---
 
 ### Day 9 — Kanban Board
 
-**Goal:** Drag-and-drop application tracker with Realtime updates
+**Goal:** Drag-and-drop application tracker with Realtime updates — built at `/journey`
 **Time:** 6–8 hours
 
 #### Morning (3–4 hours)
@@ -379,24 +419,47 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   - Subscribe to `applications` table changes
   - Update Kanban board in real-time when status changes
 - [ ] Add "Add to Tracker" button on job cards
-  - Saves job to `applications` table with status "saved"
-- [ ] Update `app/(dashboard)/tracker/page.tsx`:
-  - Render `<KanbanBoard />`
+  - Saves job to `applications` table with status "Saved"
+- [ ] Update `app/(dashboard)/journey/page.tsx`:
+  - Add sub-tab bar: Kanban | Calendar | Tasks | Stats
+  - Render `<KanbanBoard />` under Kanban tab (other tabs are stubs for now)
   - Drag card → update status in Supabase → Realtime fires → UI updates
 - [ ] Test:
   - Open app in two browser windows
   - Drag card in window 1 → verify window 2 updates instantly
 
-**Deliverable:** Kanban board working with drag-and-drop and Realtime updates
+**Deliverable:** Kanban board working with drag-and-drop and Realtime updates at `/journey`
 
 ---
 
-### Day 10 — Calendar, Todos, Dashboard, Nudges
+### Day 10 — Home Dashboard + Calendar + Todos + Nudges
 
-**Goal:** Complete Pillar 4 (Productivity Tracker)
+**Goal:** Complete Pillar 4 and ship the Home page as a real deliverable
 **Time:** 8–10 hours (longest day in Phase 2)
 
-#### Morning (4–5 hours)
+#### Morning (4–5 hours) — Home page + Nudges
+
+- [ ] Build `app/(dashboard)/page.tsx` (Home) — replace the stub:
+  - Stats grid (4 cards): applications sent, roadmap %, new matches, streak days
+  - Top job matches section: 2–3 job cards pulled from last search, highest fit scores first
+  - AI nudge banner component at top:
+    - Subscribe to `nudges` table via Realtime
+    - Show banner when new nudge arrives: *"You haven't applied this week. Here are 3 openings."*
+    - "Dismiss" button marks nudge as seen
+- [ ] Create `components/progress-dashboard.tsx`:
+  - Weekly stats cards with real data from `GET /api/dashboard/stats`
+  - Line chart: applications over time (Recharts)
+  - Bar chart: fit score distribution
+- [ ] Create backend endpoint `GET /api/dashboard/stats`:
+  - Query `progress_snapshots` table
+  - Return current week stats
+- [ ] Set up AI nudges:
+  - Enable pg_cron in Supabase (Extensions → pg_cron)
+  - Create cron job (see `CareerPilot_Stack_Final.md` Section 10)
+  - Runs every Monday 9 AM UTC
+  - Inserts nudge if user hasn't applied this week
+
+#### Afternoon (4–5 hours) — Calendar + Todos inside `/journey`
 
 - [ ] Create `components/calendar-view.tsx`:
   - Use shadcn Calendar component
@@ -412,41 +475,24 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   - `GET /api/todos` — fetch todos (optionally filtered by date)
   - `POST /api/todos` — create todo
   - `PATCH /api/todos/:id` — mark complete/incomplete
-- [ ] Update `app/(dashboard)/tracker/page.tsx`:
-  - Add tabs: Kanban | Calendar | Goals
-  - Render calendar and todo list
+- [ ] Wire up `/journey` sub-tabs:
+  - Kanban tab → `<KanbanBoard />` (already done Day 9)
+  - Calendar tab → `<CalendarView />`
+  - Tasks tab → `<TodoList />`
+  - Stats tab → `<ProgressDashboard />` (moved here from Home — stats live in both places)
 
-#### Afternoon (4–5 hours)
-
-- [ ] Create `components/progress-dashboard.tsx`:
-  - Weekly stats cards: applications sent, skills added, roadmap %, streak days
-  - Line chart: applications over time (Recharts)
-  - Bar chart: fit score distribution
-- [ ] Create backend endpoint `GET /api/dashboard/stats`:
-  - Query `progress_snapshots` table
-  - Return current week stats
-- [ ] Set up AI nudges:
-  - Enable pg_cron in Supabase (Extensions → pg_cron)
-  - Create cron job (see `CareerPilot_Stack_Final.md` Section 10)
-  - Runs every Monday 9 AM UTC
-  - Inserts nudge if user hasn't applied this week
-- [ ] Add nudge banner component:
-  - Subscribe to `nudges` table via Realtime
-  - Show banner at top of dashboard when new nudge arrives
-  - "Dismiss" button marks nudge as seen
-
-**Deliverable:** Calendar, todos, progress dashboard, AI nudges all working
+**Deliverable:** Home page live with stats + nudge banner. Calendar, todos, all `/journey` sub-tabs working.
 
 ---
 
 ## PHASE 3 — Polish + Bonus (Days 11–14)
 
-### Day 11 — Seed Data & Bug Fixes
+### Day 11 — Seed Data, Bug Fixes + Polish Items
 
-**Goal:** Demo-ready database, all edge cases handled
-**Time:** 6–8 hours
+**Goal:** Demo-ready database, all edge cases handled, three polish features attempted
+**Time:** 8–10 hours
 
-#### Morning (3–4 hours)
+#### Morning (3–4 hours) — Seed data + bug fixes
 
 - [ ] Create `scripts/seed.py`:
   - 3 sample CVs (junior, mid-level, senior)
@@ -457,26 +503,48 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
   - 10 chat messages (demonstrate memory)
 - [ ] Run seed script on deployed database
 - [ ] Create test user account: `demo@careerpilot.com` / `Demo123!`
-
-#### Afternoon (3–4 hours)
-
 - [ ] Bug hunt and fix:
-  - Test all flows end-to-end
+  - Test all flows end-to-end on deployed URL
   - Check error handling: file upload fails, API rate limits, network errors
   - Add loading states where missing
   - Add error boundaries in React components
   - Fix any broken links or 404s
-- [ ] Polish UI:
-  - Consistent spacing and typography
-  - Mobile responsive (test on phone)
+
+#### Afternoon (4–6 hours) — Three polish items *(attempt all, cut if time runs short)*
+
+**Polish item 1 — Floating AI bubble** *(highest priority)*
+- [ ] Create `components/ai-fab.tsx`:
+  - Fixed `bottom-4 right-4` circular button, `bg-[#534AB7]`, `MessageCircle` icon
+  - On click: open a slide-up drawer with `<ChatInterface />` (reuse the Day 8 component)
+  - Visible on every page except `/ai` (hide it there — user is already in full chat)
+  - Add to `app/(dashboard)/layout.tsx`
+
+**Polish item 2 — Job card side panel** *(medium priority)*
+- [ ] Update `components/job-card.tsx`:
+  - Replace "View Details" button with a click handler that opens a right-side sheet
+  - Sheet content: full job description, fit score breakdown by section, "Ask AI about this role" button (calls `sendPrompt` to AI assistant), "Add to Tracker" button
+  - Use shadcn `Sheet` component (`side="right"`)
+
+**Polish item 3 — Onboarding wizard** *(attempt if time allows)*
+- [ ] Create `components/onboarding-wizard.tsx`:
+  - Show only if user has no CV uploaded (check `cvs` table on login)
+  - Step 1: Upload CV (drag-and-drop, reuse existing upload logic)
+  - Step 2: Processing animation — "Parsing your CV… Embedding sections… Building your profile…"
+  - Step 3: Welcome screen — "Your profile is ready. Here are your first 3 job matches."
+  - On complete: redirect to Home `/`
+- [ ] Add check in `app/(dashboard)/layout.tsx`: if no CV → redirect to `/onboarding`
+- [ ] Create `app/onboarding/page.tsx` (outside dashboard layout — full-screen wizard)
+
+**Cut rule:** If behind on time, cut Polish item 3 entirely. Cut Polish item 2 before cutting item 1. The AI bubble has the highest visual impact for judges.
+
+- [ ] General UI polish (do last):
+  - Consistent spacing and typography across all 5 pages
+  - Mobile responsive — test bottom tab bar on phone
   - Add empty states with helpful messages
   - Add success toasts for actions (application saved, todo completed)
-- [ ] Performance:
-  - Add React Query caching for job search results
-  - Optimize images (if any)
   - Check Lighthouse score (aim for >80)
 
-**Deliverable:** Fully seeded database, all bugs fixed, UI polished
+**Deliverable:** Fully seeded database, all bugs fixed, floating AI bubble live, side panel attempted, onboarding wizard if time allows
 
 ---
 
@@ -533,15 +601,15 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 #### Morning (2–3 hours)
 
 - [ ] Create `system-design.md` with sections:
-  1. **Architecture Diagram** (use Mermaid or draw.io)
+  1. **Architecture diagram** (use Mermaid or draw.io)
      - User → Next.js → FastAPI → Supabase/Voyage/Groq/Gemini
      - Show data flow: CV upload → parsing → embedding → vector DB
      - Show agent loop: search → score → filter
-  2. **Data Flow**
+  2. **Data flow**
      - CV Upload: PDF → Gemini → JSON → Voyage → pgvector
      - Job Search: Query → Redis check → API call → cache → fit score
      - Chat: Message → history → RAG → Groq stream → save
-  3. **Tech Stack Justification**
+  3. **Tech stack justification**
      - Why Groq for chat (speed)
      - Why Gemini for parsing (multimodal, 1M context)
      - Why hybrid search (keyword + semantic)
@@ -574,16 +642,17 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 **Goal:** 5-minute demo video, final polish, submit
 **Time:** 6–8 hours
 
-#### Morning (3–4 hours) — Record Demo
+#### Morning (3–4 hours) — Record demo
 
 - [ ] Script the demo (see `CareerPilot_Stack_Final.md` Section 18):
-  - 0:00–0:30: CV Upload
-  - 0:30–1:15: Job Search
-  - 1:15–2:00: Fit Score
-  - 2:00–2:45: AI Assistant
-  - 2:45–3:30: Cover Letter
-  - 3:30–4:15: Tracker
-  - 4:15–5:00: Dashboard
+  - 0:00–0:20: Onboarding wizard (CV upload → processing → welcome)
+  - 0:20–0:50: Home dashboard (stats, nudge banner, top matches)
+  - 0:50–1:30: Jobs page (live search, job cards, fit score breakdown in side panel)
+  - 1:30–2:15: AI assistant (benchmark query + follow-up showing memory)
+  - 2:15–3:00: Cover letter draft from AI assistant
+  - 3:00–3:45: My journey (Kanban drag, Calendar, Todos)
+  - 3:45–4:15: Profile page (parsed CV sections, skills)
+  - 4:15–5:00: Floating AI bubble demo + wrap-up
 - [ ] Record demo (use OBS Studio or Loom):
   - Use seeded database (looks actively used)
   - Show real data, not placeholders
@@ -592,7 +661,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)   Demo-ready · Bonus points
 - [ ] Record twice, use better take
 - [ ] Edit: add title card, trim dead air, export as MP4
 
-#### Afternoon (3–4 hours) — Final Polish & Submit
+#### Afternoon (3–4 hours) — Final polish & submit
 
 - [ ] Update README.md:
   - Project description
@@ -693,7 +762,7 @@ If you fall behind schedule:
   2. Job search with fit scores
   3. Chat with RAG (no memory)
   4. Kanban board (no Realtime)
-- **Skip:** Calendar, todos, dashboard, nudges, bonus points
+- **Skip:** Calendar, todos, Home dashboard, nudges, bonus points, all three polish items
 - **Focus:** Core demo flow for video
 
 **DO NOT skip deployment (Day 7).** A broken local demo is worse than a simple deployed demo.
@@ -717,5 +786,5 @@ By end of Day 14, you should have:
 
 ---
 
-_Last updated: Day 0 · Codesprint 2026_
+_Last updated: Day 7.5 · Codesprint 2026_
 _Related docs: `AGENTS.md` · `CareerPilot_Stack_Final.md` · `PRD.md`_
