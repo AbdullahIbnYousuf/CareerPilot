@@ -38,17 +38,6 @@ async def test_groq():
         return False
 
 
-async def test_pymupdf():
-    print("Testing PyMuPDF...")
-    try:
-        import fitz
-        print(f"  [SUCCESS] PyMuPDF imported successfully, version: {fitz.VersionBind}")
-        return True
-    except Exception as e:
-        print(f"  [ERROR] PyMuPDF failed: {e}")
-        return False
-
-
 async def test_redis():
     print("Testing Upstash Redis Cache...")
     try:
@@ -110,7 +99,6 @@ async def main():
     
     results = {}
     results["Voyage AI"] = await test_voyage()
-    results["PyMuPDF"] = await test_pymupdf()
     results["Upstash Redis"] = await test_redis()
     results["Groq"] = await test_groq()
     results["JSearch"] = await test_jsearch()

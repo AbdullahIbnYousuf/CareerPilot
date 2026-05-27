@@ -49,7 +49,12 @@ export default function AiPage() {
   // ── Get user ────────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
-      if (!error) setUserId(data.user?.id ?? null);
+      if (!error && data.user) {
+        setUserId(data.user.id);
+      } else {
+        setUserId(null);
+        setLoadingSessions(false);
+      }
     });
   }, []);
 
@@ -66,7 +71,14 @@ export default function AiPage() {
         .eq("role", "user")
         .order("created_at", { ascending: true });
 
-      if (error || !data) return;
+      if (error || !data) {
+        console.error("Error loading chat messages:", error);
+        // Fallback: auto-start a fresh session anyway so the UI doesn't hang
+        if (!activeSessionId) {
+          setActiveSessionId(generateUUID());
+        }
+        return;
+      }
 
       // Deduplicate: keep only the first message per session_id
       const seen = new Map<string, ChatSession>();
@@ -90,6 +102,14 @@ export default function AiPage() {
       // If we have sessions and none is active, pick the newest
       if (sorted.length > 0 && !activeSessionId) {
         setActiveSessionId(sorted[0].id);
+      } else if (sorted.length === 0) {
+        // No history yet — auto-start a fresh session so the UI never hangs
+        setActiveSessionId(generateUUID());
+      }
+    } catch (err) {
+      console.error("Failed to load sessions:", err);
+      if (!activeSessionId) {
+        setActiveSessionId(generateUUID());
       }
     } finally {
       setLoadingSessions(false);
@@ -97,7 +117,9 @@ export default function AiPage() {
   }, [userId, activeSessionId]);
 
   useEffect(() => {
-    if (userId) loadSessions();
+    if (userId) {
+      loadSessions();
+    }
   }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Create a new session ─────────────────────────────────────────────────────
