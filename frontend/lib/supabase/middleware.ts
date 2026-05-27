@@ -48,6 +48,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAuthRoute = request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/signup");
+  const isApiRoute = request.nextUrl.pathname.startsWith("/api");
+  const isNextInternal = request.nextUrl.pathname.startsWith("/_next");
+  const hasExtension = request.nextUrl.pathname.includes(".");
+  
+  if (isApiRoute || isNextInternal || hasExtension) {
+    return supabaseResponse;
+  }
   
   if (!user && !isAuthRoute) {
     // No session — redirect to login for all protected routes (including /)
