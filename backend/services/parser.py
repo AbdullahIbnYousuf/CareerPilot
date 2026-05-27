@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 # Initialize Gemini client
 _GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
 
-def _get_gemini_client():
+def _get_gemini_client(model_name: str = 'gemini-2.0-flash'):
     genai.configure(api_key=_GOOGLE_API_KEY)
-    return genai.GenerativeModel('gemini-2.0-flash')
+    return genai.GenerativeModel(model_name)
 
 
 def _is_rate_limit(exception):
@@ -42,6 +42,32 @@ def _generate_content_with_retry(model, contents, generation_config=None):
     if generation_config:
         return model.generate_content(contents, generation_config=generation_config)
     return model.generate_content(contents)
+
+
+def generate_content_with_fallback(contents, generation_config=None):
+    models = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-flash-latest']
+    last_exception = None
+    
+    for model_name in models:
+        try:
+            model = _get_gemini_client(model_name)
+            return _generate_content_with_retry(model, contents, generation_config)
+        except Exception as e:
+            err_str = str(e).lower()
+            if "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource exhausted" in err_str:
+                logger.warning(f"Gemini model '{model_name}' failed with rate limit/quota error. Trying fallback model...")
+                last_exception = e
+                continue
+            elif "not found" in err_str or "404" in err_str:
+                logger.warning(f"Gemini model '{model_name}' not found. Trying fallback model...")
+                last_exception = e
+                continue
+            else:
+                raise e
+    
+    if last_exception:
+        raise last_exception
+    raise RuntimeError("All Gemini fallback models failed to execute.")
 
 
 # Structured parsing prompt
@@ -113,11 +139,8 @@ def parse_pdf_cv(file_bytes: bytes) -> dict[str, str]:
     Raw bytes are passed as types.Part.from_bytes.
     Returns structured JSON with 4 sections.
     """
-    model = _get_gemini_client()
-    
     # Build multimodal prompt with PDF bytes
-    response = _generate_content_with_retry(
-        model,
+    response = generate_content_with_fallback(
         [
             _STRUCTURED_PROMPT,
             {"mime_type": "application/pdf", "data": file_bytes}
@@ -137,7 +160,7 @@ def parse_pdf_cv(file_bytes: bytes) -> dict[str, str]:
 
 def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     """
-    Parse DOCX CV using python-docx + Gemini 2.0 Flash structuring.
+    Parse DOCX CV using python-docx + Gemini 2.0/2.5/1.5 Flash structuring.
     Returns structured JSON with 4 sections.
     """
     # Extract text with python-docx
@@ -147,13 +170,9 @@ def parse_docx_cv(file_bytes: bytes) -> dict[str, str]:
     if not full_text.strip():
         raise ValueError("DOCX file appears to be empty")
     
-    # Use Gemini to structure the extracted text
-    model = _get_gemini_client()
-    
     prompt = f"{_STRUCTURED_PROMPT}\n\nHere is the CV text:\n\n{full_text}"
     
-    response = _generate_content_with_retry(
-        model,
+    response = generate_content_with_fallback(
         prompt,
         generation_config=genai.GenerationConfig(
             response_mime_type="application/json",

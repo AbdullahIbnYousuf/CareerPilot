@@ -18,12 +18,7 @@ import numpy as np
 import google.generativeai as genai
 from services.embedder import embed_query, embed_documents
 from services.searcher import search_by_section_preembedded
-
-_GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-
-def _get_gemini_client():
-    genai.configure(api_key=_GOOGLE_API_KEY)
-    return genai.GenerativeModel('gemini-2.0-flash')
+from services.parser import generate_content_with_fallback
 
 SECTION_WEIGHTS: dict[str, float] = {
     "skills":     0.40,
@@ -119,10 +114,9 @@ async def compute_fit_score(
         "highlighting the strongest match or biggest gap."
     )
     
-    # Simple fallback in case Gemini rate limit hits
+    # Fallback-wrapped model call in case Gemini model quota limit hits
     try:
-        model = _get_gemini_client()
-        gemini_response = model.generate_content(explanation_prompt)
+        gemini_response = generate_content_with_fallback(explanation_prompt)
         explanation = (gemini_response.text or "").strip()
     except Exception as e:
         explanation = f"Fit score computed programmatically is {score_int}/100. (AI explanation temporarily unavailable due to rate limits)"
