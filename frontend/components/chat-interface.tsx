@@ -49,7 +49,7 @@ const SUGGESTED_PROMPTS = [
 interface ChatInterfaceProps {
   sessionId: string;
   /** Called after the first message in a fresh session is sent. */
-  onFirstMessage?: () => void;
+  onFirstMessage?: (firstMessageText: string) => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
       // Notify parent the first time so it can refresh the session list title
       if (isFirstMessageRef.current) {
         isFirstMessageRef.current = false;
-        onFirstMessage?.();
+        onFirstMessage?.(text);
       }
       setIsStreaming(true);
 

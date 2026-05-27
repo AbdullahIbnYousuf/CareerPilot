@@ -158,8 +158,27 @@ export default function AiPage() {
     }
   };
 
-  // ── Refresh session list when a new session sends its first message ──────────
-  // (handled by passing loadSessions as onFirstMessage to ChatInterface)
+  // ── Handle when a new session sends its first message ────────────────────────
+  const handleFirstMessage = (text: string) => {
+    setSessions((prev) => {
+      const exists = prev.some((s) => s.id === activeSessionId);
+      if (exists) {
+        return prev.map((s) =>
+          s.id === activeSessionId
+            ? { ...s, title: truncate(text, 42) }
+            : s
+        );
+      }
+      return [
+        {
+          id: activeSessionId,
+          title: truncate(text, 42),
+          createdAt: new Date().toISOString(),
+        },
+        ...prev,
+      ];
+    });
+  };
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -318,7 +337,7 @@ export default function AiPage() {
             <ChatInterface
               key={activeSessionId}
               sessionId={activeSessionId}
-              onFirstMessage={loadSessions}
+              onFirstMessage={handleFirstMessage}
             />
           ) : (
             <div className="flex items-center justify-center h-full">
