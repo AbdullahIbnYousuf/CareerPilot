@@ -30,6 +30,12 @@ export interface Application {
   job_id: string;
   status: ApplicationStatus;
   applied_at: string;
+  // Joined from jobs table
+  title?: string;
+  company?: string;
+  location?: string;
+  url?: string;
+  fit_score?: number;
 }
 
 export interface Snapshot {
@@ -50,4 +56,21 @@ export interface Nudge {
   id: string;
   message: string;
   seen: boolean;
+}
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  title: string;
+  target_date?: string;
+  completed: boolean;
+}
+
+export interface Todo {
+  id: string;
+  user_id: string;
+  goal_id?: string;
+  title: string;
+  due_date?: string;
+  completed: boolean;
 }

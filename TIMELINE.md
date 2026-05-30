@@ -403,11 +403,11 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 
 #### Morning (3–4 hours)
 
-- [ ] Create `components/kanban-board.tsx`:
+- [x] Create `components/kanban-board.tsx`:
   - Five columns: Saved, Applied, Interviewing, Offer, Rejected
   - Use dnd-kit for drag and drop
   - Each card shows: job title, company, applied date
-- [ ] Create backend endpoints in `backend/routers/tracker.py`:
+- [x] Create backend endpoints in `backend/routers/tracker.py`:
   - `GET /api/applications` — fetch all applications for user
   - `POST /api/applications` — create new application
   - `PATCH /api/applications/:id` — update status
@@ -415,12 +415,12 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 
 #### Afternoon (3–4 hours)
 
-- [ ] Add Supabase Realtime subscription:
+- [x] Add Supabase Realtime subscription:
   - Subscribe to `applications` table changes
   - Update Kanban board in real-time when status changes
-- [ ] Add "Add to Tracker" button on job cards
+- [x] Add "Add to Tracker" button on job cards
   - Saves job to `applications` table with status "Saved"
-- [ ] Update `app/(dashboard)/journey/page.tsx`:
+- [x] Update `app/(dashboard)/journey/page.tsx`:
   - Add sub-tab bar: Kanban | Calendar | Tasks | Stats
   - Render `<KanbanBoard />` under Kanban tab (other tabs are stubs for now)
   - Drag card → update status in Supabase → Realtime fires → UI updates

@@ -9,7 +9,7 @@ import uuid
 from fastapi import HTTPException
 from db.supabase import supabase
 
-BUCKET_NAME = "cv-files"
+BUCKET_NAME = "cvs"
 
 
 async def upload_cv_file(file_bytes: bytes, filename: str, user_id: str, content_type: str) -> str:

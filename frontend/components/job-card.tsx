@@ -12,14 +12,47 @@ import {
   X,
   Briefcase,
   ChevronRight,
+  BookmarkPlus,
+  Check,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import type { Job } from "@/types";
 
 export function JobCard({ job }: { job: Job }) {
   const [showModal, setShowModal] = useState(false);
+  const [savedToTracker, setSavedToTracker] = useState(false);
+  const [savingToTracker, setSavingToTracker] = useState(false);
 
   const salary = job.salary_range || "Not Disclosed";
   const deadline = job.deadline || "Rolling / Open";
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+  const handleSaveToTracker = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (savedToTracker || savingToTracker || !job.id) return;
+
+    setSavingToTracker(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId || !job.id) return;
+
+      await fetch(`${baseUrl}/tracker/applications`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
+          job_id: job.id,
+          status: "saved",
+        }),
+      });
+      setSavedToTracker(true);
+    } catch {
+      // silently fail
+    } finally {
+      setSavingToTracker(false);
+    }
+  };
 
   return (
     <>
@@ -77,7 +110,32 @@ export function JobCard({ job }: { job: Job }) {
           <span className="text-[10px] text-white/20 bg-white/[0.04] px-2 py-0.5 rounded-md font-mono uppercase tracking-wider">
             {job.source}
           </span>
-          <div className="flex gap-2 ml-auto">
+          <div className="flex gap-2 ml-auto items-center">
+            {/* Save to Tracker button */}
+            {job.id && (
+              <button
+                onClick={handleSaveToTracker}
+                disabled={savingToTracker || savedToTracker}
+                title={savedToTracker ? "Saved to tracker" : "Save to tracker"}
+                className={`h-7 flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium border transition-all duration-200 ${
+                  savedToTracker
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
+                    : "border-white/[0.06] bg-white/[0.02] text-white/40 hover:text-white/70 hover:border-primary/30 hover:bg-primary/10"
+                } disabled:opacity-60`}
+              >
+                {savedToTracker ? (
+                  <>
+                    <Check className="h-3 w-3" />
+                    Saved
+                  </>
+                ) : (
+                  <>
+                    <BookmarkPlus className="h-3 w-3" />
+                    Save
+                  </>
+                )}
+              </button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -174,6 +232,23 @@ export function JobCard({ job }: { job: Job }) {
               <Button variant="ghost" size="sm" onClick={() => setShowModal(false)} className="text-white/40 hover:text-white">
                 Close
               </Button>
+              {job.id && (
+                <button
+                  onClick={handleSaveToTracker}
+                  disabled={savingToTracker || savedToTracker}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium px-4 py-2 transition-all duration-200 ${
+                    savedToTracker
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
+                      : "border-white/[0.08] bg-white/[0.04] text-white/60 hover:text-white hover:border-primary/40 hover:bg-primary/10"
+                  } disabled:opacity-60`}
+                >
+                  {savedToTracker ? (
+                    <><Check className="h-4 w-4" /> Saved to Tracker</>
+                  ) : (
+                    <><BookmarkPlus className="h-4 w-4" /> Add to Tracker</>
+                  )}
+                </button>
+              )}
               <a
                 href={job.url}
                 target="_blank"
