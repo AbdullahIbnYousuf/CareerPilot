@@ -16,4 +16,4 @@ def test_endpoint(url):
 if __name__ == "__main__":
     test_endpoint("http://127.0.0.1:8000/health")
     print()
-    test_endpoint("http://127.0.0.1:8000/jobs/test-user-id")
+    test_endpoint("http://127.0.0.1:8000/jobs/550e8400-e29b-41d4-a716-446655440000")

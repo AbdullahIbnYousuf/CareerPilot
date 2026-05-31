@@ -31,7 +31,7 @@ async def upload_cv_file(file_bytes: bytes, filename: str, user_id: str, content
             file=file_bytes,
             file_options={"content-type": content_type or "application/octet-stream"},
         )
-        file_url: str = supabase.storage.from_(BUCKET_NAME).get_public_url(storage_path)
+        file_url: str = await supabase.storage.from_(BUCKET_NAME).get_public_url(storage_path)
         return file_url
     except Exception as exc:
         raise HTTPException(
