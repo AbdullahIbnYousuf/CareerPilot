@@ -16,9 +16,9 @@ import { Button } from "@/components/ui/button";
 const navItems = [
   { href: "/", label: "Home", icon: LayoutDashboard, exact: true },
   { href: "/jobs", label: "Jobs", icon: Briefcase, exact: false },
-  { href: "/journey", label: "My Journey", icon: Map, exact: false },
-  { href: "/ai", label: "AI Assistant", icon: MessageCircle, exact: false },
-  { href: "/profile", label: "Profile", icon: UserCircle, exact: false },
+  { href: "/tracker", label: "My Journey", icon: Map, exact: false },
+  { href: "/chat", label: "AI Assistant", icon: MessageCircle, exact: false },
+  { href: "/cv", label: "Profile", icon: UserCircle, exact: false },
 ];
 
 export default function DashboardLayout({
