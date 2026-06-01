@@ -2,7 +2,8 @@
 Dashboard Router — CareerPilot (Pillar 4: Progress Dashboard + AI Nudges)
 
 Handles:
-  GET  /dashboard/{user_id}          — weekly progress snapshot
+  GET  /dashboard/{user_id}          — weekly progress snapshot + status counts
+  GET  /dashboard/{user_id}/stats    — historical snapshots for charts (last 8 weeks)
   POST /dashboard/snapshot           — save a weekly progress snapshot
   GET  /dashboard/{user_id}/nudges   — fetch unseen AI nudges
   PATCH /dashboard/nudges/{nudge_id}/seen — mark nudge as seen
@@ -11,6 +12,7 @@ Handles:
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from db.supabase import supabase
+from datetime import date, timedelta
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -47,9 +49,49 @@ async def get_dashboard(user_id: str):
         if s in status_counts:
             status_counts[s] += 1
 
+    # New matches count from jobs table (fit_score >= 70)
+    new_matches_result = await supabase.table("jobs").select(
+        "id"
+    ).eq("user_id", user_id).gte("fit_score", 70).execute()
+
     return {
         "snapshot":      snapshot_result.data[0] if snapshot_result.data else None,
         "status_counts": status_counts,
+        "new_matches":   len(new_matches_result.data or []),
+    }
+
+
+@router.get("/{user_id}/stats")
+async def get_stats_history(user_id: str):
+    """
+    Return the last 8 weekly progress snapshots for Recharts line/bar charts.
+    Also returns fit score distribution from jobs table.
+    """
+    # Last 8 weekly snapshots ordered ascending (oldest first for charts)
+    snapshots_result = await supabase.table("progress_snapshots").select(
+        "week_start, applications_sent, streak_days, roadmap_pct"
+    ).eq("user_id", user_id).order("week_start", desc=True).limit(8).execute()
+
+    snapshots = list(reversed(snapshots_result.data or []))
+
+    # Fit score distribution from jobs table
+    jobs_result = await supabase.table("jobs").select(
+        "fit_score"
+    ).eq("user_id", user_id).not_.is_("fit_score", "null").execute()
+
+    scores = [j["fit_score"] for j in (jobs_result.data or []) if j.get("fit_score") is not None]
+
+    # Bucket into ranges: <40, 40-69, 70-84, 85-100
+    distribution = [
+        {"range": "<40",   "count": sum(1 for s in scores if s < 40)},
+        {"range": "40–69", "count": sum(1 for s in scores if 40 <= s < 70)},
+        {"range": "70–84", "count": sum(1 for s in scores if 70 <= s < 85)},
+        {"range": "85+",   "count": sum(1 for s in scores if s >= 85)},
+    ]
+
+    return {
+        "snapshots":    snapshots,
+        "distribution": distribution,
     }
 
 

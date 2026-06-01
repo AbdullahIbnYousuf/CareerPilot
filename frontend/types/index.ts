@@ -44,6 +44,18 @@ export interface Snapshot {
   roadmap_pct: number;
 }
 
+export interface SnapshotHistory {
+  week_start: string;
+  applications_sent: number;
+  streak_days: number;
+  roadmap_pct: number;
+}
+
+export interface FitScoreDistribution {
+  range: string;
+  count: number;
+}
+
 export interface StatusCounts {
   saved: number;
   applied: number;
@@ -56,6 +68,7 @@ export interface Nudge {
   id: string;
   message: string;
   seen: boolean;
+  job_ids?: string[];
 }
 
 export interface Goal {

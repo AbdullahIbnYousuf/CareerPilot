@@ -439,47 +439,60 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 
 #### Morning (4–5 hours) — Home page + Nudges
 
-- [ ] Build `app/(dashboard)/page.tsx` (Home) — replace the stub:
+- [x] Build `app/(dashboard)/page.tsx` (Home) — replace the stub:
   - Stats grid (4 cards): applications sent, roadmap %, new matches, streak days
   - Top job matches section: 2–3 job cards pulled from last search, highest fit scores first
   - AI nudge banner component at top:
     - Subscribe to `nudges` table via Realtime
     - Show banner when new nudge arrives: *"You haven't applied this week. Here are 3 openings."*
     - "Dismiss" button marks nudge as seen
-- [ ] Create `components/progress-dashboard.tsx`:
-  - Weekly stats cards with real data from `GET /api/dashboard/stats`
+- [x] Create `components/progress-dashboard.tsx`:
+  - Weekly stats cards with real data from `GET /dashboard/{user_id}/stats`
   - Line chart: applications over time (Recharts)
   - Bar chart: fit score distribution
-- [ ] Create backend endpoint `GET /api/dashboard/stats`:
-  - Query `progress_snapshots` table
-  - Return current week stats
-- [ ] Set up AI nudges:
+- [x] Create backend endpoint `GET /dashboard/{user_id}/stats`:
+  - Query `progress_snapshots` table — last 8 weeks
+  - Fit score distribution buckets from `jobs` table
+- [x] Set up AI nudges:
   - Enable pg_cron in Supabase (Extensions → pg_cron)
-  - Create cron job (see `CareerPilot_Stack_Final.md` Section 10)
-  - Runs every Monday 9 AM UTC
-  - Inserts nudge if user hasn't applied this week
+  - Run this SQL in Supabase SQL editor:
+    ```sql
+    select cron.schedule(
+      'weekly-nudge', '0 9 * * 1',
+      $$
+      insert into nudges (user_id, message, job_ids)
+      select u.id,
+        'You have not applied to any jobs this week. Here are 3 openings that match your profile.',
+        array(select id from jobs where user_id = u.id and fit_score >= 60 order by fit_score desc limit 3)
+      from auth.users u
+      where not exists (
+        select 1 from applications a
+        where a.user_id = u.id and a.applied_at >= date_trunc('week', now())
+      );
+      $$
+    );
+    ```
+  - Runs every Monday 9 AM UTC — inserts nudge if user hasn't applied this week
 
 #### Afternoon (4–5 hours) — Calendar + Todos inside `/journey`
 
-- [ ] Create `components/calendar-view.tsx`:
-  - Use shadcn Calendar component
-  - Show todos and deadlines on calendar dates
-  - Click date → show todos for that day
-- [ ] Create `components/todo-list.tsx`:
-  - List of todos with checkboxes
-  - Add new todo button
-  - Link todos to goals
-- [ ] Create backend endpoints in `backend/routers/tracker.py`:
-  - `GET /api/goals` — fetch all goals
-  - `POST /api/goals` — create goal
-  - `GET /api/todos` — fetch todos (optionally filtered by date)
-  - `POST /api/todos` — create todo
-  - `PATCH /api/todos/:id` — mark complete/incomplete
-- [ ] Wire up `/journey` sub-tabs:
-  - Kanban tab → `<KanbanBoard />` (already done Day 9)
-  - Calendar tab → `<CalendarView />`
-  - Tasks tab → `<TodoList />`
-  - Stats tab → `<ProgressDashboard />` (moved here from Home — stats live in both places)
+- [x] Create `components/calendar-view.tsx`:
+  - Fetches real todos from backend, groups by due_date
+  - Dot indicators per day (amber = pending, green = all done)
+  - Click date → show + toggle todos for that day
+- [x] Create `components/todo-list.tsx`:
+  - Fetches todos + goals from backend
+  - Add task form with due date + goal picker
+  - Toggles completion via PATCH, splits pending/completed sections
+- [x] Backend endpoints in `backend/routers/tracker.py` (already complete from Day 9):
+  - `GET /tracker/goals`, `POST /tracker/goals`
+  - `GET /tracker/todos`, `POST /tracker/todos`
+  - `PATCH /tracker/todos/:id`
+- [x] Wire up `/journey` sub-tabs:
+  - Kanban tab → `<KanbanBoard />` ✅
+  - Calendar tab → `<CalendarView />` ✅ (real todos)
+  - Tasks tab → `<TodoList />` ✅ (real backend)
+  - Stats tab → `<ProgressDashboard />` ✅ (Recharts charts)
 
 **Deliverable:** Home page live with stats + nudge banner. Calendar, todos, all `/journey` sub-tabs working.
 
