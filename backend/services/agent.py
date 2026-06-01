@@ -247,13 +247,60 @@ async def score_node(state: AgentState) -> Dict[str, Any]:
 
 
 async def filter_node(state: AgentState) -> Dict[str, Any]:
-    """Filter node - keeps top 10 matched jobs sorted by fit score descending."""
+    """Filter node - keeps top 10 matched jobs sorted by fit score descending and caches in Supabase."""
     jobs = list(state["jobs"])
     # Sort descending
     jobs.sort(key=lambda j: j.get("fit_score", 0), reverse=True)
     # Filter/Slice top 10
     filtered_jobs = jobs[:10]
-    return {"jobs": filtered_jobs}
+
+    from db.supabase import supabase
+    user_id = state["user_id"]
+    enriched_jobs = []
+
+    for job in filtered_jobs:
+        try:
+            title = job.get("title", "")
+            company = job.get("company", "")
+            existing = await supabase.table("jobs").select("id").eq("user_id", user_id).eq("title", title).eq("company", company).execute()
+
+            if existing.data:
+                job_id = existing.data[0]["id"]
+                # Update fit score and explanation if they changed
+                await supabase.table("jobs").update({
+                    "fit_score": job.get("fit_score", 0),
+                    "fit_explanation": job.get("fit_explanation", "")
+                }).eq("id", job_id).execute()
+            else:
+                # Insert the job into DB
+                insert_data = {
+                    "user_id": user_id,
+                    "title": title,
+                    "company": company,
+                    "location": job.get("location", ""),
+                    "salary_range": job.get("salary_range", "Not Disclosed"),
+                    "deadline": job.get("deadline", "Rolling / Open"),
+                    "description": job.get("description", ""),
+                    "source": job.get("source", "jsearch"),
+                    "fit_score": job.get("fit_score", 0),
+                    "fit_explanation": job.get("fit_explanation", ""),
+                    "url": job.get("url", "")
+                }
+                res = await supabase.table("jobs").insert(insert_data).execute()
+                if res.data:
+                    job_id = res.data[0]["id"]
+                else:
+                    job_id = None
+
+            job_copy = dict(job)
+            if job_id:
+                job_copy["id"] = job_id
+            enriched_jobs.append(job_copy)
+        except Exception:
+            # If DB insert fails, fallback to keeping the job as-is
+            enriched_jobs.append(job)
+
+    return {"jobs": enriched_jobs}
 
 
 def should_retry(state: AgentState) -> Literal["retry", "end"]:
