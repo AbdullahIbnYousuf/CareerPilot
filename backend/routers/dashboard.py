@@ -30,8 +30,14 @@ async def get_dashboard(user_id: str):
     """
     Return the latest progress snapshot + application counts per status
     for the dashboard overview.
+
+    roadmap_pct is computed dynamically from the todos table so it always
+    reflects the user's current task completion rate:
+        round(completed_todos / total_todos * 100)  — 0 when no todos exist.
+    The saved snapshot row (if any) provides applications_sent and streak_days;
+    its stored roadmap_pct column is intentionally ignored here.
     """
-    # Latest weekly snapshot
+    # Latest weekly snapshot (for applications_sent + streak_days only)
     snapshot_result = await supabase.table("progress_snapshots").select(
         "id, user_id, week_start, applications_sent, streak_days, roadmap_pct"
     ).eq("user_id", user_id).order("week_start", desc=True).limit(1).execute()
@@ -54,8 +60,31 @@ async def get_dashboard(user_id: str):
         "id"
     ).eq("user_id", user_id).gte("fit_score", 70).execute()
 
+    # ── Dynamic roadmap_pct from todos ──────────────────────────────────────
+    todos_result = await supabase.table("todos").select(
+        "completed"
+    ).eq("user_id", user_id).execute()
+
+    todos_data = todos_result.data or []
+    total_todos = len(todos_data)
+    completed_todos = sum(1 for t in todos_data if t.get("completed"))
+    dynamic_roadmap_pct: int = (
+        round(completed_todos / total_todos * 100) if total_todos > 0 else 0
+    )
+
+    # Merge: preserve saved snapshot fields, override roadmap_pct with live value
+    raw_snapshot = snapshot_result.data[0] if snapshot_result.data else {}
+    computed_snapshot: dict = {
+        "applications_sent": raw_snapshot.get("applications_sent", 0),
+        "streak_days":       raw_snapshot.get("streak_days", 0),
+        "roadmap_pct":       dynamic_roadmap_pct,
+    }
+    # Carry through extra fields (id, user_id, week_start) if snapshot exists
+    if raw_snapshot:
+        computed_snapshot = {**raw_snapshot, "roadmap_pct": dynamic_roadmap_pct}
+
     return {
-        "snapshot":      snapshot_result.data[0] if snapshot_result.data else None,
+        "snapshot":      computed_snapshot,
         "status_counts": status_counts,
         "new_matches":   len(new_matches_result.data or []),
     }

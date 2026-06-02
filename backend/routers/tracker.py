@@ -14,6 +14,7 @@ Endpoints:
   GET    /tracker/todos                 — fetch todos
   POST   /tracker/todos                 — create todo
   PATCH  /tracker/todos/:id             — mark complete/incomplete
+  PATCH  /tracker/goals/:id             — mark goal complete/incomplete
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -58,6 +59,10 @@ class CreateTodoRequest(BaseModel):
 
 
 class UpdateTodoRequest(BaseModel):
+    completed: bool
+
+
+class UpdateGoalRequest(BaseModel):
     completed: bool
 
 
@@ -169,6 +174,19 @@ async def create_goal(req: CreateGoalRequest):
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create goal.")
+
+    return {"goal": result.data[0]}
+
+
+@router.patch("/goals/{goal_id}")
+async def update_goal(goal_id: str, req: UpdateGoalRequest):
+    """Mark a goal complete or incomplete."""
+    result = await supabase.table("goals").update({
+        "completed": req.completed,
+    }).eq("id", goal_id).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Goal not found.")
 
     return {"goal": result.data[0]}
 

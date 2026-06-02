@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { supabase } from "@/lib/supabase";
 import type { Todo, Goal } from "@/types";
 import {
   ListTodo,
@@ -16,58 +15,40 @@ import {
   Calendar,
 } from "lucide-react";
 
-export function TodoList() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
+// ─── Props ─────────────────────────────────────────────────────────────────────
+// goals and todos are lifted into tracker/page.tsx so both GoalsSection and
+// TodoList share the same data without inconsistent parallel fetches.
+
+interface TodoListProps {
+  userId: string;
+  goals: Goal[];
+  todos: Todo[];
+  /** Called after any successful mutation so the parent can re-fetch. */
+  onTodosChange: () => void;
+}
+
+// ─── Component ─────────────────────────────────────────────────────────────────
+
+export function TodoList({ userId, goals, todos, onTodosChange }: TodoListProps) {
   const [newTitle, setNewTitle] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
   const [newGoalId, setNewGoalId] = useState<string>("");
   const [showForm, setShowForm] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  // Track locally deleted IDs — backend DELETE endpoint not yet implemented,
+  // so we hide the row visually only.
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  // ── Auth ──────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const loadUser = async () => {
-      const { data, error } = await supabase.auth.getUser();
-      if (!error) setUserId(data.user?.id ?? null);
-    };
-    loadUser();
-  }, []);
-
-  // ── Fetch todos + goals ───────────────────────────────────────────────────
-  const fetchTodos = useCallback(async (uid: string) => {
-    try {
-      const res = await fetch(`${baseUrl}/tracker/todos?user_id=${uid}`);
-      if (res.ok) {
-        const data = await res.json();
-        setTodos(data.todos || []);
-      }
-    } catch { /* silently fail */ }
-  }, [baseUrl]);
-
-  const fetchGoals = useCallback(async (uid: string) => {
-    try {
-      const res = await fetch(`${baseUrl}/tracker/goals?user_id=${uid}`);
-      if (res.ok) {
-        const data = await res.json();
-        setGoals(data.goals || []);
-      }
-    } catch { /* silently fail */ }
-  }, [baseUrl]);
-
-  useEffect(() => {
-    if (!userId) { setLoading(false); return; }
-    Promise.all([fetchTodos(userId), fetchGoals(userId)]).finally(() => setLoading(false));
-  }, [userId, fetchTodos, fetchGoals]);
+  const visibleTodos = todos.filter((t) => !deletedIds.has(t.id));
+  const pendingCount = visibleTodos.filter((t) => !t.completed).length;
+  const goalMap = Object.fromEntries(goals.map((g) => [g.id, g.title]));
 
   // ── Add todo ──────────────────────────────────────────────────────────────
   const addTodo = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !userId) return;
+    if (!newTitle.trim()) return;
     setSubmitting(true);
     try {
       const res = await fetch(`${baseUrl}/tracker/todos`, {
@@ -81,14 +62,15 @@ export function TodoList() {
         }),
       });
       if (res.ok) {
-        const data = await res.json();
-        setTodos((prev) => [data.todo, ...prev]);
         setNewTitle("");
         setNewDueDate("");
         setNewGoalId("");
         setShowForm(false);
+        onTodosChange();
       }
-    } catch { /* silently fail */ } finally {
+    } catch {
+      /* silently fail */
+    } finally {
       setSubmitting(false);
     }
   };
@@ -102,25 +84,17 @@ export function TodoList() {
         body: JSON.stringify({ completed: !todo.completed }),
       });
       if (res.ok) {
-        setTodos((prev) =>
-          prev.map((t) => (t.id === todo.id ? { ...t, completed: !t.completed } : t))
-        );
+        onTodosChange();
       }
-    } catch { /* silently fail */ }
+    } catch {
+      /* silently fail */
+    }
   };
 
-  // ── Delete todo ───────────────────────────────────────────────────────────
-  const deleteTodo = async (id: string) => {
-    // Optimistic update
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-    try {
-      // Backend doesn't have DELETE /todos yet — remove silently
-      // (tracker.py can be extended; for now optimistic removal is fine)
-    } catch { /* silently fail */ }
+  // ── Delete todo (visual-only until backend DELETE is wired) ───────────────
+  const deleteTodo = (id: string) => {
+    setDeletedIds((prev) => new Set(prev).add(id));
   };
-
-  const pendingCount = todos.filter((t) => !t.completed).length;
-  const goalMap = Object.fromEntries(goals.map((g) => [g.id, g.title]));
 
   return (
     <Card className="w-full bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
@@ -202,7 +176,11 @@ export function TodoList() {
                 id="submit-todo-btn"
                 className="flex-1 h-9 flex items-center justify-center gap-1.5 rounded-xl bg-[#534AB7] hover:bg-[#6B63CC] disabled:opacity-50 text-white text-xs font-semibold transition-all"
               >
-                {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+                {submitting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  "Add"
+                )}
               </button>
               <button
                 type="button"
@@ -216,11 +194,7 @@ export function TodoList() {
         )}
 
         {/* Todo list */}
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-[#7C74DB]" />
-          </div>
-        ) : todos.length === 0 ? (
+        {visibleTodos.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <ListTodo className="h-8 w-8 text-white/10" />
             <p className="text-sm text-white/25">No tasks yet. Add one above!</p>
@@ -228,30 +202,36 @@ export function TodoList() {
         ) : (
           <div className="space-y-1.5">
             {/* Pending */}
-            {todos.filter((t) => !t.completed).map((todo) => (
-              <TodoItem
-                key={todo.id}
-                todo={todo}
-                goalName={todo.goal_id ? goalMap[todo.goal_id] : undefined}
-                onToggle={() => toggleTodo(todo)}
-                onDelete={() => deleteTodo(todo.id)}
-              />
-            ))}
+            {visibleTodos
+              .filter((t) => !t.completed)
+              .map((todo) => (
+                <TodoItem
+                  key={todo.id}
+                  todo={todo}
+                  goalName={todo.goal_id ? goalMap[todo.goal_id] : undefined}
+                  onToggle={() => toggleTodo(todo)}
+                  onDelete={() => deleteTodo(todo.id)}
+                />
+              ))}
             {/* Completed */}
-            {todos.filter((t) => t.completed).length > 0 && (
+            {visibleTodos.filter((t) => t.completed).length > 0 && (
               <>
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-white/20 pt-2 pb-1">
                   Completed
                 </p>
-                {todos.filter((t) => t.completed).map((todo) => (
-                  <TodoItem
-                    key={todo.id}
-                    todo={todo}
-                    goalName={todo.goal_id ? goalMap[todo.goal_id] : undefined}
-                    onToggle={() => toggleTodo(todo)}
-                    onDelete={() => deleteTodo(todo.id)}
-                  />
-                ))}
+                {visibleTodos
+                  .filter((t) => t.completed)
+                  .map((todo) => (
+                    <TodoItem
+                      key={todo.id}
+                      todo={todo}
+                      goalName={
+                        todo.goal_id ? goalMap[todo.goal_id] : undefined
+                      }
+                      onToggle={() => toggleTodo(todo)}
+                      onDelete={() => deleteTodo(todo.id)}
+                    />
+                  ))}
               </>
             )}
           </div>
@@ -260,6 +240,8 @@ export function TodoList() {
     </Card>
   );
 }
+
+// ─── Todo item ──────────────────────────────────────────────────────────────────
 
 function TodoItem({
   todo,
@@ -304,10 +286,10 @@ function TodoItem({
           {todo.due_date && (
             <span className="text-[10px] text-white/30 flex items-center gap-1">
               <Calendar className="h-2.5 w-2.5" />
-              {new Date(todo.due_date + "T12:00:00").toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              })}
+              {new Date(todo.due_date + "T12:00:00").toLocaleDateString(
+                "en-US",
+                { month: "short", day: "numeric" }
+              )}
             </span>
           )}
           {goalName && (
