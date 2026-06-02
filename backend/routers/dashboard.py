@@ -9,10 +9,10 @@ Handles:
   PATCH /dashboard/nudges/{nudge_id}/seen — mark nudge as seen
 """
 
+from datetime import date, timedelta, datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from db.supabase import supabase
-from datetime import date, timedelta
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -31,18 +31,96 @@ async def get_dashboard(user_id: str):
     Return the latest progress snapshot + application counts per status
     for the dashboard overview.
 
-    roadmap_pct is computed dynamically from the todos table so it always
-    reflects the user's current task completion rate:
-        round(completed_todos / total_todos * 100)  — 0 when no todos exist.
-    The saved snapshot row (if any) provides applications_sent and streak_days;
-    its stored roadmap_pct column is intentionally ignored here.
+    Metrics (applications_sent, streak_days, and roadmap_pct) are computed
+    live from the source tables (applications, todos) to show up-to-date values.
+    Saved snapshots are preserved for historical charts only.
     """
-    # Latest weekly snapshot (for applications_sent + streak_days only)
+    # 1. Compute dynamic roadmap_pct from todos
+    todos_result = await supabase.table("todos").select(
+        "completed"
+    ).eq("user_id", user_id).execute()
+
+    todos_data = todos_result.data or []
+    total_todos = len(todos_data)
+    completed_todos = sum(1 for t in todos_data if t.get("completed"))
+    dynamic_roadmap_pct: int = (
+        round(completed_todos / total_todos * 100) if total_todos > 0 else 0
+    )
+
+    # 2. Compute applications_sent live:
+    # count applications where user_id matches, status is not 'saved',
+    # and applied_at is within the current week.
+    apps_sent_result = await supabase.table("applications").select(
+        "id, status, applied_at"
+    ).eq("user_id", user_id).in_("status", ["applied", "interviewing", "offer", "rejected"]).execute()
+
+    now_utc = datetime.now(timezone.utc)
+    # Start of current week (Monday 00:00:00 UTC)
+    start_of_week = (now_utc - timedelta(days=now_utc.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    live_apps_sent = 0
+    for app in (apps_sent_result.data or []):
+        applied_at_str = app.get("applied_at")
+        if applied_at_str:
+            try:
+                dt_str = applied_at_str.replace("Z", "+00:00")
+                applied_at_dt = datetime.fromisoformat(dt_str)
+                if applied_at_dt >= start_of_week:
+                    live_apps_sent += 1
+            except Exception:
+                pass
+
+    # 3. Compute streak_days live:
+    # use todos completed_at dates, grouped by local date or UTC date consistently.
+    # Count consecutive days ending today if today has a completed task, otherwise ending yesterday.
+    todos_completed_result = await supabase.table("todos").select(
+        "completed_at"
+    ).eq("user_id", user_id).eq("completed", True).execute()
+
+    completed_dates = set()
+    for t in (todos_completed_result.data or []):
+        completed_at_str = t.get("completed_at")
+        if completed_at_str:
+            try:
+                dt_str = completed_at_str.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(dt_str)
+                dt_utc = dt.astimezone(timezone.utc)
+                completed_dates.add(dt_utc.date())
+            except Exception:
+                pass
+
+    today = now_utc.date()
+    if today in completed_dates:
+        check_date = today
+    else:
+        check_date = today - timedelta(days=1)
+
+    live_streak = 0
+    while check_date in completed_dates:
+        live_streak += 1
+        check_date -= timedelta(days=1)
+
+    # 4. Fetch metadata from latest weekly snapshot (if any, for ID/week_start structure)
     snapshot_result = await supabase.table("progress_snapshots").select(
-        "id, user_id, week_start, applications_sent, streak_days, roadmap_pct"
+        "id, user_id, week_start"
     ).eq("user_id", user_id).order("week_start", desc=True).limit(1).execute()
 
-    # Application counts grouped by status (manual count, no raw SQL)
+    raw_snapshot = snapshot_result.data[0] if snapshot_result.data else {}
+
+    computed_snapshot = {
+        "applications_sent": live_apps_sent,
+        "streak_days":       live_streak,
+        "roadmap_pct":       dynamic_roadmap_pct,
+    }
+    if raw_snapshot:
+        computed_snapshot = {
+            **raw_snapshot,
+            "applications_sent": live_apps_sent,
+            "streak_days":       live_streak,
+            "roadmap_pct":       dynamic_roadmap_pct,
+        }
+
+    # 5. Application counts grouped by status (manual count, no raw SQL)
     apps_result = await supabase.table("applications").select(
         "status"
     ).eq("user_id", user_id).execute()
@@ -55,33 +133,10 @@ async def get_dashboard(user_id: str):
         if s in status_counts:
             status_counts[s] += 1
 
-    # New matches count from jobs table (fit_score >= 70)
+    # 6. New matches count from jobs table (fit_score >= 70)
     new_matches_result = await supabase.table("jobs").select(
         "id"
     ).eq("user_id", user_id).gte("fit_score", 70).execute()
-
-    # ── Dynamic roadmap_pct from todos ──────────────────────────────────────
-    todos_result = await supabase.table("todos").select(
-        "completed"
-    ).eq("user_id", user_id).execute()
-
-    todos_data = todos_result.data or []
-    total_todos = len(todos_data)
-    completed_todos = sum(1 for t in todos_data if t.get("completed"))
-    dynamic_roadmap_pct: int = (
-        round(completed_todos / total_todos * 100) if total_todos > 0 else 0
-    )
-
-    # Merge: preserve saved snapshot fields, override roadmap_pct with live value
-    raw_snapshot = snapshot_result.data[0] if snapshot_result.data else {}
-    computed_snapshot: dict = {
-        "applications_sent": raw_snapshot.get("applications_sent", 0),
-        "streak_days":       raw_snapshot.get("streak_days", 0),
-        "roadmap_pct":       dynamic_roadmap_pct,
-    }
-    # Carry through extra fields (id, user_id, week_start) if snapshot exists
-    if raw_snapshot:
-        computed_snapshot = {**raw_snapshot, "roadmap_pct": dynamic_roadmap_pct}
 
     return {
         "snapshot":      computed_snapshot,

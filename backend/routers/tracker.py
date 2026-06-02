@@ -17,6 +17,7 @@ Endpoints:
   PATCH  /tracker/goals/:id             — mark goal complete/incomplete
 """
 
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Literal, Optional
@@ -133,10 +134,28 @@ async def create_application(req: CreateApplicationRequest):
 
 @router.patch("/applications/{application_id}")
 async def update_application_status(application_id: str, req: UpdateStatusRequest):
-    """Update the Kanban status of an application (drag-and-drop)."""
-    result = await supabase.table("applications").update({
+    """Update the Kanban status of an application (drag-and-drop) and set applied_at appropriately."""
+    # Fetch existing application to check current applied_at
+    existing_app = await supabase.table("applications").select("applied_at").eq("id", application_id).execute()
+    if not existing_app.data:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    
+    current_applied_at = existing_app.data[0].get("applied_at")
+
+    update_data = {
         "status": req.status,
-    }).eq("id", application_id).execute()
+    }
+
+    if req.status == "saved":
+        update_data["applied_at"] = None
+    elif req.status == "applied":
+        if not current_applied_at:
+            update_data["applied_at"] = datetime.now(timezone.utc).isoformat()
+    elif req.status in ["interviewing", "offer", "rejected"]:
+        if not current_applied_at:
+            update_data["applied_at"] = datetime.now(timezone.utc).isoformat()
+
+    result = await supabase.table("applications").update(update_data).eq("id", application_id).execute()
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Application not found.")
@@ -229,10 +248,16 @@ async def create_todo(req: CreateTodoRequest):
 
 @router.patch("/todos/{todo_id}")
 async def update_todo(todo_id: str, req: UpdateTodoRequest):
-    """Mark a todo complete or incomplete."""
-    result = await supabase.table("todos").update({
+    """Mark a todo complete or incomplete and set completed_at."""
+    update_data = {
         "completed": req.completed,
-    }).eq("id", todo_id).execute()
+    }
+    if req.completed:
+        update_data["completed_at"] = datetime.now(timezone.utc).isoformat()
+    else:
+        update_data["completed_at"] = None
+
+    result = await supabase.table("todos").update(update_data).eq("id", todo_id).execute()
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Todo not found.")
