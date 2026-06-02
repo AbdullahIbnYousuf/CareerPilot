@@ -222,37 +222,11 @@ async def search_node(state: AgentState) -> Dict[str, Any]:
     return {"jobs": jobs}
 
 
-async def score_node(state: AgentState) -> Dict[str, Any]:
-    """Score node - computes programmatic fit score for each job."""
-    scored_jobs = []
-    user_id = state["user_id"]
-    
-    for job in state["jobs"]:
-        try:
-            result = await compute_fit_score(
-                job_description=job.get("description", job.get("title", "")),
-                user_id=user_id,
-            )
-            job_copy = dict(job)
-            job_copy["fit_score"] = result["score"]
-            job_copy["fit_explanation"] = result["explanation"]
-            scored_jobs.append(job_copy)
-        except Exception:
-            job_copy = dict(job)
-            job_copy["fit_score"] = 0
-            job_copy["fit_explanation"] = ""
-            scored_jobs.append(job_copy)
-            
-    return {"jobs": scored_jobs}
-
-
 async def filter_node(state: AgentState) -> Dict[str, Any]:
-    """Filter node - keeps top 10 matched jobs sorted by fit score descending and caches in Supabase."""
+    """Filter node - keeps first 30 unscored search result jobs and caches in Supabase."""
     jobs = list(state["jobs"])
-    # Sort descending
-    jobs.sort(key=lambda j: j.get("fit_score", 0), reverse=True)
-    # Filter/Slice top 10
-    filtered_jobs = jobs[:10]
+    # Slice first 30 jobs from the search result order (no fit_score sorting)
+    filtered_jobs = jobs[:30]
 
     from db.supabase import supabase
     user_id = state["user_id"]
@@ -266,13 +240,9 @@ async def filter_node(state: AgentState) -> Dict[str, Any]:
 
             if existing.data:
                 job_id = existing.data[0]["id"]
-                # Update fit score and explanation if they changed
-                await supabase.table("jobs").update({
-                    "fit_score": job.get("fit_score", 0),
-                    "fit_explanation": job.get("fit_explanation", "")
-                }).eq("id", job_id).execute()
+                # If job already exists, reuse its id but do not overwrite existing score/explanation
             else:
-                # Insert the job into DB
+                # Insert the job into DB without fit_score and fit_explanation
                 insert_data = {
                     "user_id": user_id,
                     "title": title,
@@ -282,8 +252,6 @@ async def filter_node(state: AgentState) -> Dict[str, Any]:
                     "deadline": job.get("deadline", "Rolling / Open"),
                     "description": job.get("description", ""),
                     "source": job.get("source", "jsearch"),
-                    "fit_score": job.get("fit_score", 0),
-                    "fit_explanation": job.get("fit_explanation", ""),
                     "url": job.get("url", "")
                 }
                 res = await supabase.table("jobs").insert(insert_data).execute()
@@ -295,10 +263,16 @@ async def filter_node(state: AgentState) -> Dict[str, Any]:
             job_copy = dict(job)
             if job_id:
                 job_copy["id"] = job_id
+            # Strip fit_score and fit_explanation to guarantee they are unscored initial cards
+            job_copy.pop("fit_score", None)
+            job_copy.pop("fit_explanation", None)
             enriched_jobs.append(job_copy)
         except Exception:
-            # If DB insert fails, fallback to keeping the job as-is
-            enriched_jobs.append(job)
+            # Fallback (strip fit score columns too)
+            job_copy = dict(job)
+            job_copy.pop("fit_score", None)
+            job_copy.pop("fit_explanation", None)
+            enriched_jobs.append(job_copy)
 
     return {"jobs": enriched_jobs}
 
@@ -326,7 +300,6 @@ workflow = StateGraph(AgentState)
 
 # Add nodes
 workflow.add_node("search", search_node)
-workflow.add_node("score", score_node)
 workflow.add_node("filter", filter_node)
 workflow.add_node("retry", retry_node)
 
@@ -335,7 +308,6 @@ workflow.set_entry_point("search")
 
 # Add standard edges
 workflow.add_edge("retry", "search")
-workflow.add_edge("score", "filter")
 workflow.add_edge("filter", END)
 
 # Add conditional edges from search
@@ -344,7 +316,7 @@ workflow.add_conditional_edges(
     should_retry,
     {
         "retry": "retry",
-        "end": "score"
+        "end": "filter"
     }
 )
 

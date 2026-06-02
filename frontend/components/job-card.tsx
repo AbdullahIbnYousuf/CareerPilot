@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { FitScoreBadge } from "./fit-score-badge";
 import {
   MapPin,
@@ -14,14 +14,39 @@ import {
   ChevronRight,
   BookmarkPlus,
   Check,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { Job } from "@/types";
 
-export function JobCard({ job }: { job: Job }) {
+export function JobCard({
+  job,
+  onScoreUpdated,
+}: {
+  job: Job;
+  onScoreUpdated?: (jobId: string, fitScore: number, fitExplanation: string) => void;
+}) {
   const [showModal, setShowModal] = useState(false);
   const [savedToTracker, setSavedToTracker] = useState(false);
   const [savingToTracker, setSavingToTracker] = useState(false);
+
+  // Local score states
+  const [localFitScore, setLocalFitScore] = useState<number | null>(job.fit_score ?? null);
+  const [localFitExplanation, setLocalFitExplanation] = useState<string | null>(job.fit_explanation ?? null);
+  const [calculatingFitScore, setCalculatingFitScore] = useState(false);
+  const [fitScoreError, setFitScoreError] = useState("");
+
+  // Sync state in render if props change (e.g. after parent batch calculations)
+  const [prevJobScore, setPrevJobScore] = useState<number | undefined | null>(job.fit_score);
+  const [prevJobExplanation, setPrevJobExplanation] = useState<string | undefined | null>(job.fit_explanation);
+
+  if (job.fit_score !== prevJobScore || job.fit_explanation !== prevJobExplanation) {
+    setPrevJobScore(job.fit_score);
+    setPrevJobExplanation(job.fit_explanation);
+    setLocalFitScore(job.fit_score ?? null);
+    setLocalFitExplanation(job.fit_explanation ?? null);
+  }
 
   const salary = job.salary_range || "Not Disclosed";
   const deadline = job.deadline || "Rolling / Open";
@@ -54,6 +79,41 @@ export function JobCard({ job }: { job: Job }) {
     }
   };
 
+  const handleCheckFitScore = async () => {
+    if (!job.id) return;
+    setCalculatingFitScore(true);
+    setFitScoreError("");
+
+    try {
+      const { data: userData, error: authError } = await supabase.auth.getUser();
+      if (authError || !userData?.user) {
+        throw new Error("Please sign in to check your fit score.");
+      }
+      const userId = userData.user.id;
+
+      const response = await fetch(`${baseUrl}/jobs/score/${job.id}?user_id=${userId}`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to calculate fit score");
+      }
+
+      const scoreData = await response.json();
+      setLocalFitScore(scoreData.fit_score);
+      setLocalFitExplanation(scoreData.fit_explanation);
+
+      if (onScoreUpdated) {
+        onScoreUpdated(job.id, scoreData.fit_score, scoreData.fit_explanation);
+      }
+    } catch (err) {
+      setFitScoreError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setCalculatingFitScore(false);
+    }
+  };
+
   return (
     <>
       {/* ── Card ── */}
@@ -79,9 +139,9 @@ export function JobCard({ job }: { job: Job }) {
                 </span>
               </div>
             </div>
-            {job.fit_score !== undefined && job.fit_score > 0 && (
+            {localFitScore !== null && localFitScore > 0 && (
               <div className="shrink-0">
-                <FitScoreBadge score={job.fit_score} explanation={job.fit_explanation} />
+                <FitScoreBadge score={localFitScore} explanation={localFitExplanation ?? undefined} />
               </div>
             )}
           </div>
@@ -189,14 +249,38 @@ export function JobCard({ job }: { job: Job }) {
 
             {/* Modal body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              {/* Fit score */}
-              {job.fit_score !== undefined && job.fit_score > 0 && (
+              {/* Fit score calculation section */}
+              {localFitScore !== null && localFitScore > 0 ? (
                 <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
-                  <div className="shrink-0"><FitScoreBadge score={job.fit_score} /></div>
-                  <div className="space-y-1 text-center md:text-left">
-                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">Fit Match</p>
-                    <p className="text-sm text-white/60 italic leading-relaxed">&ldquo;{job.fit_explanation}&rdquo;</p>
+                  <div className="shrink-0">
+                    <FitScoreBadge score={localFitScore} />
                   </div>
+                  <div className="space-y-1 text-center md:text-left flex-1">
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">Fit Match</p>
+                    <p className="text-sm text-white/60 italic leading-relaxed">
+                      &ldquo;{localFitExplanation}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {calculatingFitScore ? (
+                    <div className="flex items-center justify-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.05] p-4 text-sm text-white/60">
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      <span>Calculating your fit...</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={handleCheckFitScore}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] hover:from-[#5E55CC] hover:to-[#7A73DD] text-white text-sm font-medium py-3 px-4 transition-all duration-200 shadow-md shadow-primary/10"
+                    >
+                      <Sparkles className="h-4 w-4 text-white animate-pulse" />
+                      Check My Fit Score
+                    </button>
+                  )}
+                  {fitScoreError && (
+                    <p className="text-xs text-red-400 text-center mt-1">{fitScoreError}</p>
+                  )}
                 </div>
               )}
 

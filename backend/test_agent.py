@@ -38,12 +38,11 @@ async def mock_fit_score(job_description, user_id):
     return {"score": 40, "explanation": "Basic developer match."}
 
 async def test_agent_retry_and_scoring():
-    print("=== Testing LangGraph Agent Workflow (with mock retries & scoring) ===")
+    print("=== Testing LangGraph Agent Workflow (unscored search) ===")
     
     with patch("services.agent._search_jsearch", side_effect=mock_jsearch), \
          patch("services.agent._search_remotive", side_effect=mock_remotive), \
          patch("services.agent._search_tavily", side_effect=mock_tavily), \
-         patch("services.agent.compute_fit_score", side_effect=mock_fit_score), \
          patch("services.agent.get_cached_jobs", return_value=None), \
          patch("services.agent.cache_jobs", return_value=None):
          
@@ -57,14 +56,19 @@ async def test_agent_retry_and_scoring():
         
         print(f"Workflow completed! Returned {len(results)} jobs.")
         for idx, job in enumerate(results):
-            print(f"Job {idx+1}: {job['title']} at {job['company']} - Score: {job['fit_score']} - Expl: {job['fit_explanation']}")
+            print(f"Job {idx+1}: {job['title']} at {job['company']}")
             
         assert len(results) == 3
-        # Assert sort order: ML Engineer (score 90) -> Data Engineer (score 60) -> Software Developer (score 40)
-        assert results[0]["fit_score"] == 90
-        assert results[1]["fit_score"] == 60
-        assert results[2]["fit_score"] == 40
-        print("[OK] LangGraph retry, scoring, and sorting verified perfectly!")
+        # Ensure they are unscored
+        for job in results:
+            assert "fit_score" not in job
+            assert "fit_explanation" not in job
+        
+        # Order should preserve search order (unscored)
+        assert results[0]["title"] == "Software Developer"
+        assert results[1]["title"] == "Data Engineer"
+        assert results[2]["title"] == "Senior ML Engineer"
+        print("[OK] LangGraph retry, unscored search, and original ordering verified perfectly!")
 
 async def main():
     try:

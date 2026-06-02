@@ -22,7 +22,7 @@ _TTL = 7200  # 2 hours
 
 def _job_cache_key(query: str, location: str = "") -> str:
     raw = (query + location).encode("utf-8")
-    return f"jobs:{hashlib.md5(raw).hexdigest()}"
+    return f"jobs:v2:{hashlib.md5(raw).hexdigest()}"
 
 
 async def get_cached_jobs(query: str, location: str = "") -> list[dict] | None:
@@ -32,7 +32,14 @@ async def get_cached_jobs(query: str, location: str = "") -> list[dict] | None:
     if value is None:
         return None
     try:
-        return json.loads(value)
+        jobs = json.loads(value)
+        if isinstance(jobs, list):
+            # Strip potential stale score fields to guarantee they are on-demand
+            for job in jobs:
+                if isinstance(job, dict):
+                    job.pop("fit_score", None)
+                    job.pop("fit_explanation", None)
+        return jobs
     except (json.JSONDecodeError, TypeError):
         return None
 
