@@ -156,11 +156,11 @@ export function TodoList({ userId, goals, todos, onTodosChange }: TodoListProps)
                     id="new-todo-goal"
                     value={newGoalId}
                     onChange={(e) => setNewGoalId(e.target.value)}
-                    className="w-full h-9 pl-9 pr-3 bg-white/[0.04] border border-white/[0.06] text-white/70 focus:outline-none focus:border-primary/50 rounded-xl text-xs transition-all appearance-none"
+                    className="w-full h-9 pl-9 pr-3 bg-[#0E0E12]/80 border border-white/[0.06] text-white/70 focus:outline-none focus:border-primary/50 rounded-xl text-xs transition-all appearance-none"
                   >
-                    <option value="">No goal</option>
+                    <option value="" className="bg-[#0E0E12] text-white">No goal</option>
                     {goals.map((g) => (
-                      <option key={g.id} value={g.id}>
+                      <option key={g.id} value={g.id} className="bg-[#0E0E12] text-white">
                         {g.title}
                       </option>
                     ))}
