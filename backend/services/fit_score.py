@@ -66,7 +66,7 @@ async def compute_fit_score(
         )
         section_chunks[section] = chunks
 
-    # 3. Gather all chunk texts and batch embed them in a single Voyage call
+    # 3. Gather all chunk texts and batch embed them in a single Gemini call
     all_texts = []
     for section, chunks in section_chunks.items():
         for c in chunks:

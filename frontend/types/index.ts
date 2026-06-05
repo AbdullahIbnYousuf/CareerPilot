@@ -87,3 +87,73 @@ export interface Todo {
   due_date?: string;
   completed: boolean;
 }
+
+export interface ProfileLink {
+  label: string;
+  url: string;
+}
+
+export interface ProfileExperience {
+  title: string;
+  company: string;
+  location: string;
+  start_date: string;
+  end_date: string;
+  description: string;
+}
+
+export interface ProfileEducation {
+  institution: string;
+  degree: string;
+  field: string;
+  start_year: string;
+  end_year: string;
+  details: string;
+}
+
+export interface ProfileProject {
+  title: string;
+  description: string;
+  technologies: string[];
+  url: string;
+}
+
+export interface ProfilePayload {
+  full_name: string;
+  headline: string;
+  location: string;
+  email: string;
+  phone: string;
+  links: ProfileLink[];
+  summary: string;
+  skills: string[];
+  experience: ProfileExperience[];
+  education: ProfileEducation[];
+  projects: ProfileProject[];
+  certifications: string[];
+}
+
+export interface UserProfile extends ProfilePayload {
+  user_id: string;
+  active_cv_id?: string | null;
+  raw_sections: Record<string, string>;
+  generated_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface CVUploadResult {
+  cv_id: string;
+  file_name: string;
+  file_url: string | null;
+  parsed_data: {
+    skills: string;
+    experience: string;
+    education: string;
+    projects: string;
+  };
+  profile: UserProfile;
+  chunks_stored: number;
+  parsed_at: string;
+  message: string;
+}

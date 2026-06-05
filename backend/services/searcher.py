@@ -65,7 +65,7 @@ async def search_by_section_preembedded(
 ) -> list[dict]:
     """
     Run hybrid search filtered to a specific CV section using a pre-computed embedding.
-    This saves Voyage AI API calls.
+    This saves Gemini embedding API calls.
     """
     result = await supabase.rpc(
         "hybrid_search",

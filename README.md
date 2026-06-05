@@ -30,7 +30,7 @@ careerpilot/
 | **Frontend**        | Next.js 14, React 19, Tailwind CSS, shadcn/ui |
 | **Database**        | Supabase (PostgreSQL + pgvector)              |
 | **LLMs**            | Groq (Llama 3.3 70B), Gemini 2.0 Flash        |
-| **Embeddings**      | Voyage AI (voyage-3)                          |
+| **Embeddings**      | Gemini text-embedding-004                     |
 | **Caching**         | Upstash Redis                                 |
 | **Agent Framework** | LangGraph                                     |
 | **Job Search**      | JSearch (RapidAPI), Remotive, Tavily          |
@@ -86,9 +86,6 @@ Edit `.env` and add your API keys:
 GROQ_API_KEY=your_groq_api_key_here
 GOOGLE_API_KEY=your_google_api_key_here
 
-# Embeddings
-VOYAGE_API_KEY=your_voyage_api_key_here
-
 # Database
 SUPABASE_URL=your_supabase_url_here
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
@@ -106,7 +103,6 @@ TAVILY_API_KEY=your_tavily_api_key_here
 
 - **Groq**: https://console.groq.com/
 - **Google AI (Gemini)**: https://aistudio.google.com/apikey
-- **Voyage AI**: https://www.voyageai.com/
 - **Supabase**: https://supabase.com/ (create a new project)
 - **Upstash Redis**: https://upstash.com/
 - **JSearch**: https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
@@ -233,7 +229,7 @@ Key principles:
 - **100% free tier** — No paid APIs, no credit card required
 - **Monorepo structure** — Backend and frontend in one repo
 - **Type-safe** — TypeScript frontend, Python type hints backend
-- **RAG-powered** — Vector search with pgvector + Voyage embeddings
+- **RAG-powered** — Vector search with pgvector + Gemini embeddings
 - **Agentic** — LangGraph for job hunting workflows
 
 ## 🐛 Troubleshooting
@@ -299,7 +295,7 @@ This project is built for Codesprint 2026. See license details in the repository
 ## 🙏 Acknowledgments
 
 - Built with free-tier AI services
-- Powered by Groq, Gemini, Voyage AI, Supabase, and Upstash
+- Powered by Groq, Gemini, Supabase, and Upstash
 - UI components from shadcn/ui
 
 ---

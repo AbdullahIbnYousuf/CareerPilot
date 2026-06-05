@@ -52,7 +52,7 @@ def check_day_1():
     
     # Environment variables
     print("\n🔑 Backend Environment Variables:")
-    required_env = ["GROQ_API_KEY", "GOOGLE_API_KEY", "VOYAGE_API_KEY", 
+    required_env = ["GROQ_API_KEY", "GOOGLE_API_KEY",
                    "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY",
                    "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN",
                    "JSEARCH_API_KEY", "TAVILY_API_KEY"]
@@ -140,8 +140,8 @@ def check_day_3():
     if embedder_file.exists():
         with open(embedder_file) as f:
             content = f.read()
-            if "voyage" in content.lower() and "embed" in content:
-                print("  ✅ embedder.py with Voyage AI")
+            if "text-embedding-004" in content and "embed" in content:
+                print("  ✅ embedder.py with Gemini embeddings")
                 checks.append(True)
             else:
                 print("  ❌ embedder.py incomplete")

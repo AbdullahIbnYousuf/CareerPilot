@@ -23,10 +23,10 @@ async def test_fit_score_mismatch():
         return mock_chunks.get(section, [])
         
     def mock_embed_query(text):
-        return [1.0] * 1024
+        return [1.0] * 768
         
     def mock_embed_documents(texts):
-        return [[0.0] * 1024 for _ in texts]
+        return [[0.0] * 768 for _ in texts]
         
     with patch("services.fit_score.search_by_section_preembedded", side_effect=mock_search), \
          patch("services.fit_score.embed_query", side_effect=mock_embed_query), \
@@ -47,17 +47,17 @@ async def test_fit_score_match():
         "skills": [{"content": "Python, PyTorch, TensorFlow, LLMs, Kubernetes, Docker, SQL, FastAPI"}],
         "experience": [{"content": "Senior ML Engineer at TechCorp. Built production LLM pipelines, deployed on Kubernetes."}],
         "education": [{"content": "PhD in Computer Science, Machine Learning specialization, Stanford University"}],
-        "projects": [{"content": "Open-source RAG framework with PyTorch and Voyage embeddings. 2k GitHub stars."}]
+        "projects": [{"content": "Open-source RAG framework with PyTorch and Gemini embeddings. 2k GitHub stars."}]
     }
     
     async def mock_search(query, query_embedding, user_id, section, match_count=3):
         return mock_chunks.get(section, [])
         
     def mock_embed_query(text):
-        return [1.0] * 1024
+        return [1.0] * 768
         
     def mock_embed_documents(texts):
-        return [[1.0] * 1024 for _ in texts]
+        return [[1.0] * 768 for _ in texts]
         
     with patch("services.fit_score.search_by_section_preembedded", side_effect=mock_search), \
          patch("services.fit_score.embed_query", side_effect=mock_embed_query), \

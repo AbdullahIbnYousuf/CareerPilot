@@ -90,7 +90,7 @@ Section-aware chunking
 {section: "education",  content: "BSc Computer Science..."}
 {section: "projects",   content: "Built a RAG pipeline..."}
     ↓
-Voyage AI voyage-3 embeddings (1024 dimensions)
+Gemini text-embedding-004 embeddings (768 dimensions)
     ↓
 Store in Supabase pgvector with section metadata
     ↓

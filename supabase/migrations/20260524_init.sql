@@ -21,7 +21,7 @@ create table cv_chunks (
   cv_id uuid references cvs(id) on delete cascade,
   section text not null check (section in ('skills', 'experience', 'education', 'projects')),
   content text not null,
-  embedding vector(1024),
+  embedding vector(768),
   fts tsvector generated always as (to_tsvector('english', content)) stored,
   created_at timestamptz default now()
 );
@@ -140,7 +140,7 @@ create unique index progress_snapshots_user_week_idx on progress_snapshots(user_
 
 -- 10. Create hybrid_search stored procedure
 create or replace function hybrid_search(
-  query_embedding vector(1024),
+  query_embedding vector(768),
   query_text text,
   match_count int,
   p_user_id uuid,

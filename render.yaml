@@ -11,8 +11,6 @@ services:
         sync: false
       - key: GOOGLE_API_KEY
         sync: false
-      - key: VOYAGE_API_KEY
-        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY

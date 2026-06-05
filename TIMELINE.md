@@ -42,7 +42,6 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 - [x] Get all API keys:
   - Groq (groq.com) — free, no credit card
   - Google AI Studio (aistudio.google.com) — free, no credit card
-  - Voyage AI (voyageai.com) — free, no credit card
   - Upstash Redis (upstash.com) — free, no credit card
   - JSearch via RapidAPI (rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch) — free tier
   - Tavily (tavily.com) — free tier
@@ -105,16 +104,16 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 #### Morning (3–4 hours)
 
 - [x] Create `backend/services/embedder.py`:
-  - `embed_chunks(chunks: list[str]) -> list[list[float]]` — Voyage AI with `input_type="document"`
-  - `embed_query(query: str) -> list[float]` — Voyage AI with `input_type="query"`
-  - Add fallback to Gemini embeddings if Voyage fails
+  - `embed_chunks(chunks: list[str]) -> list[list[float]]` — Gemini with `task_type="retrieval_document"`
+  - `embed_query(query: str) -> list[float]` — Gemini with `task_type="retrieval_query"`
+  - Validate all embeddings are 768-dimensional
 - [x] Create chunking logic in `backend/services/parser.py`:
   - `chunk_cv(parsed: dict, cv_id: str, user_id: str) -> list[dict]`
   - One chunk per section: skills, experience, education, projects
   - Each chunk: `{"section": str, "content": str, "cv_id": str, "user_id": str}`
 - [x] Update `POST /api/cv/upload` to:
   - Parse CV → chunk by section → embed each chunk → store in `cv_chunks` table
-  - Store embedding as `vector(1024)` type
+  - Store embedding as `vector(768)` type
 
 #### Afternoon (3–4 hours)
 
@@ -615,11 +614,11 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
 
 - [ ] Create `system-design.md` with sections:
   1. **Architecture diagram** (use Mermaid or draw.io)
-     - User → Next.js → FastAPI → Supabase/Voyage/Groq/Gemini
+     - User → Next.js → FastAPI → Supabase/Groq/Gemini
      - Show data flow: CV upload → parsing → embedding → vector DB
      - Show agent loop: search → score → filter
   2. **Data flow**
-     - CV Upload: PDF → Gemini → JSON → Voyage → pgvector
+     - CV Upload: PDF → Gemini → JSON → Gemini embeddings → pgvector
      - Job Search: Query → Redis check → API call → cache → fit score
      - Chat: Message → history → RAG → Groq stream → save
   3. **Tech stack justification**
@@ -641,7 +640,7 @@ PHASE 3 — Polish + Bonus (Days 11–14)            Demo-ready · Bonus points
     3. Supabase connections → Mitigation: pgBouncer (built-in)
   - **Cost optimization:**
     - Redis caching reduces API calls by 80%
-    - Batch embeddings reduce Voyage API calls
+    - Batch embeddings reduce Gemini embedding API calls
     - Supabase Realtime reduces polling
 - [ ] Add architecture diagram (Mermaid code or image)
 - [ ] Commit `system-design.md` to repo

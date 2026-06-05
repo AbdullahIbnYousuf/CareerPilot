@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { UploadCloud, Loader2, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import type { CVUploadResult } from "@/types";
 
 interface CvUploadProps {
-  onUploadSuccess: (data: any) => void;
+  onUploadSuccess: (data: CVUploadResult) => void;
 }
 
 export function CvUpload({ onUploadSuccess }: CvUploadProps) {

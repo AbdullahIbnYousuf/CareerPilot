@@ -70,7 +70,7 @@ careerpilot/                        ← repo root
 │   │   └── dashboard.py
 │   ├── services/
 │   │   ├── parser.py               ← PDF (Gemini) + DOCX (python-docx) routing
-│   │   ├── embedder.py             ← Voyage AI embedding
+│   │   ├── embedder.py             ← Gemini embedding
 │   │   ├── searcher.py             ← hybrid search RPC
 │   │   ├── fit_score.py            ← weighted cosine similarity
 │   │   ├── agent.py                ← job hunter agent
@@ -110,14 +110,16 @@ Docling requires 1.5–2 GB RAM and will OOM-kill the Render container.
 
 ### Embeddings
 
-**Always use:** Voyage AI `voyage-3`
+**Always use:** Gemini `models/text-embedding-004` embeddings
 
 ```python
-import voyageai
-vo = voyageai.Client()
-# For documents: input_type="document"
-# For queries: input_type="query"
+import google.generativeai as genai
+genai.configure(api_key=GOOGLE_API_KEY)
+# For documents: task_type="retrieval_document"
+# For queries: task_type="retrieval_query"
 ```
+
+Embedding dimension: 768. The `cv_chunks.embedding` column and `hybrid_search` RPC must use `vector(768)`.
 
 **NEVER use:** OpenAI embeddings, HuggingFace inference API, sentence-transformers locally.
 
@@ -215,7 +217,6 @@ TTL: 7200 seconds (2 hours).
 ```
 GROQ_API_KEY=
 GOOGLE_API_KEY=
-VOYAGE_API_KEY=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 UPSTASH_REDIS_REST_URL=
