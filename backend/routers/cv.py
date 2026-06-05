@@ -14,6 +14,7 @@ Day 3 additions:
 import uuid
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
 from pydantic import BaseModel, Field
 from db.supabase import supabase
@@ -364,16 +365,16 @@ async def update_profile(
         raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
 
 
-@router.get("/{cv_id}", response_model=CVMetadata)
+@router.get("/{cv_id:uuid}", response_model=CVMetadata)
 async def get_cv(
-    cv_id: str,
+    cv_id: UUID,
     user_id: str = Query(..., description="User UUID from Supabase Auth"),
 ):
     """Get a specific CV by ID."""
     try:
         result = await supabase.table("cvs") \
             .select("id, user_id, file_name, file_url, parsed_at, created_at") \
-            .eq("id", cv_id) \
+            .eq("id", str(cv_id)) \
             .eq("user_id", user_id) \
             .single() \
             .execute()
