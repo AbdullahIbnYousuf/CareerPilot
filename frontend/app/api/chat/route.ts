@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
               } else if (parsed.error) {
                 controller.enqueue(encoder.encode(`\nError: ${parsed.error}`));
               }
-            } catch (e) {
+            } catch {
               // Ignore JSON parse errors for incomplete/malformed lines
             }
           }
