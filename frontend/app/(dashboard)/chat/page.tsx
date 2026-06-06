@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChatInterface } from "@/components/chat-interface";
 import {
   Bot,
@@ -12,19 +12,20 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import type { ChatSession } from "@/types";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface ChatSession {
-  id: string;          // UUID
-  title: string;       // derived from first user message
-  createdAt: string;
+interface ChatSessionRow {
+  id: string;
+  title: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const DEFAULT_SESSION_TITLE = "New conversation";
+const SESSION_TITLE_LIMIT = 42;
+const ACTIVE_SESSION_KEY_PREFIX = "careerpilot:active-chat:";
 
 function generateUUID(): string {
-  // RFC-4122 v4 UUID — safe for Supabase uuid columns
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;
@@ -33,10 +34,29 @@ function generateUUID(): string {
 }
 
 function truncate(str: string, n: number) {
-  return str.length > n ? str.slice(0, n) + "…" : str;
+  return str.length > n ? str.slice(0, n) + "..." : str;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+function activeSessionStorageKey(userId: string) {
+  return `${ACTIVE_SESSION_KEY_PREFIX}${userId}`;
+}
+
+function mapChatSession(row: ChatSessionRow): ChatSession {
+  const createdAt = row.created_at ?? row.updated_at ?? new Date().toISOString();
+  return {
+    id: row.id,
+    title: row.title || DEFAULT_SESSION_TITLE,
+    createdAt,
+    updatedAt: row.updated_at ?? createdAt,
+  };
+}
+
+function sortSessions(sessions: ChatSession[]) {
+  return [...sessions].sort(
+    (a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+}
 
 export default function AiPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -44,9 +64,14 @@ export default function AiPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isMobileDropdownOpen, setIsMobileDropdownOpen] = useState(false);
   const [isClearing, setIsClearing] = useState(false);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [loadingSessions, setLoadingSessions] = useState(true);
+  const activeSessionIdRef = useRef("");
 
-  // ── Get user ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (!error && data.user) {
@@ -58,143 +83,228 @@ export default function AiPage() {
     });
   }, []);
 
-  // ── Load sessions from Supabase ──────────────────────────────────────────────
+  const persistActiveSessionId = useCallback(
+    (sessionId: string) => {
+      setActiveSessionId(sessionId);
+      activeSessionIdRef.current = sessionId;
+
+      if (userId) {
+        window.localStorage.setItem(
+          activeSessionStorageKey(userId),
+          sessionId
+        );
+      }
+    },
+    [userId]
+  );
+
+  const createSession = useCallback(
+    async (makeActive = true): Promise<ChatSession | null> => {
+      if (!userId) return null;
+
+      const now = new Date().toISOString();
+      const session: ChatSession = {
+        id: generateUUID(),
+        title: DEFAULT_SESSION_TITLE,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const { error } = await supabase.from("chat_sessions").insert({
+        id: session.id,
+        user_id: userId,
+        title: session.title,
+        created_at: session.createdAt,
+        updated_at: session.updatedAt,
+      });
+
+      if (error) return null;
+
+      setSessions((prev) =>
+        sortSessions([session, ...prev.filter((s) => s.id !== session.id)])
+      );
+
+      if (makeActive) {
+        persistActiveSessionId(session.id);
+      }
+
+      setIsMobileDropdownOpen(false);
+      return session;
+    },
+    [persistActiveSessionId, userId]
+  );
+
   const loadSessions = useCallback(async () => {
     if (!userId) return;
+
     setLoadingSessions(true);
     try {
-      // Get the first message per session to derive a title
       const { data, error } = await supabase
-        .from("chat_messages")
-        .select("session_id, content, created_at")
+        .from("chat_sessions")
+        .select("id, title, created_at, updated_at")
         .eq("user_id", userId)
-        .eq("role", "user")
-        .order("created_at", { ascending: true });
+        .order("updated_at", { ascending: false });
 
       if (error || !data) {
-        console.error("Error loading chat messages:", error);
-        // Fallback: auto-start a fresh session anyway so the UI doesn't hang
-        if (!activeSessionId) {
-          setActiveSessionId(generateUUID());
+        if (!activeSessionIdRef.current) {
+          await createSession();
         }
         return;
       }
 
-      // Deduplicate: keep only the first message per session_id
-      const seen = new Map<string, ChatSession>();
-      for (const row of data) {
-        if (!seen.has(row.session_id)) {
-          seen.set(row.session_id, {
-            id: row.session_id,
-            title: truncate(row.content, 42),
-            createdAt: row.created_at,
-          });
-        }
-      }
-
-      // Sort newest first
-      const sorted = Array.from(seen.values()).sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      const sorted = sortSessions((data as ChatSessionRow[]).map(mapChatSession));
       setSessions(sorted);
 
-      // If we have sessions and none is active, pick the newest
-      if (sorted.length > 0 && !activeSessionId) {
-        setActiveSessionId(sorted[0].id);
-      } else if (sorted.length === 0) {
-        // No history yet — auto-start a fresh session so the UI never hangs
-        setActiveSessionId(generateUUID());
-      }
-    } catch (err) {
-      console.error("Failed to load sessions:", err);
-      if (!activeSessionId) {
-        setActiveSessionId(generateUUID());
+      const storedSessionId = window.localStorage.getItem(
+        activeSessionStorageKey(userId)
+      );
+      const currentSessionId = activeSessionIdRef.current;
+      const nextActiveSession =
+        sorted.find((s) => s.id === currentSessionId)?.id ??
+        sorted.find((s) => s.id === storedSessionId)?.id ??
+        sorted[0]?.id;
+
+      if (nextActiveSession) {
+        persistActiveSessionId(nextActiveSession);
+      } else {
+        await createSession();
       }
     } finally {
       setLoadingSessions(false);
     }
-  }, [userId, activeSessionId]);
+  }, [createSession, persistActiveSessionId, userId]);
 
   useEffect(() => {
-    if (userId) {
-      loadSessions();
-    }
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!userId) return;
 
-  // ── Create a new session ─────────────────────────────────────────────────────
-  const handleNewChat = () => {
-    const newId = generateUUID();
-    setActiveSessionId(newId);
-    // Session row will be populated once the user sends the first message
-    setIsMobileDropdownOpen(false);
-    // Optimistically add a placeholder to the list
-    setSessions((prev) => [
-      {
-        id: newId,
-        title: "New conversation",
-        createdAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        void loadSessions();
+      }
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [loadSessions, userId]);
+
+  const handleNewChat = async () => {
+    await createSession();
   };
 
-  // ── Clear current session's history ─────────────────────────────────────────
+  const handleSelectSession = (sessionId: string) => {
+    persistActiveSessionId(sessionId);
+    setIsMobileDropdownOpen(false);
+  };
+
   const handleClearHistory = async () => {
     if (!userId || !activeSessionId || isClearing) return;
+
+    const sessionIdToClear = activeSessionId;
     setIsClearing(true);
     try {
       await supabase
         .from("chat_messages")
         .delete()
         .eq("user_id", userId)
-        .eq("session_id", activeSessionId);
+        .eq("session_id", sessionIdToClear);
 
-      // Remove from sessions list and start fresh new chat
-      setSessions((prev) => prev.filter((s) => s.id !== activeSessionId));
-      handleNewChat();
+      await supabase
+        .from("chat_sessions")
+        .delete()
+        .eq("user_id", userId)
+        .eq("id", sessionIdToClear);
+
+      setSessions((prev) => prev.filter((s) => s.id !== sessionIdToClear));
+      window.localStorage.removeItem(activeSessionStorageKey(userId));
+      setActiveSessionId("");
+      activeSessionIdRef.current = "";
+      await createSession();
     } finally {
       setIsClearing(false);
     }
   };
 
-  // ── Handle when a new session sends its first message ────────────────────────
+  const handleDeleteSession = async (sessionId: string) => {
+    if (!userId || deletingSessionId) return;
+
+    const session = sessions.find((s) => s.id === sessionId);
+    const confirmed = window.confirm(
+      `Delete "${session?.title ?? "this chat"}"? This cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingSessionId(sessionId);
+    try {
+      const { error } = await supabase
+        .from("chat_sessions")
+        .delete()
+        .eq("user_id", userId)
+        .eq("id", sessionId);
+
+      if (error) return;
+
+      const remainingSessions = sessions.filter((s) => s.id !== sessionId);
+      setSessions(remainingSessions);
+
+      if (sessionId !== activeSessionIdRef.current) return;
+
+      const nextSession = remainingSessions[0];
+      if (nextSession) {
+        persistActiveSessionId(nextSession.id);
+      } else {
+        window.localStorage.removeItem(activeSessionStorageKey(userId));
+        setActiveSessionId("");
+        activeSessionIdRef.current = "";
+        await createSession();
+      }
+    } finally {
+      setDeletingSessionId(null);
+    }
+  };
+
   const handleFirstMessage = (text: string) => {
+    const now = new Date().toISOString();
+    const title = truncate(text.trim(), SESSION_TITLE_LIMIT);
+
     setSessions((prev) => {
       const exists = prev.some((s) => s.id === activeSessionId);
       if (exists) {
-        return prev.map((s) =>
-          s.id === activeSessionId
-            ? { ...s, title: truncate(text, 42) }
-            : s
+        return sortSessions(
+          prev.map((s) =>
+            s.id === activeSessionId ? { ...s, title, updatedAt: now } : s
+          )
         );
       }
-      return [
+
+      return sortSessions([
         {
           id: activeSessionId,
-          title: truncate(text, 42),
-          createdAt: new Date().toISOString(),
+          title,
+          createdAt: now,
+          updatedAt: now,
         },
         ...prev,
-      ];
+      ]);
     });
   };
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="flex h-[calc(100vh-100px)] gap-0">
-
-      {/* ── Desktop session sidebar ─────────────────────────────────────── */}
       <aside className="hidden md:flex flex-col w-60 shrink-0 bg-white/[0.015] border border-white/[0.05] rounded-2xl mr-4 overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/[0.05]">
           <span className="text-xs font-semibold text-white/40 uppercase tracking-wider">
             Chats
           </span>
           <button
-            onClick={handleNewChat}
+            onClick={() => {
+              void handleNewChat();
+            }}
             title="New chat"
             className="h-7 w-7 rounded-lg border border-white/[0.07] flex items-center justify-center text-white/40 hover:text-white/70 hover:bg-white/[0.05] transition-all"
           >
@@ -202,7 +312,6 @@ export default function AiPage() {
           </button>
         </div>
 
-        {/* Session list */}
         <div className="flex-1 overflow-y-auto py-2 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
           {loadingSessions && (
             <div className="flex items-center justify-center py-8">
@@ -215,28 +324,46 @@ export default function AiPage() {
             </p>
           )}
           {sessions.map((s) => (
-            <button
+            <div
               key={s.id}
-              onClick={() => setActiveSessionId(s.id)}
               className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl mx-1 text-left transition-all duration-150 group ${
                 s.id === activeSessionId
                   ? "bg-[#1E1B3A] text-[#AFA9EC]"
                   : "text-white/35 hover:bg-white/[0.03] hover:text-white/60"
               }`}
             >
-              <MessageSquare className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-60" />
-              <span className="text-xs leading-snug line-clamp-2">
-                {s.title}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => handleSelectSession(s.id)}
+                className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+              >
+                <MessageSquare className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-60" />
+                <span className="min-w-0 text-xs leading-snug line-clamp-2">
+                  {s.title}
+                </span>
+              </button>
+              <button
+                type="button"
+                title="Delete chat"
+                aria-label={`Delete ${s.title}`}
+                disabled={deletingSessionId !== null}
+                onClick={() => {
+                  void handleDeleteSession(s.id);
+                }}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/20 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:pointer-events-none group-hover:opacity-100"
+              >
+                {deletingSessionId === s.id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+              </button>
+            </div>
           ))}
         </div>
       </aside>
 
-      {/* ── Main chat panel ─────────────────────────────────────────────── */}
       <div className="flex flex-col flex-1 min-w-0">
-
-        {/* Page header */}
         <div className="shrink-0 flex items-start justify-between mb-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2 mb-1">
@@ -251,15 +378,14 @@ export default function AiPage() {
               AI Assistant
             </h1>
             <p className="text-white/40 text-sm mt-1">
-              {activeSession?.title && activeSession.title !== "New conversation"
+              {activeSession?.title &&
+              activeSession.title !== DEFAULT_SESSION_TITLE
                 ? truncate(activeSession.title, 60)
                 : "Chat with an AI that knows your CV inside out."}
             </p>
           </div>
 
-          {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0 mt-1">
-            {/* Mobile session switcher */}
             <div className="relative md:hidden">
               <Button
                 variant="outline"
@@ -273,7 +399,9 @@ export default function AiPage() {
               {isMobileDropdownOpen && (
                 <div className="absolute right-0 top-full mt-1.5 w-56 bg-[#0E0E12] border border-white/[0.08] rounded-xl shadow-xl z-50 overflow-hidden">
                   <button
-                    onClick={handleNewChat}
+                    onClick={() => {
+                      void handleNewChat();
+                    }}
                     className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-white/60 hover:bg-white/[0.05] transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -281,43 +409,65 @@ export default function AiPage() {
                   </button>
                   <div className="border-t border-white/[0.05] max-h-60 overflow-y-auto">
                     {sessions.map((s) => (
-                      <button
+                      <div
                         key={s.id}
-                        onClick={() => {
-                          setActiveSessionId(s.id);
-                          setIsMobileDropdownOpen(false);
-                        }}
                         className={`w-full flex items-start gap-2 px-3 py-2.5 text-left transition-colors ${
                           s.id === activeSessionId
                             ? "bg-[#1E1B3A] text-[#AFA9EC]"
                             : "text-white/40 hover:bg-white/[0.04]"
                         }`}
                       >
-                        <MessageSquare className="h-3 w-3 shrink-0 mt-0.5 opacity-60" />
-                        <span className="text-xs line-clamp-1">{s.title}</span>
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectSession(s.id)}
+                          className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                        >
+                          <MessageSquare className="h-3 w-3 shrink-0 mt-0.5 opacity-60" />
+                          <span className="min-w-0 text-xs line-clamp-1">
+                            {s.title}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          title="Delete chat"
+                          aria-label={`Delete ${s.title}`}
+                          disabled={deletingSessionId !== null}
+                          onClick={() => {
+                            void handleDeleteSession(s.id);
+                          }}
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white/30 transition-colors hover:bg-red-500/10 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500/30 disabled:pointer-events-none"
+                        >
+                          {deletingSessionId === s.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3 w-3" />
+                          )}
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* New Chat (desktop shortcut) */}
             <Button
               variant="outline"
               size="sm"
-              onClick={handleNewChat}
+              onClick={() => {
+                void handleNewChat();
+              }}
               className="hidden md:flex gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/50 hover:text-white/70 hover:bg-white/[0.04] text-xs"
             >
               <Plus className="h-3.5 w-3.5" />
               New chat
             </Button>
 
-            {/* Clear history */}
             <Button
               variant="outline"
               size="sm"
-              onClick={handleClearHistory}
+              onClick={() => {
+                void handleClearHistory();
+              }}
               disabled={isClearing || !activeSession || sessions.length === 0}
               className="gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/30 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 text-xs disabled:opacity-30 transition-all"
             >
@@ -331,7 +481,6 @@ export default function AiPage() {
           </div>
         </div>
 
-        {/* Chat interface */}
         <div className="flex-1 min-h-0">
           {activeSessionId ? (
             <ChatInterface

@@ -17,6 +17,13 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ApplicationStatus =
   | "saved"
   | "applied"
