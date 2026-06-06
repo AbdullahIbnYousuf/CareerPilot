@@ -27,9 +27,6 @@ export function NudgeBanner({ message, onDismiss }: NudgeBannerProps) {
             <Sparkles className="h-4 w-4" />
           </div>
           <p className="text-sm font-medium text-white/90">
-            <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#7C74DB] to-[#AFA9EC] mr-1">
-              AI Nudge:
-            </span>
             {message}
           </p>
         </div>

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import {
-  LayoutDashboard,
   Briefcase,
   Map,
   MessageCircle,
@@ -14,9 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { href: "/", label: "Home", icon: LayoutDashboard, exact: true },
-  { href: "/jobs", label: "Jobs", icon: Briefcase, exact: false },
   { href: "/tracker", label: "My Journey", icon: Map, exact: false },
+  { href: "/jobs", label: "Jobs", icon: Briefcase, exact: false },
   { href: "/chat", label: "AI Assistant", icon: MessageCircle, exact: false },
   { href: "/cv", label: "Profile", icon: UserCircle, exact: false },
 ];

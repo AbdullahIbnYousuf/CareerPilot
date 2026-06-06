@@ -19,7 +19,7 @@ import {
   SunMedium,
 } from "lucide-react";
 
-type View = "today" | "kanban" | "dashboard" | "calendar" | "tasks";
+type View = "today" | "applications" | "progress" | "calendar" | "goals_tasks";
 
 interface TodoRow {
   id: string;
@@ -234,11 +234,11 @@ export default function JourneyPage() {
   };
 
   const tabs: { key: View; label: string; icon: React.ElementType }[] = [
-    { key: "today",     label: "Today",    icon: SunMedium },
-    { key: "kanban",    label: "Kanban",   icon: LayoutGrid },
-    { key: "dashboard", label: "Stats",    icon: BarChart3 },
-    { key: "calendar",  label: "Calendar", icon: Calendar },
-    { key: "tasks",     label: "Tasks",    icon: ListTodo },
+    { key: "today",       label: "Today",        icon: SunMedium },
+    { key: "applications",label: "Applications", icon: LayoutGrid },
+    { key: "goals_tasks", label: "Goals & Tasks", icon: ListTodo },
+    { key: "calendar",    label: "Calendar",     icon: Calendar },
+    { key: "progress",    label: "Progress",     icon: BarChart3 },
   ];
 
   return (
@@ -271,42 +271,23 @@ export default function JourneyPage() {
           </p>
         </div>
 
-        {/* View Switcher Tabs and Demo trigger */}
-        <div className="flex flex-wrap items-center gap-3 shrink-0 self-start md:self-auto">
-          <button
-            id="journey-gen-nudge-btn"
-            onClick={async () => {
-              if (!userId) return;
-              try {
-                await fetch(`${baseUrl}/dashboard/${userId}/nudges/generate`, {
-                  method: "POST",
-                });
-              } catch {
-                /* silently fail */
-              }
-            }}
-            className="flex items-center gap-1 px-3 py-2 text-xs font-semibold rounded-lg bg-yellow-500/10 text-yellow-300 border border-yellow-500/20 hover:bg-yellow-500/20 transition-all duration-200"
-          >
-            Demo: Gen Nudge
-          </button>
-
-          <div className="flex p-1 gap-1 rounded-xl bg-[#0E0E12] border border-white/[0.06] shadow-md">
-            {tabs.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                id={`journey-tab-${key}`}
-                onClick={() => setView(key)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
-                  view === key
-                    ? "bg-[#1E1B3A] text-[#AFA9EC] shadow-sm"
-                    : "text-white/60 hover:text-white hover:bg-white/[0.02]"
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-              </button>
-            ))}
-          </div>
+        {/* View Switcher Tabs */}
+        <div className="flex p-1 gap-1 rounded-xl bg-[#0E0E12] border border-white/[0.06] shadow-md shrink-0 self-start md:self-auto">
+          {tabs.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              id={`journey-tab-${key}`}
+              onClick={() => setView(key)}
+              className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                view === key
+                  ? "bg-[#1E1B3A] text-[#AFA9EC] shadow-sm"
+                  : "text-white/60 hover:text-white hover:bg-white/[0.02]"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -318,18 +299,18 @@ export default function JourneyPage() {
             todos={todos}
             nudges={nudges}
             onRefresh={handleDataRefresh}
-            onOpenApplications={() => setView("kanban")}
+            onOpenApplications={() => setView("applications")}
             onOpenCalendar={() => setView("calendar")}
-            onOpenProgress={() => setView("dashboard")}
-            onOpenTasks={() => setView("tasks")}
+            onOpenProgress={() => setView("progress")}
+            onOpenTasks={() => setView("goals_tasks")}
           />
         )}
-        {view === "kanban"    && <KanbanBoard />}
-        {view === "dashboard" && <ProgressDashboard />}
-        {view === "calendar"  && <CalendarView />}
+        {view === "applications" && <KanbanBoard />}
+        {view === "progress"     && <ProgressDashboard />}
+        {view === "calendar"     && <CalendarView />}
 
-        {/* Tasks — GoalsSection above TodoList, single shared data source */}
-        {view === "tasks" && userId && (
+        {/* Goals & Tasks — GoalsSection above TodoList, single shared data source */}
+        {view === "goals_tasks" && userId && (
           <div className="space-y-4">
             {dataLoadError && (
               <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
