@@ -248,6 +248,7 @@ export default function JourneyPage() {
         <NudgeBanner
           key={nudge.id}
           message={nudge.message}
+          jobs={nudge.jobs}
           onDismiss={() => dismissNudge(nudge.id)}
         />
       ))}

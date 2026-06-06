@@ -40,6 +40,7 @@ export interface Application {
   job_id: string;
   status: ApplicationStatus;
   applied_at: string | null;
+  notes?: string | null;
   // Joined from jobs table
   title?: string;
   company?: string;
@@ -94,6 +95,13 @@ export interface Nudge {
   message: string;
   seen: boolean;
   job_ids?: string[];
+  jobs?: {
+    id: string;
+    title: string;
+    company: string;
+    fit_score?: number | null;
+    url?: string;
+  }[];
 }
 
 export interface Goal {

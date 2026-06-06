@@ -334,6 +334,42 @@ async def get_nudges(user_id: str):
     if stale_ids:
         await supabase.table("nudges").update({"seen": True}).in_("id", stale_ids).execute()
 
+    # Enrich fresh nudges with job details if job_ids exist
+    all_job_ids = set()
+    for nudge in fresh:
+        jids = nudge.get("job_ids")
+        if jids:
+            for jid in jids:
+                if jid:
+                    all_job_ids.add(str(jid))
+
+    jobs_map = {}
+    if all_job_ids:
+        try:
+            jobs_res = await supabase.table("jobs").select(
+                "id, title, company, fit_score, url"
+            ).in_("id", list(all_job_ids)).execute()
+            if jobs_res.data:
+                jobs_map = {j["id"]: j for j in jobs_res.data}
+        except Exception:
+            try:
+                jobs_res = await supabase.table("jobs").select(
+                    "id, title, company, fit_score"
+                ).in_("id", list(all_job_ids)).execute()
+                if jobs_res.data:
+                    jobs_map = {j["id"]: {**j, "url": ""} for j in jobs_res.data}
+            except Exception:
+                pass
+
+    for nudge in fresh:
+        nudge_jobs = []
+        jids = nudge.get("job_ids")
+        if jids:
+            for jid in jids:
+                if str(jid) in jobs_map:
+                    nudge_jobs.append(jobs_map[str(jid)])
+        nudge["jobs"] = nudge_jobs
+
     return {"nudges": fresh}
 
 

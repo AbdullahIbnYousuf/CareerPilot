@@ -19,6 +19,7 @@ import {
   Bell,
   Briefcase,
   CheckCircle2,
+  ExternalLink,
   Flame,
   Loader2,
   Send,
@@ -237,16 +238,57 @@ export function ProgressDashboard() {
           {nudges.map((nudge) => (
             <div
               key={nudge.id}
-              className="flex items-start gap-3 rounded-lg border border-[#534AB7]/20 bg-[#534AB7]/10 p-4 text-white/90 shadow-md"
+              className="flex flex-col gap-3 rounded-xl border border-[#534AB7]/20 bg-[#534AB7]/10 p-4 text-white/90 shadow-md"
             >
-              <Bell className="mt-0.5 h-4 w-4 shrink-0 text-[#AFA9EC]" />
-              <p className="flex-1 text-sm">{nudge.message}</p>
-              <button
-                className="shrink-0 text-xs text-white/40 underline transition-colors hover:text-white"
-                onClick={() => dismissNudge(nudge.id)}
-              >
-                Dismiss
-              </button>
+              <div className="flex items-start gap-3">
+                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-[#AFA9EC]" />
+                <p className="flex-1 text-sm">{nudge.message}</p>
+                <button
+                  className="shrink-0 text-xs text-white/40 underline transition-colors hover:text-white"
+                  onClick={() => dismissNudge(nudge.id)}
+                >
+                  Dismiss
+                </button>
+              </div>
+
+              {/* Linked Jobs list */}
+              {nudge.jobs && nudge.jobs.length > 0 && (
+                <div className="border-t border-[#534AB7]/20 pt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/45 mb-2">Suggested Roles</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                    {nudge.jobs.slice(0, 3).map((job) => (
+                      <div 
+                        key={job.id} 
+                        className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/[0.04] p-3 hover:bg-white/[0.04] transition-all"
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <p className="text-xs font-semibold text-white/90 truncate">{job.title}</p>
+                          <p className="text-[10px] text-white/40 truncate mt-0.5">{job.company}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {job.fit_score !== undefined && job.fit_score !== null && (
+                            <span className={`text-[10px] font-bold ${
+                              job.fit_score >= 70 ? "text-emerald-400" : job.fit_score >= 40 ? "text-amber-400" : "text-red-400"
+                            }`}>
+                              {job.fit_score}%
+                            </span>
+                          )}
+                          {job.url && (
+                            <a
+                              href={job.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#534AB7]/20 text-[#AFA9EC] hover:bg-[#534AB7]/30 transition-all border border-[#534AB7]/20"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
