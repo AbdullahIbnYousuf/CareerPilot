@@ -34,6 +34,12 @@ import {
   Sparkles,
   CalendarPlus,
   CheckCircle2,
+  MapPin,
+  Building2,
+  DollarSign,
+  Calendar,
+  BookmarkCheck,
+  X,
 } from "lucide-react";
 
 // ─── Column config ──────────────────────────────────────────────────────────
@@ -387,6 +393,50 @@ function ApplicationActionPrompt({
   created_at: string;
 }
 
+interface JobDetails {
+  description?: string | null;
+  salary_range?: string | null;
+  fit_explanation?: string | null;
+}
+
+const htmlEntities: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+function decodeHtml(value: string) {
+  return value.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
+    if (entity.startsWith("#x")) {
+      const cp = Number.parseInt(entity.slice(2), 16);
+      return Number.isNaN(cp) ? match : String.fromCodePoint(cp);
+    }
+    if (entity.startsWith("#")) {
+      const cp = Number.parseInt(entity.slice(1), 10);
+      return Number.isNaN(cp) ? match : String.fromCodePoint(cp);
+    }
+    return htmlEntities[entity] ?? match;
+  });
+}
+
+function cleanDesc(raw: string | null | undefined) {
+  if (!raw) return "";
+  const withBreaks = raw.replace(/<\/?(?:br|p|div|li|ul|ol|section|article|h[1-4])[^>]*>/gi, "\n");
+  return decodeHtml(withBreaks.replace(/<[^>]+>/g, " "))
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t\r\f\v]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function capitalize(s?: string | null) {
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 export function KanbanBoard() {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -410,12 +460,15 @@ export function KanbanBoard() {
   const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
   const [notesSaveError, setNotesSaveError] = useState("");
   const [notesSaved, setNotesSaved] = useState(false);
+  const [jobDetails, setJobDetails] = useState<JobDetails | null>(null);
+  const [loadingJobDetails, setLoadingJobDetails] = useState(false);
 
   const closeDetails = useCallback(() => {
     setSelectedApp(null);
     setEvents([]);
     setNotesSaveError("");
     setNotesSaved(false);
+    setJobDetails(null);
   }, []);
 
   useEffect(() => {
@@ -436,6 +489,26 @@ export function KanbanBoard() {
     };
     void loadEvents();
   }, [selectedApp, baseUrl, eventsRefreshKey]);
+
+  // Fetch full job details (description, salary, fit explanation) when modal opens
+  useEffect(() => {
+    if (!selectedApp?.job_id) return;
+    const loadJobDetails = async () => {
+      setLoadingJobDetails(true);
+      try {
+        const res = await fetch(`${baseUrl}/jobs/${selectedApp.job_id}/details`);
+        if (res.ok) {
+          const data = await res.json() as JobDetails;
+          setJobDetails(data);
+        }
+      } catch {
+        // silently fail — modal still works without these extras
+      } finally {
+        setLoadingJobDetails(false);
+      }
+    };
+    void loadJobDetails();
+  }, [selectedApp?.job_id, baseUrl]);
 
   const handleSaveNotes = async () => {
     if (!selectedApp) return;
@@ -837,85 +910,151 @@ export function KanbanBoard() {
       </DndContext>
 
       {selectedApp && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
           onClick={closeDetails}
         >
-          <div 
-            className="relative w-full max-w-xl max-h-[85vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          <div
+            className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal Header */}
-            <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-gradient-to-b from-white/[0.02] to-transparent">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-1.5">
+            {/* ── Modal Header ── */}
+            <div className="flex items-start justify-between p-6 border-b border-white/[0.06] bg-white/[0.02]">
+              <div className="flex-1 min-w-0 pr-4">
+                {/* Source tag + status pill */}
+                <div className="flex items-center gap-2 mb-2">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-md">
                     {selectedApp.status}
                   </span>
                   {selectedApp.fit_score !== undefined && selectedApp.fit_score !== null && (
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      selectedApp.fit_score >= 70 
-                        ? "bg-emerald-500/10 text-emerald-400" 
-                        : selectedApp.fit_score >= 40 
-                          ? "bg-amber-500/10 text-amber-400" 
+                      selectedApp.fit_score >= 70
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : selectedApp.fit_score >= 40
+                          ? "bg-amber-500/10 text-amber-400"
                           : "bg-red-500/10 text-red-400"
                     }`}>
                       {selectedApp.fit_score}% fit
                     </span>
                   )}
                 </div>
-                <h2 className="text-lg font-bold text-white leading-snug line-clamp-2 pr-4">{selectedApp.title}</h2>
-                <p className="text-sm text-white/50 mt-0.5 font-medium">{selectedApp.company}</p>
-                {selectedApp.location && (
-                  <p className="text-xs text-white/30 mt-1">{selectedApp.location}</p>
-                )}
-              </div>
-              <button 
-                onClick={closeDetails}
-                className="h-8 w-8 flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
-              >
-                <XCircle className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-              {/* Job Info Details */}
-              <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.02] border border-white/[0.04] p-3 text-xs">
-                <div>
-                  <p className="text-white/30 font-medium">Applied Date</p>
-                  <p className="text-white/80 mt-0.5 font-semibold">
-                    {selectedApp.applied_at 
-                      ? new Date(selectedApp.applied_at).toLocaleDateString("en-US", {
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric"
-                        })
-                      : "Not applied yet"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-white/30 font-medium">Link</p>
-                  {selectedApp.url ? (
-                    <a 
-                      href={selectedApp.url} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
-                      className="inline-flex items-center gap-1 text-[#AFA9EC] hover:text-[#C5BFFF] hover:underline mt-0.5 font-semibold"
-                    >
-                      Open Posting <ExternalLink className="h-3 w-3" />
-                    </a>
-                  ) : (
-                    <p className="text-white/30 mt-0.5 italic">No link available</p>
+                <h2 className="text-xl font-bold text-white leading-snug">
+                  {selectedApp.title || "Unknown Role"}
+                </h2>
+                <div className="flex flex-wrap items-center gap-4 mt-1.5 text-sm text-white/40">
+                  {selectedApp.company && (
+                    <span className="flex items-center gap-1.5 text-white/70 font-medium">
+                      <Building2 className="h-3.5 w-3.5 text-white/30" />
+                      {selectedApp.company}
+                    </span>
+                  )}
+                  {selectedApp.location && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {selectedApp.location}
+                    </span>
                   )}
                 </div>
               </div>
+              <button
+                onClick={closeDetails}
+                className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-              {/* Notes Textarea */}
+            {/* ── Scrollable Body ── */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+              {/* Fit score + explanation panel */}
+              {(selectedApp.fit_score !== undefined && selectedApp.fit_score !== null) && (
+                <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
+                  {/* Score ring */}
+                  <div className="shrink-0 flex flex-col items-center gap-1">
+                    <div className={`h-16 w-16 rounded-full border-4 flex items-center justify-center font-bold text-xl ${
+                      selectedApp.fit_score >= 70
+                        ? "border-emerald-400 text-emerald-400"
+                        : selectedApp.fit_score >= 40
+                          ? "border-amber-400 text-amber-400"
+                          : "border-red-400 text-red-400"
+                    }`}>
+                      {selectedApp.fit_score}
+                    </div>
+                    <span className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">% Fit</span>
+                  </div>
+                  <div className="space-y-1 text-center md:text-left flex-1">
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">CV Fit Analysis</p>
+                    {loadingJobDetails ? (
+                      <div className="flex items-center gap-1.5 text-xs text-white/30">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading analysis...
+                      </div>
+                    ) : jobDetails?.fit_explanation ? (
+                      <p className="text-sm text-white/60 italic leading-relaxed">
+                        &ldquo;{jobDetails.fit_explanation}&rdquo;
+                      </p>
+                    ) : (
+                      <p className="text-xs text-white/30 italic">Open the job in Job Hunter to see fit analysis.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Meta row — Salary / Deadline / Applied Date */}
+              <div className="grid grid-cols-3 gap-3 rounded-xl bg-white/[0.03] border border-white/[0.05] px-4 py-3 text-xs">
+                <div className="space-y-1">
+                  <span className="text-white/30 block font-medium">Salary Range</span>
+                  <span className="text-white font-semibold flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-primary/60" />
+                    {loadingJobDetails
+                      ? "…"
+                      : jobDetails?.salary_range || "Not Disclosed"}
+                  </span>
+                </div>
+                <div className="space-y-1 border-l border-white/[0.05] pl-3">
+                  <span className="text-white/30 block font-medium">Deadline</span>
+                  <span className="text-white font-semibold flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-primary/60" />
+                    {selectedApp.deadline || "Rolling / Open"}
+                  </span>
+                </div>
+                <div className="space-y-1 border-l border-white/[0.05] pl-3">
+                  <span className="text-white/30 block font-medium">Applied Date</span>
+                  <span className="text-white font-semibold">
+                    {selectedApp.applied_at
+                      ? new Date(selectedApp.applied_at).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })
+                      : "Not yet"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Job Description */}
+              <div className="space-y-2">
+                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5" /> Job Description
+                </h3>
+                {loadingJobDetails ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-xs text-white/30">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading description...
+                  </div>
+                ) : jobDetails && cleanDesc(jobDetails.description) ? (
+                  <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-sm text-white/50 leading-relaxed whitespace-pre-wrap max-h-52 overflow-y-auto">
+                    {cleanDesc(jobDetails.description)}
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/20 italic">No description available.</p>
+                )}
+              </div>
+
+              {/* Notes */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label htmlFor="app-modal-notes" className="text-xs font-bold text-white/70 uppercase tracking-wider">
-                    Notes
+                    My Notes
                   </label>
                   <button
                     onClick={handleSaveNotes}
@@ -930,12 +1069,12 @@ export function KanbanBoard() {
                   id="app-modal-notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Paste details, links, interview dates, recruiter info..."
-                  className="w-full min-h-[100px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2 text-xs text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
+                  placeholder="Interview dates, recruiter contacts, links, prep notes..."
+                  className="w-full min-h-[90px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2.5 text-sm text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
                 />
                 {notesSaved && (
                   <p className="text-[11px] text-emerald-400 flex items-center gap-1">
-                    <CheckCircle2 className="h-3 w-3" /> Notes saved successfully
+                    <CheckCircle2 className="h-3 w-3" /> Notes saved
                   </p>
                 )}
                 {notesSaveError && (
@@ -943,9 +1082,9 @@ export function KanbanBoard() {
                 )}
               </div>
 
-              {/* History Timeline */}
+              {/* Activity History */}
               <div className="space-y-3">
-                <h3 className="text-xs font-bold text-white/70 uppercase tracking-wider">
+                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider">
                   Activity History
                 </h3>
                 {loadingEvents ? (
@@ -953,17 +1092,16 @@ export function KanbanBoard() {
                     <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading logs...
                   </div>
                 ) : events.length === 0 ? (
-                  <p className="text-xs text-white/20 italic py-2">No activity events logged yet.</p>
+                  <p className="text-xs text-white/20 italic py-2">No activity recorded yet.</p>
                 ) : (
                   <div className="relative border-l border-white/[0.06] ml-2 pl-4 py-1 space-y-4">
                     {events.map((ev) => (
                       <div key={ev.id} className="relative">
-                        {/* Dot indicator */}
                         <div className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border border-white/10 bg-[#7C74DB]" />
                         <div className="text-xs">
                           <p className="font-semibold text-white/80">
-                            {ev.event_type === "created" && `Created in ${ev.to_status ? ev.to_status.charAt(0).toUpperCase() + ev.to_status.slice(1) : "Saved"}`}
-                            {ev.event_type === "status_changed" && `Moved from ${ev.from_status ? ev.from_status.charAt(0).toUpperCase() + ev.from_status.slice(1) : "Saved"} to ${ev.to_status ? ev.to_status.charAt(0).toUpperCase() + ev.to_status.slice(1) : "Applied"}`}
+                            {ev.event_type === "created" && `Created in ${capitalize(ev.to_status) || "Saved"}`}
+                            {ev.event_type === "status_changed" && `Moved from ${capitalize(ev.from_status) || "Saved"} → ${capitalize(ev.to_status) || "Applied"}`}
                             {ev.event_type === "note_updated" && "Notes updated"}
                           </p>
                           <p className="text-[10px] text-white/30 mt-0.5">
@@ -971,13 +1109,39 @@ export function KanbanBoard() {
                               month: "short",
                               day: "numeric",
                               hour: "2-digit",
-                              minute: "2-digit"
+                              minute: "2-digit",
                             })}
                           </p>
                         </div>
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Modal Footer ── */}
+            <div className="p-4 border-t border-white/[0.06] flex flex-col-reverse gap-2 bg-white/[0.02] sm:flex-row sm:justify-end">
+              <button
+                onClick={closeDetails}
+                className="h-9 rounded-xl bg-white/[0.04] px-4 text-xs font-semibold text-white/40 transition-all hover:text-white sm:mr-auto"
+              >
+                Close
+              </button>
+              <div className="flex items-center gap-2 justify-end">
+                {/* Saved to tracker indicator */}
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-medium px-3 py-2">
+                  <BookmarkCheck className="h-3.5 w-3.5" /> In Tracker
+                </span>
+                {selectedApp.url && (
+                  <a
+                    href={selectedApp.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-4 py-2 transition-colors duration-150"
+                  >
+                    Apply Now <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
                 )}
               </div>
             </div>

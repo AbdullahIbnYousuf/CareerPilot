@@ -123,6 +123,34 @@ async def score_job_endpoint(job_id: str, user_id: str = Query(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+@router.get("/{job_id}/details")
+async def get_job_details(job_id: str):
+    """
+    Fetch additional job details (description, salary_range, fit_explanation)
+    for the Applications modal. These fields are not included in the Kanban
+    applications list response to keep it light.
+    """
+    try:
+        result = await supabase.table("jobs").select(
+            "id, description, salary_range, fit_explanation"
+        ).eq("id", job_id).limit(1).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail="Job not found.")
+
+        job = result.data[0]
+        return {
+            "description": job.get("description"),
+            "salary_range": job.get("salary_range"),
+            "fit_explanation": job.get("fit_explanation"),
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{user_id}")
 async def get_saved_jobs(user_id: str):
     """Fetch previously saved/scored jobs for a user from the database."""
