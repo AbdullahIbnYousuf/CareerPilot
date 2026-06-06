@@ -283,14 +283,33 @@ async def upload_cv(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save profile: {str(e)}")
 
+    def _is_missing_provenance_columns_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "jobs" in text and (
+            "scored_cv_id" in text or "fit_score_calculated_at" in text or "fit_score_version" in text
+        ) and (
+            "schema cache" in text
+            or "pgrst204" in text
+            or "42703" in text
+            or "does not exist" in text
+        )
+
     try:
-        await supabase.table("jobs").update({
-            "fit_score": None,
-            "fit_explanation": None,
-            "scored_cv_id": None,
-            "fit_score_calculated_at": None,
-            "fit_score_version": None,
-        }).eq("user_id", user_id).execute()
+        try:
+            await supabase.table("jobs").update({
+                "fit_score": None,
+                "fit_explanation": None,
+                "scored_cv_id": None,
+                "fit_score_calculated_at": None,
+                "fit_score_version": None,
+            }).eq("user_id", user_id).execute()
+        except Exception as exc:
+            if not _is_missing_provenance_columns_error(exc):
+                raise
+            await supabase.table("jobs").update({
+                "fit_score": None,
+                "fit_explanation": None,
+            }).eq("user_id", user_id).execute()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to invalidate stale job scores: {str(e)}")
 

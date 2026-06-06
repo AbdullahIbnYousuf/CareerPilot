@@ -33,6 +33,18 @@ def _is_missing_url_column_error(exc: Exception) -> bool:
     )
 
 
+def _is_missing_provenance_columns_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "jobs" in text and (
+        "scored_cv_id" in text or "fit_score_calculated_at" in text or "fit_score_version" in text
+    ) and (
+        "schema cache" in text
+        or "pgrst204" in text
+        or "42703" in text
+        or "does not exist" in text
+    )
+
+
 @router.post("/hunt")
 async def hunt_jobs_endpoint(req: JobHuntRequest):
     """
@@ -78,13 +90,21 @@ async def score_job_endpoint(job_id: str, user_id: str = Query(...)):
         calculated_at = datetime.utcnow().isoformat()
 
         # Update fit_score and fit_explanation
-        await supabase.table("jobs").update({
-            "fit_score": score_res["score"],
-            "fit_explanation": score_res["explanation"],
-            "scored_cv_id": score_res["active_cv_id"],
-            "fit_score_calculated_at": calculated_at,
-            "fit_score_version": score_res["fit_score_version"],
-        }).eq("id", job_id).execute()
+        try:
+            await supabase.table("jobs").update({
+                "fit_score": score_res["score"],
+                "fit_explanation": score_res["explanation"],
+                "scored_cv_id": score_res["active_cv_id"],
+                "fit_score_calculated_at": calculated_at,
+                "fit_score_version": score_res["fit_score_version"],
+            }).eq("id", job_id).execute()
+        except Exception as exc:
+            if not _is_missing_provenance_columns_error(exc):
+                raise
+            await supabase.table("jobs").update({
+                "fit_score": score_res["score"],
+                "fit_explanation": score_res["explanation"],
+            }).eq("id", job_id).execute()
 
         return {
             "job_id": job_id,
@@ -107,16 +127,38 @@ async def score_job_endpoint(job_id: str, user_id: str = Query(...)):
 async def get_saved_jobs(user_id: str):
     """Fetch previously saved/scored jobs for a user from the database."""
     try:
-        result = await supabase.table("jobs").select(
-            "id, title, company, location, fit_score, fit_explanation, source, url, scored_cv_id, fit_score_calculated_at, fit_score_version"
-        ).eq("user_id", user_id).order("fit_score", desc=True).execute()
-    except Exception as exc:
-        if not _is_missing_url_column_error(exc):
-            raise
-        result = await supabase.table("jobs").select(
-            "id, title, company, location, fit_score, fit_explanation, source, scored_cv_id, fit_score_calculated_at, fit_score_version"
-        ).eq("user_id", user_id).order("fit_score", desc=True).execute()
-        for job in result.data or []:
-            job["url"] = ""
+        try:
+            result = await supabase.table("jobs").select(
+                "id, title, company, location, fit_score, fit_explanation, source, url, scored_cv_id, fit_score_calculated_at, fit_score_version"
+            ).eq("user_id", user_id).order("fit_score", desc=True).execute()
+        except Exception as exc:
+            if _is_missing_provenance_columns_error(exc):
+                try:
+                    result = await supabase.table("jobs").select(
+                        "id, title, company, location, fit_score, fit_explanation, source, url"
+                    ).eq("user_id", user_id).order("fit_score", desc=True).execute()
+                except Exception as inner_exc:
+                    if _is_missing_url_column_error(inner_exc):
+                        result = await supabase.table("jobs").select(
+                            "id, title, company, location, fit_score, fit_explanation, source"
+                        ).eq("user_id", user_id).order("fit_score", desc=True).execute()
+                        for job in result.data or []:
+                            job["url"] = ""
+                    else:
+                        raise
+                for job in result.data or []:
+                    job["scored_cv_id"] = None
+                    job["fit_score_calculated_at"] = None
+                    job["fit_score_version"] = None
+            elif _is_missing_url_column_error(exc):
+                result = await supabase.table("jobs").select(
+                    "id, title, company, location, fit_score, fit_explanation, source, scored_cv_id, fit_score_calculated_at, fit_score_version"
+                ).eq("user_id", user_id).order("fit_score", desc=True).execute()
+                for job in result.data or []:
+                    job["url"] = ""
+            else:
+                raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
     return {"jobs": result.data or []}

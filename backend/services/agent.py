@@ -336,14 +336,40 @@ def _is_missing_url_column_error(exc: Exception) -> bool:
     )
 
 
+def _is_missing_provenance_columns_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "jobs" in text and (
+        "scored_cv_id" in text or "fit_score_calculated_at" in text or "fit_score_version" in text
+    ) and (
+        "schema cache" in text
+        or "pgrst204" in text
+        or "42703" in text
+        or "does not exist" in text
+    )
+
+
 async def _insert_or_reuse_job(raw_job: dict, user_id: str) -> tuple[dict, dict | None]:
     title = raw_job["title"]
     company = raw_job["company"]
-    existing = await supabase.table("jobs").select(
-        "id, fit_score, fit_explanation, scored_cv_id, fit_score_calculated_at, fit_score_version"
-    ).eq("user_id", user_id).eq("title", title).eq("company", company).execute()
+    try:
+        existing = await supabase.table("jobs").select(
+            "id, fit_score, fit_explanation, scored_cv_id, fit_score_calculated_at, fit_score_version"
+        ).eq("user_id", user_id).eq("title", title).eq("company", company).execute()
+    except Exception as exc:
+        if not _is_missing_provenance_columns_error(exc):
+            raise
+        try:
+            existing = await supabase.table("jobs").select(
+                "id, fit_score, fit_explanation"
+            ).eq("user_id", user_id).eq("title", title).eq("company", company).execute()
+            for row in existing.data or []:
+                row["scored_cv_id"] = None
+                row["fit_score_calculated_at"] = None
+                row["fit_score_version"] = None
+        except Exception:
+            existing = None
 
-    if existing.data:
+    if existing and existing.data:
         return {**raw_job, "id": existing.data[0]["id"]}, existing.data[0]
 
     insert_data = {
@@ -455,13 +481,21 @@ async def _score_and_rank_jobs(raw_jobs: list[dict], user_id: str, search_query:
     for (job, job_id, calculated_at), explanation in zip(explanation_targets, explanations):
         job["fit_explanation"] = explanation
         if job_id:
-            await supabase.table("jobs").update({
-                "fit_score": job["fit_score"],
-                "fit_explanation": explanation,
-                "scored_cv_id": job["scored_cv_id"],
-                "fit_score_calculated_at": calculated_at,
-                "fit_score_version": job["fit_score_version"],
-            }).eq("id", job_id).execute()
+            try:
+                await supabase.table("jobs").update({
+                    "fit_score": job["fit_score"],
+                    "fit_explanation": explanation,
+                    "scored_cv_id": job["scored_cv_id"],
+                    "fit_score_calculated_at": calculated_at,
+                    "fit_score_version": job["fit_score_version"],
+                }).eq("id", job_id).execute()
+            except Exception as exc:
+                if not _is_missing_provenance_columns_error(exc):
+                    raise
+                await supabase.table("jobs").update({
+                    "fit_score": job["fit_score"],
+                    "fit_explanation": explanation,
+                }).eq("id", job_id).execute()
 
     return sorted(
         scored_jobs,
