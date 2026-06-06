@@ -14,6 +14,7 @@ Endpoints:
   GET    /tracker/todos                 — fetch todos
   POST   /tracker/todos                 — create todo
   PATCH  /tracker/todos/:id             — mark complete/incomplete
+  DELETE /tracker/todos/:id             — delete todo
   PATCH  /tracker/goals/:id             — mark goal complete/incomplete
 """
 
@@ -34,6 +35,27 @@ def _is_missing_url_column_error(exc: Exception) -> bool:
         or "42703" in text
         or "does not exist" in text
     )
+
+
+def _is_missing_deadline_column_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "deadline" in text and "jobs" in text and (
+        "schema cache" in text
+        or "pgrst204" in text
+        or "42703" in text
+        or "does not exist" in text
+    )
+
+
+def _is_missing_completed_at_column_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "completed_at" in text and "todos" in text and (
+        "schema cache" in text
+        or "pgrst204" in text
+        or "42703" in text
+        or "does not exist" in text
+    )
+
 
 ApplicationStatus = Literal["saved", "applied", "interviewing", "offer", "rejected"]
 
@@ -99,16 +121,25 @@ async def get_applications(user_id: str = Query(...)):
     job_ids = list({a["job_id"] for a in applications})
     try:
         jobs_result = await supabase.table("jobs").select(
-            "id, title, company, location, url, fit_score"
+            "id, title, company, location, url, fit_score, deadline"
         ).in_("id", job_ids).execute()
     except Exception as exc:
         if _is_missing_url_column_error(exc):
             try:
                 jobs_result = await supabase.table("jobs").select(
-                    "id, title, company, location, fit_score"
+                    "id, title, company, location, fit_score, deadline"
                 ).in_("id", job_ids).execute()
                 for job in jobs_result.data or []:
                     job["url"] = ""
+            except Exception:
+                jobs_result = None
+        elif _is_missing_deadline_column_error(exc):
+            try:
+                jobs_result = await supabase.table("jobs").select(
+                    "id, title, company, location, url, fit_score"
+                ).in_("id", job_ids).execute()
+                for job in jobs_result.data or []:
+                    job["deadline"] = None
             except Exception:
                 jobs_result = None
         else:
@@ -127,6 +158,7 @@ async def get_applications(user_id: str = Query(...)):
             "location": job.get("location", ""),
             "url": job.get("url", ""),
             "fit_score": job.get("fit_score"),
+            "deadline": job.get("deadline"),
         })
 
     return {"applications": enriched}
@@ -251,14 +283,27 @@ async def get_todos(
     due_date: Optional[str] = Query(None),
 ):
     """Fetch todos for a user, optionally filtered by due date."""
-    query = supabase.table("todos").select(
-        "id, user_id, goal_id, title, due_date, completed"
-    ).eq("user_id", user_id)
+    select_columns = "id, user_id, goal_id, title, due_date, completed, completed_at"
+    query = supabase.table("todos").select(select_columns).eq("user_id", user_id)
 
     if due_date:
         query = query.eq("due_date", due_date)
 
-    result = await query.order("due_date", desc=False).execute()
+    try:
+        result = await query.order("due_date", desc=False).execute()
+    except Exception as exc:
+        if not _is_missing_completed_at_column_error(exc):
+            raise
+
+        fallback_query = supabase.table("todos").select(
+            "id, user_id, goal_id, title, due_date, completed"
+        ).eq("user_id", user_id)
+        if due_date:
+            fallback_query = fallback_query.eq("due_date", due_date)
+        result = await fallback_query.order("due_date", desc=False).execute()
+        for todo in result.data or []:
+            todo["completed_at"] = None
+
     return {"todos": result.data or []}
 
 
@@ -279,6 +324,13 @@ async def create_todo(req: CreateTodoRequest):
     return {"todo": result.data[0]}
 
 
+@router.delete("/todos/{todo_id}")
+async def delete_todo(todo_id: str):
+    """Delete a todo without deleting any linked goal."""
+    await supabase.table("todos").delete().eq("id", todo_id).execute()
+    return {"status": "deleted"}
+
+
 @router.patch("/todos/{todo_id}")
 async def update_todo(todo_id: str, req: UpdateTodoRequest):
     """Mark a todo complete or incomplete and set completed_at."""
@@ -290,7 +342,14 @@ async def update_todo(todo_id: str, req: UpdateTodoRequest):
     else:
         update_data["completed_at"] = None
 
-    result = await supabase.table("todos").update(update_data).eq("id", todo_id).execute()
+    try:
+        result = await supabase.table("todos").update(update_data).eq("id", todo_id).execute()
+    except Exception as exc:
+        if not _is_missing_completed_at_column_error(exc):
+            raise
+        result = await supabase.table("todos").update({
+            "completed": req.completed,
+        }).eq("id", todo_id).execute()
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Todo not found.")

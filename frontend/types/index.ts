@@ -39,13 +39,14 @@ export interface Application {
   user_id: string;
   job_id: string;
   status: ApplicationStatus;
-  applied_at: string;
+  applied_at: string | null;
   // Joined from jobs table
   title?: string;
   company?: string;
   location?: string;
   url?: string;
   fit_score?: number | null;
+  deadline?: string | null;
 }
 
 export interface Snapshot {
@@ -66,12 +67,26 @@ export interface FitScoreDistribution {
   count: number;
 }
 
+export interface StatusDistribution {
+  status: ApplicationStatus;
+  label: string;
+  count: number;
+}
+
 export interface StatusCounts {
   saved: number;
   applied: number;
   interviewing: number;
   offer: number;
   rejected: number;
+}
+
+export interface DashboardAttention {
+  high_fit_saved: number;
+  overdue_tasks: number;
+  active_goals: number;
+  completed_goals: number;
+  interviews: number;
 }
 
 export interface Nudge {
@@ -96,6 +111,7 @@ export interface Todo {
   title: string;
   due_date?: string;
   completed: boolean;
+  completed_at?: string | null;
 }
 
 export interface ProfileLink {
