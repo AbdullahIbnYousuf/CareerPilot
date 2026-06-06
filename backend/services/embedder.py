@@ -11,7 +11,7 @@ from typing import Any, Literal
 
 import google.generativeai as genai
 
-EMBEDDING_MODEL = "models/embedding-001"
+EMBEDDING_MODEL = "models/gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768
 
 InputType = Literal["document", "query"]

@@ -32,10 +32,17 @@ def _is_rate_limit(exception):
     return "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource exhausted" in err_str
 
 
+def _is_retryable_transient(exception):
+    if _is_rate_limit(exception):
+        return False
+    err_str = str(exception).lower()
+    return "503" in err_str or "unavailable" in err_str or "timeout" in err_str or "deadline" in err_str
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception(_is_rate_limit),
+    retry=retry_if_exception(_is_retryable_transient),
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True
 )
@@ -46,7 +53,14 @@ def _generate_content_with_retry(model, contents, generation_config=None):
 
 
 def generate_content_with_fallback(contents, generation_config=None):
-    models = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-flash-latest']
+    models = [
+        'gemini-2.5-flash-lite',
+        'gemini-flash-lite-latest',
+        'gemini-2.0-flash-lite',
+        'gemini-2.5-flash',
+        'gemini-flash-latest',
+        'gemini-2.0-flash',
+    ]
     last_exception = None
     
     for model_name in models:

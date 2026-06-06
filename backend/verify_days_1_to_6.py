@@ -140,7 +140,7 @@ def check_day_3():
     if embedder_file.exists():
         with open(embedder_file) as f:
             content = f.read()
-            if "embedding-001" in content and "embed" in content:
+            if "gemini-embedding-001" in content and "embed" in content:
                 print("  ✅ embedder.py with Gemini embeddings")
                 checks.append(True)
             else:

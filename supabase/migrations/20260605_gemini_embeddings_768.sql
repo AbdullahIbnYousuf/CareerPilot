@@ -1,5 +1,5 @@
 -- Switch CV vector search from legacy 1024-dimension embeddings to
--- 768-dimension Gemini embedding-001 embeddings.
+-- 768-dimension Gemini gemini-embedding-001 embeddings.
 --
 -- Existing chunk embeddings cannot be converted safely across providers, so
 -- they are cleared and regenerated when users re-upload their CVs.

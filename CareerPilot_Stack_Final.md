@@ -14,7 +14,7 @@
 | Reasoning LLM   | Gemini 2.0 Flash                             | ✅ Locked |
 | PDF Parser      | Gemini 2.0 Flash (multimodal)                | ✅ Locked |
 | DOCX Parser     | python-docx                                  | ✅ Locked |
-| Embeddings      | Gemini embedding-001                         | ✅ Locked |
+| Embeddings      | Gemini gemini-embedding-001                  | ✅ Locked |
 | Vector DB       | Supabase pgvector                            | ✅ Locked |
 | Vector Search   | Hybrid dense + BM25 + RRF                    | ✅ Locked |
 | Job Search      | JSearch + Remotive + Tavily                  | ✅ Locked |
@@ -169,7 +169,7 @@ An in-platform CV builder done well requires 3–4 days minimum (rich text edito
 
 | Choice      | Model                | Free Tier                    | Why                                                                                               |
 | ----------- | -------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
-| ✅ Selected | Gemini `embedding-001` | Free tier through Google AI Studio | Reuses the existing Gemini API key and produces 768-dimensional vectors for pgvector. |
+| ✅ Selected | Gemini `gemini-embedding-001` | Free tier through Google AI Studio | Reuses the existing Gemini API key and produces 768-dimensional vectors for pgvector. |
 
 **Rejected:** OpenAI `text-embedding-3-small` — paid, requires credit card upfront.
 
@@ -184,7 +184,7 @@ genai.configure(api_key=GOOGLE_API_KEY)
 
 def embed_chunks(chunks: list[str]) -> list[list[float]]:
     result = genai.embed_content(
-        model="models/embedding-001",
+        model="models/gemini-embedding-001",
         content=chunks,
         task_type="retrieval_document",
     )
@@ -192,7 +192,7 @@ def embed_chunks(chunks: list[str]) -> list[list[float]]:
 
 def embed_query(query: str) -> list[float]:
     result = genai.embed_content(
-        model="models/embedding-001",
+        model="models/gemini-embedding-001",
         content=query,
         task_type="retrieval_query",
     )
