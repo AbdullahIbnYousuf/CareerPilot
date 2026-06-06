@@ -78,6 +78,10 @@ class UpdateStatusRequest(BaseModel):
     status: ApplicationStatus
 
 
+class UpdateNotesRequest(BaseModel):
+    notes: str
+
+
 class CreateGoalRequest(BaseModel):
     user_id: str
     title: str
@@ -109,7 +113,7 @@ async def get_applications(user_id: str = Query(...)):
     """
     # Fetch applications
     apps_result = await supabase.table("applications").select(
-        "id, user_id, job_id, status, applied_at"
+        "id, user_id, job_id, status, applied_at, notes"
     ).eq("user_id", user_id).order("applied_at", desc=True).execute()
 
     applications = apps_result.data or []
@@ -194,17 +198,28 @@ async def create_application(req: CreateApplicationRequest):
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create application.")
 
-    return {"application": result.data[0], "duplicate": False}
+    # Write created event to audit log
+    app_data = result.data[0]
+    await supabase.table("application_events").insert({
+        "user_id": req.user_id,
+        "application_id": app_data["id"],
+        "event_type": "created",
+        "to_status": req.status,
+    }).execute()
+
+    return {"application": app_data, "duplicate": False}
 
 
 @router.patch("/applications/{application_id}")
 async def update_application_status(application_id: str, req: UpdateStatusRequest):
     """Update the Kanban status of an application (drag-and-drop) and set applied_at appropriately."""
-    # Fetch existing application to check current applied_at
-    existing_app = await supabase.table("applications").select("applied_at").eq("id", application_id).execute()
+    # Fetch existing application to check current applied_at and status
+    existing_app = await supabase.table("applications").select("user_id, status, applied_at").eq("id", application_id).execute()
     if not existing_app.data:
         raise HTTPException(status_code=404, detail="Application not found.")
     
+    user_id = existing_app.data[0].get("user_id")
+    current_status = existing_app.data[0].get("status")
     current_applied_at = existing_app.data[0].get("applied_at")
 
     update_data = {
@@ -225,6 +240,16 @@ async def update_application_status(application_id: str, req: UpdateStatusReques
     if not result.data:
         raise HTTPException(status_code=404, detail="Application not found.")
 
+    # Write status changed event to audit log if status actually changed
+    if current_status != req.status:
+        await supabase.table("application_events").insert({
+            "user_id": user_id,
+            "application_id": application_id,
+            "event_type": "status_changed",
+            "from_status": current_status,
+            "to_status": req.status,
+        }).execute()
+
     return {"application": result.data[0]}
 
 
@@ -233,6 +258,45 @@ async def delete_application(application_id: str):
     """Remove an application from the tracker."""
     await supabase.table("applications").delete().eq("id", application_id).execute()
     return {"status": "deleted"}
+
+
+@router.patch("/applications/{application_id}/notes")
+async def update_application_notes(application_id: str, req: UpdateNotesRequest):
+    """Update notes for an application and record notes updated audit event."""
+    # Fetch user_id for logging event
+    existing_app = await supabase.table("applications").select("user_id").eq("id", application_id).execute()
+    if not existing_app.data:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    
+    user_id = existing_app.data[0]["user_id"]
+
+    result = await supabase.table("applications").update({
+        "notes": req.notes,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", application_id).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Application not found.")
+
+    # Write note updated event to audit log
+    await supabase.table("application_events").insert({
+        "user_id": user_id,
+        "application_id": application_id,
+        "event_type": "note_updated",
+        "note": req.notes,
+    }).execute()
+
+    return {"application": result.data[0]}
+
+
+@router.get("/applications/{application_id}/events")
+async def get_application_events(application_id: str):
+    """Fetch recent audit log history events for a single application."""
+    result = await supabase.table("application_events").select(
+        "id, event_type, from_status, to_status, note, created_at"
+    ).eq("application_id", application_id).order("created_at", desc=True).execute()
+
+    return {"events": result.data or []}
 
 
 # ─── Goals ───────────────────────────────────────────────────────────────────
