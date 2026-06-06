@@ -198,14 +198,17 @@ async def create_application(req: CreateApplicationRequest):
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create application.")
 
-    # Write created event to audit log
+    # Write created event to audit log (best-effort — don't fail if table missing)
     app_data = result.data[0]
-    await supabase.table("application_events").insert({
-        "user_id": req.user_id,
-        "application_id": app_data["id"],
-        "event_type": "created",
-        "to_status": req.status,
-    }).execute()
+    try:
+        await supabase.table("application_events").insert({
+            "user_id": req.user_id,
+            "application_id": app_data["id"],
+            "event_type": "created",
+            "to_status": req.status,
+        }).execute()
+    except Exception:
+        pass  # Event logging is non-critical
 
     return {"application": app_data, "duplicate": False}
 
@@ -240,15 +243,18 @@ async def update_application_status(application_id: str, req: UpdateStatusReques
     if not result.data:
         raise HTTPException(status_code=404, detail="Application not found.")
 
-    # Write status changed event to audit log if status actually changed
+    # Write status changed event to audit log (best-effort)
     if current_status != req.status:
-        await supabase.table("application_events").insert({
-            "user_id": user_id,
-            "application_id": application_id,
-            "event_type": "status_changed",
-            "from_status": current_status,
-            "to_status": req.status,
-        }).execute()
+        try:
+            await supabase.table("application_events").insert({
+                "user_id": user_id,
+                "application_id": application_id,
+                "event_type": "status_changed",
+                "from_status": current_status,
+                "to_status": req.status,
+            }).execute()
+        except Exception:
+            pass  # Event logging is non-critical
 
     return {"application": result.data[0]}
 
@@ -267,24 +273,37 @@ async def update_application_notes(application_id: str, req: UpdateNotesRequest)
     existing_app = await supabase.table("applications").select("user_id").eq("id", application_id).execute()
     if not existing_app.data:
         raise HTTPException(status_code=404, detail="Application not found.")
-    
+
     user_id = existing_app.data[0]["user_id"]
 
-    result = await supabase.table("applications").update({
-        "notes": req.notes,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }).eq("id", application_id).execute()
+    # Try with updated_at first; fall back if column doesn't exist
+    try:
+        result = await supabase.table("applications").update({
+            "notes": req.notes,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", application_id).execute()
+    except Exception as exc:
+        text = str(exc).lower()
+        if "updated_at" in text and ("42703" in text or "does not exist" in text or "schema cache" in text):
+            result = await supabase.table("applications").update({
+                "notes": req.notes,
+            }).eq("id", application_id).execute()
+        else:
+            raise
 
     if not result.data:
         raise HTTPException(status_code=404, detail="Application not found.")
 
-    # Write note updated event to audit log
-    await supabase.table("application_events").insert({
-        "user_id": user_id,
-        "application_id": application_id,
-        "event_type": "note_updated",
-        "note": req.notes,
-    }).execute()
+    # Write note updated event to audit log (best-effort)
+    try:
+        await supabase.table("application_events").insert({
+            "user_id": user_id,
+            "application_id": application_id,
+            "event_type": "note_updated",
+            "note": req.notes[:500] if req.notes else "",  # truncate for storage
+        }).execute()
+    except Exception:
+        pass  # Event logging is non-critical
 
     return {"application": result.data[0]}
 
@@ -292,11 +311,14 @@ async def update_application_notes(application_id: str, req: UpdateNotesRequest)
 @router.get("/applications/{application_id}/events")
 async def get_application_events(application_id: str):
     """Fetch recent audit log history events for a single application."""
-    result = await supabase.table("application_events").select(
-        "id, event_type, from_status, to_status, note, created_at"
-    ).eq("application_id", application_id).order("created_at", desc=True).execute()
-
-    return {"events": result.data or []}
+    try:
+        result = await supabase.table("application_events").select(
+            "id, event_type, from_status, to_status, note, created_at"
+        ).eq("application_id", application_id).order("created_at", desc=True).execute()
+        return {"events": result.data or []}
+    except Exception:
+        # Table may not exist yet — return empty list gracefully
+        return {"events": []}
 
 
 # ─── Goals ───────────────────────────────────────────────────────────────────

@@ -408,10 +408,14 @@ export function KanbanBoard() {
   const [events, setEvents] = useState<ApplicationEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
+  const [notesSaveError, setNotesSaveError] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
 
   const closeDetails = useCallback(() => {
     setSelectedApp(null);
     setEvents([]);
+    setNotesSaveError("");
+    setNotesSaved(false);
   }, []);
 
   useEffect(() => {
@@ -436,6 +440,8 @@ export function KanbanBoard() {
   const handleSaveNotes = async () => {
     if (!selectedApp) return;
     setSavingNotes(true);
+    setNotesSaveError("");
+    setNotesSaved(false);
     try {
       const res = await fetch(`${baseUrl}/tracker/applications/${selectedApp.id}/notes`, {
         method: "PATCH",
@@ -450,9 +456,14 @@ export function KanbanBoard() {
         );
         setSelectedApp((prev) => (prev ? { ...prev, notes: updated.notes } : null));
         setEventsRefreshKey((k) => k + 1);
+        setNotesSaved(true);
+        setTimeout(() => setNotesSaved(false), 2500);
+      } else {
+        const errData = await res.json().catch(() => ({})) as { detail?: string };
+        setNotesSaveError(errData.detail || `Save failed (${res.status})`);
       }
-    } catch {
-      // fail silently
+    } catch (err) {
+      setNotesSaveError(err instanceof Error ? err.message : "Network error — check connection.");
     } finally {
       setSavingNotes(false);
     }
@@ -922,6 +933,14 @@ export function KanbanBoard() {
                   placeholder="Paste details, links, interview dates, recruiter info..."
                   className="w-full min-h-[100px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2 text-xs text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
                 />
+                {notesSaved && (
+                  <p className="text-[11px] text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Notes saved successfully
+                  </p>
+                )}
+                {notesSaveError && (
+                  <p className="text-[11px] text-red-400">{notesSaveError}</p>
+                )}
               </div>
 
               {/* History Timeline */}
