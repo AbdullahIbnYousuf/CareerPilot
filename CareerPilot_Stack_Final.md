@@ -21,9 +21,9 @@
 | Agent           | LangGraph                                    | ✅ Locked |
 | Caching         | Upstash Redis                                | ✅ Locked |
 | Chat Memory     | Supabase `chat_messages` table               | ✅ Locked |
-| AI Nudges       | Supabase pg_cron                             | ✅ Locked |
+| Suggested nudges | Rule-based generator + Supabase Realtime; scheduler later | ✅ Locked |
 | Frontend        | Next.js 14 App Router + Tailwind + shadcn/ui | ✅ Locked |
-| Kanban          | dnd-kit                                      | ✅ Locked |
+| Applications DnD | dnd-kit                                     | ✅ Locked |
 | Charts          | Recharts                                     | ✅ Locked |
 | Backend         | FastAPI (Python 3.11)                        | ✅ Locked |
 | CV Scope        | Upload only — PDF and DOCX                   | ✅ Locked |
@@ -578,6 +578,34 @@ async def chat(user_id: str, session_id: str, user_message: str, cv_context: str
 
 ## 10. AI Nudges — Proactive Reminders
 
+### Current V1 Direction
+
+V1 nudges are deterministic rule-based suggestions, not LLM-generated messages.
+They should read like normal product guidance and must not show `AI Nudge:` as
+visible copy.
+
+The backend may expose `POST /dashboard/{user_id}/nudges/generate` for manual
+demo/testing, but that trigger must not be visible in the normal production UI.
+A scheduler such as Supabase `pg_cron` can call the generator later.
+
+Rule priority:
+
+1. Overdue goal
+2. Overdue todo
+3. No applications this week
+4. Saved high-fit jobs not applied
+5. Goal due soon
+6. Interviewing application without prep task
+7. Positive task streak reinforcement
+
+The nudge row is inserted -> Supabase Realtime fires -> frontend banner appears.
+No polling is required.
+
+### Legacy pg_cron SQL Note
+
+The older SQL-first nudge sketch below is retained only as historical context.
+The current implementation direction is the rule-based generator above.
+
 The problem statement requires: _"Agent proactively reminds: 'You haven't applied this week. Here are 3 openings matching your profile.'"_
 
 Proactive = runs on a schedule, not on user request. Use Supabase `pg_cron` (built-in, no new service).
@@ -796,7 +824,7 @@ npm install lucide-react                       # Icons (already with shadcn)
 | Job Hunter      | `/jobs`    | Search bar, job cards grid, fit score badge            |
 | CV Intelligence | `/cv`      | Upload dropzone, parsed sections preview               |
 | AI Assistant    | `/chat`    | Chat interface with streaming, session switcher        |
-| Tracker         | `/tracker` | Kanban board, Calendar, To-do list, Progress dashboard |
+| My Journey      | `/tracker` | Today, Applications, Goals & Tasks, Calendar, Progress |
 
 ### Streaming Chat Setup
 
@@ -826,7 +854,7 @@ export default function ChatPage() {
 }
 ```
 
-### Kanban with Supabase Realtime
+### Applications Drag-and-Drop with Supabase Realtime
 
 ```typescript
 // Drag a card → update Supabase → Realtime fires → all clients update

@@ -2,6 +2,22 @@
 
 Your agentic career co-pilot. Built for Codesprint 2026.
 
+## Current App Shape
+
+CareerPilot's main authenticated workspace is **My Journey** at `/tracker`.
+It contains Today, Applications, Goals & Tasks, Calendar, Progress, and
+rule-based suggested nudges. Use `Applications` as the visible label, not
+`Kanban`; use `Progress`, not `Stats`; and do not show `AI Nudge:` as visible
+product copy.
+
+| Route | Area | Purpose |
+| --- | --- | --- |
+| `/tracker` | My Journey | Main authenticated workspace |
+| `/jobs` | Job Hunter | Search jobs and save opportunities to My Journey |
+| `/chat` | AI Assistant | Streaming CV-grounded career chat |
+| `/cv` | Profile | CV upload, parsing, and profile intelligence |
+| `/` | Redirect | Redirect authenticated users to `/tracker` |
+
 **CareerPilot** is an AI-powered career assistant that helps you hunt jobs, analyze CV fit scores, get personalized career advice, and track your applications—all powered by free-tier AI services.
 
 ## 🎯 Features

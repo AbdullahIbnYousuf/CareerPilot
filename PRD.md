@@ -176,6 +176,96 @@ Rules:
 
 ---
 
+## Pillar 4 -- My Journey: Productivity & Progress Tracker
+
+### Canonical Product Direction
+
+`/tracker` is the canonical My Journey route and should be the main authenticated
+workspace. `/` should redirect to `/tracker` after auth rather than serve a
+duplicate dashboard. AI Assistant-to-My Journey automation is intentionally
+deferred for now.
+
+My Journey has five user-facing views:
+
+1. **Today** -- daily action queue, urgent tasks, current nudges, weekly progress, and next best action.
+2. **Applications** -- saved/applied/interviewing/offer/rejected tracking implemented with drag-and-drop.
+3. **Goals & Tasks** -- career goals with linked todos, deadline states, categories, and progress.
+4. **Calendar** -- task due dates, goal target dates, and job application deadlines.
+5. **Progress** -- real dashboard metrics, attention items, pipeline counts, and charts.
+
+Use these visible names in product UI. `Kanban`, `Stats`, and plain `Tasks` are
+implementation or legacy terms, not primary labels.
+
+### Applications
+
+Application status values remain exactly:
+
+```
+saved -> applied -> interviewing -> offer -> rejected
+```
+
+Jobs saved from Job Hunter appear in My Journey as `saved`. Dragging an
+application updates Supabase immediately and Realtime reflects across open tabs.
+Moving from `saved` to `applied` sets `applied_at` when empty. Moving to
+`applied` or `interviewing` may offer follow-up or interview-prep task creation.
+
+### Goals & Tasks
+
+Goals represent career outcomes such as applying to jobs, finishing a course,
+updating a CV, or preparing for an interview. Goals should show category, target
+date, status, and linked-task progress. Goal categories are Applications,
+Learning, CV/Profile, Interview Prep, and Roadmap.
+
+Tasks can be linked to goals, have due dates, and drive task completion progress
+and streaks. Overdue and due-today tasks should be visually prioritized.
+
+### Calendar
+
+The calendar shows todo due dates, goal target dates, and job application
+deadlines when available. Task rows can be completed from the selected-day panel.
+Goal and job deadline rows are informational.
+
+### Progress
+
+Progress displays real data from source tables, not hardcoded metrics:
+
+- Applications this week
+- Active pipeline
+- Task completion
+- Task streak
+- High-fit saved jobs
+- Overdue tasks
+- Interviews in progress
+
+Charts use Recharts for applications per week, application status breakdown, and
+fit score distribution.
+
+### Suggested Next Steps
+
+Nudges are deterministic rule-based suggestions in v1, not LLM-generated
+messages. They should read like normal product guidance and must not show
+`AI Nudge:` as visible copy. The manual/demo generation endpoint may exist for
+testing, but demo/dev trigger buttons must not appear in the normal user UI.
+A scheduler such as pg_cron can call the generator later.
+
+### Acceptance Criteria
+
+- [ ] My Journey opens on Today by default.
+- [ ] Applications drag-and-drop works across all status columns.
+- [ ] Application updates are reflected in real time.
+- [ ] Goals & Tasks supports linked tasks and progress.
+- [ ] Calendar shows todos, goals, and job deadlines.
+- [ ] Progress shows real data and helpful empty states.
+- [ ] Streak counter is based on completed tasks.
+- [ ] At least one rule-based suggested next step can be triggered and displayed.
+
+### Legacy Pillar 4 Text
+
+The older Pillar 4 notes below are retained only for historical context and must
+not override the canonical My Journey direction above.
+
+---
+
 ## Pillar 4 — Productivity & Progress Tracker
 
 ### User Story

@@ -29,7 +29,7 @@ CareerPilot is an AI-powered career co-pilot that helps users:
 - Search and discover job opportunities with personalized fit scores
 - Upload and analyze CVs using AI
 - Chat with an AI assistant that understands their career profile
-- Track job applications through a Kanban board
+- Track job applications through an Applications board
 - Manage goals, tasks, and monitor progress
 
 ### Tech Stack
@@ -38,7 +38,7 @@ CareerPilot is an AI-powered career co-pilot that helps users:
 - **Styling**: Tailwind CSS
 - **UI Components**: shadcn/ui
 - **Icons**: Lucide React
-- **Drag & Drop**: dnd-kit (for Kanban)
+- **Drag & Drop**: dnd-kit (for the Applications board)
 - **Charts**: Recharts (for dashboard)
 
 ### Design Philosophy
@@ -178,11 +178,13 @@ Following Tailwind's spacing scale (4px base unit):
 
 **Navigation Items List**:
 
-1. Home (LayoutDashboard icon) - /
+1. My Journey (Map icon) - /tracker
 2. Jobs (Briefcase icon) - /jobs
-3. My Journey (Map icon) - /journey
-4. AI Assistant (MessageCircle icon) - /ai
-5. Profile (UserCircle icon) - /profile
+3. AI Assistant (MessageCircle icon) - /chat
+4. Profile (UserCircle icon) - /cv
+
+`Home` is not a primary navigation item. Authenticated users should be redirected
+from `/` to `/tracker` so My Journey is the main workspace.
 
 **Footer Section** (Bottom):
 
@@ -298,6 +300,10 @@ Following Tailwind's spacing scale (4px base unit):
 
 ### 1. Home Page (`/`)
 
+**Current direction**: `/` redirects authenticated users to `/tracker`. Do not
+build or maintain a duplicate Home dashboard. My Journey is the main workspace
+and its Progress view owns account progress metrics.
+
 **Status**: Placeholder (Coming Day 10)
 
 - Simple text: "Home dashboard — coming Day 10"
@@ -363,9 +369,11 @@ Following Tailwind's spacing scale (4px base unit):
 - Border radius: 6px
 - Font: 14px
 
-### 3. My Journey Page (`/journey`)
+### 3. My Journey Page (`/tracker`)
 
-**AI Nudge Banner** (Top):
+`/journey` may exist as a compatibility alias, but `/tracker` is canonical.
+
+**Suggested Next Step Banner** (Top):
 
 - Component: NudgeBanner (see Components section)
 - Gradient border: indigo → purple → pink
@@ -379,11 +387,12 @@ Following Tailwind's spacing scale (4px base unit):
 **View Switcher** (Top Right):
 
 - Container: Muted background, 4px padding, rounded-lg
-- Buttons: 4 toggle buttons with icons
-  1. Kanban (LayoutGrid icon)
-  2. Stats (BarChart3 icon)
-  3. Calendar (Calendar icon)
-  4. Tasks (ListTodo icon)
+- Buttons: 5 toggle buttons with icons
+  1. Today (SunMedium icon)
+  2. Applications (LayoutGrid icon)
+  3. Goals & Tasks (ListTodo icon)
+  4. Calendar (Calendar icon)
+  5. Progress (BarChart3 icon)
 - Active state: Secondary variant
 - Inactive state: Ghost variant
 - Icon size: 16x16px
@@ -391,12 +400,13 @@ Following Tailwind's spacing scale (4px base unit):
 
 **View Content**:
 
-- Kanban View: KanbanBoard component
-- Stats View: ProgressDashboard component
+- Today View: TodayView component
+- Applications View: KanbanBoard component (implementation detail; visible label is Applications)
+- Goals & Tasks View: GoalsSection + TodoList components
 - Calendar View: CalendarView component
-- Tasks View: TodoList component
+- Progress View: ProgressDashboard component
 
-### 4. AI Assistant Page (`/ai`)
+### 4. AI Assistant Page (`/chat`)
 
 **Page Header**:
 
@@ -409,7 +419,7 @@ Following Tailwind's spacing scale (4px base unit):
 - Height: calc(100vh - 100px) - full height minus header
 - Layout: Flex column with flex-1 for messages area
 
-### 5. Profile Page (`/profile`)
+### 5. Profile Page (`/cv`)
 
 **Page Header**:
 
@@ -1013,6 +1023,9 @@ Following Tailwind's spacing scale (4px base unit):
   - Background: primary/20
   - Text: primary
   - Icon: Sparkles (16px)
+
+Current direction: NudgeBanner must not render a visible `AI Nudge:` prefix.
+Use only the suggestion message so it feels like native product guidance.
 - Message:
   - Font: 14px, medium
   - Prefix: "AI Nudge:" - bold, gradient text (indigo → pink)

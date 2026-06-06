@@ -16,7 +16,37 @@ Stack is 100% free tier. No paid APIs. No credit card.
 1. Job Hunter Agent — searches jobs, returns structured cards with fit scores
 2. CV Intelligence — RAG over the user's own CV using vector search
 3. AI Assistant — conversational interface with full CV context and session memory
-4. Productivity Tracker — Kanban, calendar, todos, progress dashboard, AI nudges
+4. My Journey — Today, Applications, Goals & Tasks, Calendar, Progress, suggested next steps
+
+---
+
+## Canonical Product Navigation
+
+Use these routes and visible labels as the current source of truth:
+
+| Route | Visible label | Purpose |
+| --- | --- | --- |
+| `/tracker` | My Journey | Main authenticated workspace and Pillar 4 hub |
+| `/jobs` | Jobs | Job Hunter Agent |
+| `/chat` | AI Assistant | Streaming RAG chat |
+| `/cv` | Profile | CV/profile intelligence |
+| `/` | Redirect | Redirect authenticated users to `/tracker`; do not build a duplicate dashboard |
+
+My Journey is the user's daily workspace. It contains five internal views:
+
+1. `Today` — daily action queue, urgent tasks, current nudges, weekly progress, and next best action.
+2. `Applications` — drag-and-drop application tracking. The implementation may use a Kanban board, but visible UI copy should say Applications.
+3. `Goals & Tasks` — career goals, linked todos, deadline states, and progress.
+4. `Calendar` — todo due dates, goal target dates, and job deadlines.
+5. `Progress` — real metrics, attention items, pipeline counts, and charts.
+
+Do not use `Kanban`, `Stats`, or plain `Tasks` as primary visible tab labels.
+Do not show `AI Nudge:` as visible copy. Nudges should read like native product
+guidance. Do not expose demo/dev nudge trigger buttons in the normal UI.
+
+AI Assistant action automation is deferred: chat may advise on roadmaps, cover
+letters, and interview prep, but it should not yet create goals, tasks, or
+application state changes automatically.
 
 ---
 
@@ -246,7 +276,7 @@ NEXT_PUBLIC_API_URL=https://your-render-url.onrender.com
 | `cvs`                | CV file metadata                | `id`, `user_id`, `file_name`, `file_url`, `parsed_at`                            |
 | `cv_chunks`          | Embedded CV sections            | `id`, `user_id`, `cv_id`, `section`, `content`, `embedding`, `fts`               |
 | `jobs`               | Cached job search results       | `id`, `user_id`, `title`, `company`, `location`, `fit_score`, `fit_explanation`  |
-| `applications`       | Kanban tracker                  | `id`, `user_id`, `job_id`, `status`, `applied_at`                                |
+| `applications`       | Applications tracker            | `id`, `user_id`, `job_id`, `status`, `applied_at`                                |
 | `chat_messages`      | Conversational memory           | `id`, `user_id`, `session_id`, `role`, `content`                                 |
 | `goals`              | User goals                      | `id`, `user_id`, `title`, `target_date`, `completed`                             |
 | `todos`              | Daily todos linked to goals     | `id`, `user_id`, `goal_id`, `title`, `due_date`, `completed`                     |
@@ -405,8 +435,8 @@ useEffect(() => {
 | 6   | Frontend scaffold, auth pages, basic navigation                               |
 | 7   | 🚀 Deployed (Vercel + Render) — frontend shows job cards                      |
 | 8   | Streaming chat working end-to-end with RAG and memory                         |
-| 9   | Kanban working with drag-and-drop and Realtime updates                        |
-| 10  | Calendar, todos, progress dashboard, AI nudges via pg_cron                    |
+| 9   | Applications drag-and-drop with Realtime updates                              |
+| 10  | Today, Goals & Tasks, Calendar, Progress, and rule-based suggested next steps |
 | 11  | Seed data, bug fixes, polish                                                  |
 | 12  | Evaluation suite (5 test cases → eval.md)                                     |
 | 13  | System design doc, README, architecture diagram                               |
