@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/lib/supabase";
+import { FitScoreBadge } from "./fit-score-badge";
 import type { Application, ApplicationStatus } from "@/types";
 import {
   Loader2,
@@ -42,7 +43,7 @@ import {
   X,
 } from "lucide-react";
 
-// ─── Column config ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Column config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const COLUMNS: {
   key: ApplicationStatus;
@@ -94,7 +95,7 @@ const COLUMNS: {
   },
 ];
 
-// ─── Sortable Card ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Sortable Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 type ActionPromptState = {
   type: "follow_up" | "interview_prep";
@@ -223,7 +224,7 @@ function ApplicationCard({
                 month: "short",
                 day: "numeric",
               })
-            : "—"}
+            : "â€”"}
         </span>
 
         <div className="flex items-center gap-2">
@@ -253,7 +254,7 @@ function ApplicationCard({
   );
 }
 
-// ─── Column ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function KanbanColumn({
   column,
@@ -314,7 +315,7 @@ function KanbanColumn({
   );
 }
 
-// ─── Main Kanban Board ────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Kanban Board â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ApplicationActionPrompt({
   prompt,
@@ -384,7 +385,9 @@ function ApplicationActionPrompt({
       </div>
     </div>
   );
-}interface ApplicationEvent {
+}
+
+interface ApplicationEvent {
   id: string;
   event_type: "created" | "status_changed" | "note_updated";
   from_status?: string | null;
@@ -488,7 +491,8 @@ export function KanbanBoard() {
       }
     };
     void loadEvents();
-  }, [selectedApp, baseUrl, eventsRefreshKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedApp?.id, baseUrl, eventsRefreshKey]);
 
   // Fetch full job details (description, salary, fit explanation) when modal opens
   useEffect(() => {
@@ -502,7 +506,7 @@ export function KanbanBoard() {
           setJobDetails(data);
         }
       } catch {
-        // silently fail — modal still works without these extras
+        // silently fail â€” modal still works without these extras
       } finally {
         setLoadingJobDetails(false);
       }
@@ -536,19 +540,19 @@ export function KanbanBoard() {
         setNotesSaveError(errData.detail || `Save failed (${res.status})`);
       }
     } catch (err) {
-      setNotesSaveError(err instanceof Error ? err.message : "Network error — check connection.");
+      setNotesSaveError(err instanceof Error ? err.message : "Network error â€” check connection.");
     } finally {
       setSavingNotes(false);
     }
   };
-  // ── Sensors ────────────────────────────────────────────────────────────────
+  // â”€â”€ Sensors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  // ── Load user ──────────────────────────────────────────────────────────────
+  // â”€â”€ Load user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (!error) {
@@ -558,7 +562,7 @@ export function KanbanBoard() {
     });
   }, []);
 
-  // ── Fetch applications ────────────────────────────────────────────────────
+  // â”€â”€ Fetch applications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchApplications = useCallback(
     async (uid: string) => {
       try {
@@ -570,7 +574,7 @@ export function KanbanBoard() {
           setApplications(data.applications || []);
         }
       } catch {
-        // silently fail — Realtime will keep us in sync
+        // silently fail â€” Realtime will keep us in sync
       } finally {
         setLoading(false);
       }
@@ -586,7 +590,7 @@ export function KanbanBoard() {
     void loadApplications();
   }, [userId, fetchApplications]);
 
-  // ── Supabase Realtime ─────────────────────────────────────────────────────
+  // â”€â”€ Supabase Realtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!userId) return;
 
@@ -634,7 +638,7 @@ export function KanbanBoard() {
     };
   }, [userId, fetchApplications]);
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const deleteApplication = async (appId: string) => {
     // Optimistic
     setApplications((prev) => prev.filter((a) => a.id !== appId));
@@ -648,7 +652,7 @@ export function KanbanBoard() {
     }
   };
 
-  // ── DnD handlers ──────────────────────────────────────────────────────────
+  // â”€â”€ DnD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
     setActiveApp(applications.find((a) => a.id === id) ?? null);
@@ -664,7 +668,7 @@ export function KanbanBoard() {
     const draggedId = active.id as string;
     const overedId = over.id as string;
 
-    // Determine target column — overedId is either a column key or a card id
+    // Determine target column â€” overedId is either a column key or a card id
     const targetColumn = COLUMNS.find((c) => c.key === overedId)
       ? (overedId as ApplicationStatus)
       : applications.find((a) => a.id === overedId)?.status ?? null;
@@ -750,7 +754,7 @@ export function KanbanBoard() {
     }
   };
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const createTodo = async (title: string, dueDate: string) => {
     if (!userId) throw new Error("Please sign in to create tasks.");
 
@@ -806,7 +810,7 @@ export function KanbanBoard() {
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-white/30">Loading your applications…</p>
+          <p className="text-sm text-white/30">Loading your applicationsâ€¦</p>
         </div>
       </div>
     );
@@ -897,7 +901,7 @@ export function KanbanBoard() {
           })}
         </div>
 
-        {/* Drag overlay — card ghost that follows cursor */}
+        {/* Drag overlay â€” card ghost that follows cursor */}
         <DragOverlay dropAnimation={{ duration: 200, easing: "ease" }}>
           {activeApp ? (
             <ApplicationCard
@@ -911,80 +915,51 @@ export function KanbanBoard() {
 
       {selectedApp && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
-          onClick={closeDetails}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && closeDetails()}
         >
-          <div
-            className="relative w-full max-w-2xl max-h-[90vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* ── Modal Header ── */}
-            <div className="flex items-start justify-between p-6 border-b border-white/[0.06] bg-white/[0.02]">
+          <div className="w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 overflow-hidden">
+
+            {/* â”€â”€ Header (exact Job Hunter modal header) â”€â”€ */}
+            <div className="flex justify-between items-start p-6 border-b border-white/[0.06] bg-white/[0.02]">
               <div className="flex-1 min-w-0 pr-4">
-                {/* Source tag + status pill */}
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                {/* Status + source badge row */}
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] text-white/20 bg-white/[0.05] px-2 py-0.5 rounded font-mono uppercase tracking-wider">
                     {selectedApp.status}
                   </span>
-                  {selectedApp.fit_score !== undefined && selectedApp.fit_score !== null && (
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
-                      selectedApp.fit_score >= 70
-                        ? "bg-emerald-500/10 text-emerald-400"
-                        : selectedApp.fit_score >= 40
-                          ? "bg-amber-500/10 text-amber-400"
-                          : "bg-red-500/10 text-red-400"
-                    }`}>
-                      {selectedApp.fit_score}% fit
-                    </span>
-                  )}
                 </div>
-                <h2 className="text-xl font-bold text-white leading-snug">
-                  {selectedApp.title || "Unknown Role"}
-                </h2>
-                <div className="flex flex-wrap items-center gap-4 mt-1.5 text-sm text-white/40">
-                  {selectedApp.company && (
-                    <span className="flex items-center gap-1.5 text-white/70 font-medium">
-                      <Building2 className="h-3.5 w-3.5 text-white/30" />
-                      {selectedApp.company}
-                    </span>
-                  )}
+                <h2 className="text-xl font-bold text-white mt-1 leading-snug">{selectedApp.title || "Unknown Role"}</h2>
+                <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-white/40">
+                  <span className="flex items-center gap-1.5 text-white/70 font-medium">
+                    <Building2 className="h-4 w-4 text-white/30" /> {selectedApp.company}
+                  </span>
                   {selectedApp.location && (
                     <span className="flex items-center gap-1.5">
-                      <MapPin className="h-3.5 w-3.5" />
-                      {selectedApp.location}
+                      <MapPin className="h-4 w-4" /> {selectedApp.location}
                     </span>
                   )}
                 </div>
               </div>
               <button
                 onClick={closeDetails}
-                className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
+                className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
 
-            {/* ── Scrollable Body ── */}
+            {/* â”€â”€ Scrollable body â”€â”€ */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
-              {/* Fit score + explanation panel */}
-              {(selectedApp.fit_score !== undefined && selectedApp.fit_score !== null) && (
+              {/* Fit score panel â€” exact Job Hunter style using FitScoreBadge */}
+              {selectedApp.fit_score !== undefined && selectedApp.fit_score !== null ? (
                 <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
-                  {/* Score ring */}
-                  <div className="shrink-0 flex flex-col items-center gap-1">
-                    <div className={`h-16 w-16 rounded-full border-4 flex items-center justify-center font-bold text-xl ${
-                      selectedApp.fit_score >= 70
-                        ? "border-emerald-400 text-emerald-400"
-                        : selectedApp.fit_score >= 40
-                          ? "border-amber-400 text-amber-400"
-                          : "border-red-400 text-red-400"
-                    }`}>
-                      {selectedApp.fit_score}
-                    </div>
-                    <span className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">% Fit</span>
+                  <div className="shrink-0">
+                    <FitScoreBadge score={selectedApp.fit_score} explanation={jobDetails?.fit_explanation ?? undefined} />
                   </div>
                   <div className="space-y-1 text-center md:text-left flex-1">
-                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">CV Fit Analysis</p>
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">Fit Match</p>
                     {loadingJobDetails ? (
                       <div className="flex items-center gap-1.5 text-xs text-white/30">
                         <Loader2 className="h-3 w-3 animate-spin" /> Loading analysis...
@@ -994,83 +969,72 @@ export function KanbanBoard() {
                         &ldquo;{jobDetails.fit_explanation}&rdquo;
                       </p>
                     ) : (
-                      <p className="text-xs text-white/30 italic">Open the job in Job Hunter to see fit analysis.</p>
+                      <p className="text-xs text-white/30 italic">Run &ldquo;Check My Fit Score&rdquo; in Job Hunter to see analysis here.</p>
                     )}
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {/* Meta row — Salary / Deadline / Applied Date */}
-              <div className="grid grid-cols-3 gap-3 rounded-xl bg-white/[0.03] border border-white/[0.05] px-4 py-3 text-xs">
+              {/* Quick info â€” salary / deadline / applied (exact Job Hunter grid) */}
+              <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.03] border border-white/[0.05] p-4 text-xs">
                 <div className="space-y-1">
-                  <span className="text-white/30 block font-medium">Salary Range</span>
+                  <span className="text-white/30 block">Salary Range</span>
                   <span className="text-white font-semibold flex items-center gap-1.5">
-                    <DollarSign className="h-3.5 w-3.5 text-primary/60" />
-                    {loadingJobDetails
-                      ? "…"
-                      : jobDetails?.salary_range || "Not Disclosed"}
+                    <DollarSign className="h-3.5 w-3.5 text-primary" />
+                    {loadingJobDetails ? "â€¦" : (jobDetails?.salary_range || "Not Disclosed")}
                   </span>
                 </div>
-                <div className="space-y-1 border-l border-white/[0.05] pl-3">
-                  <span className="text-white/30 block font-medium">Deadline</span>
+                <div className="space-y-1 pl-4 border-l border-white/[0.05]">
+                  <span className="text-white/30 block">Deadline</span>
                   <span className="text-white font-semibold flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 text-primary/60" />
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
                     {selectedApp.deadline || "Rolling / Open"}
                   </span>
                 </div>
-                <div className="space-y-1 border-l border-white/[0.05] pl-3">
-                  <span className="text-white/30 block font-medium">Applied Date</span>
+                <div className="space-y-1">
+                  <span className="text-white/30 block">Applied</span>
                   <span className="text-white font-semibold">
                     {selectedApp.applied_at
-                      ? new Date(selectedApp.applied_at).toLocaleDateString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })
+                      ? new Date(selectedApp.applied_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                       : "Not yet"}
                   </span>
                 </div>
+                <div className="space-y-1 pl-4 border-l border-white/[0.05]">
+                  <span className="text-white/30 block">Job Link</span>
+                  {selectedApp.url ? (
+                    <a
+                      href={selectedApp.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[#AFA9EC] hover:text-[#C5BFFF] hover:underline font-semibold"
+                    >
+                      Open Posting <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    <span className="text-white/30 italic">No link</span>
+                  )}
+                </div>
               </div>
 
-              {/* Job Description */}
-              <div className="space-y-2">
-                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
-                  <Briefcase className="h-3.5 w-3.5" /> Job Description
-                </h3>
-                {loadingJobDetails ? (
-                  <div className="flex items-center gap-2 rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-xs text-white/30">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading description...
-                  </div>
-                ) : jobDetails && cleanDesc(jobDetails.description) ? (
-                  <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-sm text-white/50 leading-relaxed whitespace-pre-wrap max-h-52 overflow-y-auto">
-                    {cleanDesc(jobDetails.description)}
-                  </div>
-                ) : (
-                  <p className="text-xs text-white/20 italic">No description available.</p>
-                )}
-              </div>
-
-              {/* Notes */}
+              {/* â”€â”€ Notes (app-specific) â”€â”€ */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="app-modal-notes" className="text-xs font-bold text-white/70 uppercase tracking-wider">
-                    My Notes
-                  </label>
+                  <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider">My Notes</h3>
                   <button
                     onClick={handleSaveNotes}
                     disabled={savingNotes}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#534AB7] hover:bg-[#6B63CC] text-xs font-semibold text-white transition-all disabled:opacity-50"
                   >
                     {savingNotes && <Loader2 className="h-3 w-3 animate-spin" />}
-                    Save Notes
+                    Save
                   </button>
                 </div>
                 <textarea
                   id="app-modal-notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Interview dates, recruiter contacts, links, prep notes..."
-                  className="w-full min-h-[90px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2.5 text-sm text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
+                  placeholder="Interview dates, recruiter contacts, prep notes, links..."
+                  className="w-full min-h-[80px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2.5 text-sm text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
                 />
                 {notesSaved && (
                   <p className="text-[11px] text-emerald-400 flex items-center gap-1">
@@ -1082,72 +1046,83 @@ export function KanbanBoard() {
                 )}
               </div>
 
-              {/* Activity History */}
-              <div className="space-y-3">
-                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider">
+              {/* â”€â”€ Activity History (app-specific) â”€â”€ */}
+              <div className="space-y-2">
+                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
                   Activity History
                 </h3>
                 {loadingEvents ? (
                   <div className="flex items-center gap-2 text-xs text-white/30 py-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading logs...
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading history...
                   </div>
                 ) : events.length === 0 ? (
-                  <p className="text-xs text-white/20 italic py-2">No activity recorded yet.</p>
+                  <p className="text-xs text-white/20 italic py-1">No activity recorded yet. Move this card between columns to log history.</p>
                 ) : (
-                  <div className="relative border-l border-white/[0.06] ml-2 pl-4 py-1 space-y-4">
+                  <div className="relative border-l border-white/[0.06] ml-2 pl-4 py-1 space-y-3.5">
                     {events.map((ev) => (
                       <div key={ev.id} className="relative">
                         <div className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border border-white/10 bg-[#7C74DB]" />
-                        <div className="text-xs">
-                          <p className="font-semibold text-white/80">
-                            {ev.event_type === "created" && `Created in ${capitalize(ev.to_status) || "Saved"}`}
-                            {ev.event_type === "status_changed" && `Moved from ${capitalize(ev.from_status) || "Saved"} → ${capitalize(ev.to_status) || "Applied"}`}
-                            {ev.event_type === "note_updated" && "Notes updated"}
-                          </p>
-                          <p className="text-[10px] text-white/30 mt-0.5">
-                            {new Date(ev.created_at).toLocaleString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        </div>
+                        <p className="text-xs font-semibold text-white/80">
+                          {ev.event_type === "created" && `Created in ${capitalize(ev.to_status) || "Saved"}`}
+                          {ev.event_type === "status_changed" && `Moved from ${capitalize(ev.from_status)} â†’ ${capitalize(ev.to_status)}`}
+                          {ev.event_type === "note_updated" && "Notes updated"}
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-0.5">
+                          {new Date(ev.created_at).toLocaleString("en-US", {
+                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </p>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+
+              {/* â”€â”€ Job Description (at the bottom, exact Job Hunter style) â”€â”€ */}
+              <div className="space-y-2">
+                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5" /> Job Description
+                </h3>
+                {loadingJobDetails ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-xs text-white/30">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading...
+                  </div>
+                ) : (jobDetails?.description) ? (
+                  <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-sm text-white/50 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
+                    {cleanDesc(jobDetails.description) || jobDetails.description}
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/20 italic">No description stored for this job.</p>
+                )}
+              </div>
             </div>
 
-            {/* ── Modal Footer ── */}
+            {/* â”€â”€ Footer (exact Job Hunter modal footer) â”€â”€ */}
             <div className="p-4 border-t border-white/[0.06] flex flex-col-reverse gap-2 bg-white/[0.02] sm:flex-row sm:justify-end">
               <button
                 onClick={closeDetails}
-                className="h-9 rounded-xl bg-white/[0.04] px-4 text-xs font-semibold text-white/40 transition-all hover:text-white sm:mr-auto"
+                className="inline-flex items-center justify-center rounded-lg border border-white/[0.08] text-sm font-medium px-4 py-2 text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors sm:mr-auto"
               >
                 Close
               </button>
-              <div className="flex items-center gap-2 justify-end">
-                {/* Saved to tracker indicator */}
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-medium px-3 py-2">
-                  <BookmarkCheck className="h-3.5 w-3.5" /> In Tracker
-                </span>
-                {selectedApp.url && (
-                  <a
-                    href={selectedApp.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-semibold px-4 py-2 transition-colors duration-150"
-                  >
-                    Apply Now <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                )}
-              </div>
+              <span className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-sm font-medium px-4 py-2">
+                <BookmarkCheck className="h-4 w-4 shrink-0" /> Saved to Tracker
+              </span>
+              {selectedApp.url && (
+                <a
+                  href={selectedApp.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
+                >
+                  Apply Now <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </a>
+              )}
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }
