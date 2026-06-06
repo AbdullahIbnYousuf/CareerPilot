@@ -30,7 +30,7 @@ careerpilot/
 | **Frontend**        | Next.js 14, React 19, Tailwind CSS, shadcn/ui |
 | **Database**        | Supabase (PostgreSQL + pgvector)              |
 | **LLMs**            | Groq (Llama 3.3 70B), Gemini 2.0 Flash        |
-| **Embeddings**      | Gemini text-embedding-004                     |
+| **Embeddings**      | Gemini embedding-001                          |
 | **Caching**         | Upstash Redis                                 |
 | **Agent Framework** | LangGraph                                     |
 | **Job Search**      | JSearch (RapidAPI), Remotive, Tavily          |

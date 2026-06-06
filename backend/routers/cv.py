@@ -136,7 +136,7 @@ async def upload_cv(
     5. Delete old cvs row for this user (cascade removes old cv_chunks)
     6. Insert metadata into cvs table
     7. Chunk parsed JSON by section
-    8. Embed each chunk with Gemini text-embedding-004
+    8. Embed each chunk with Gemini embedding-001
     9. Insert chunks + embeddings into cv_chunks
     10. Return structured response
     """
@@ -246,7 +246,7 @@ async def upload_cv(
     chunks_stored = 0
 
     if chunks:
-        # ── 8. Embed each chunk with Gemini text-embedding-004 ────────────────
+        # ── 8. Embed each chunk with Gemini embedding-001 ────────────────────
         try:
             chunk_texts = [c["content"] for c in chunks]
             embeddings = embed_documents(chunk_texts)

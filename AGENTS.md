@@ -110,7 +110,7 @@ Docling requires 1.5–2 GB RAM and will OOM-kill the Render container.
 
 ### Embeddings
 
-**Always use:** Gemini `models/text-embedding-004` embeddings
+**Always use:** Gemini `models/embedding-001` embeddings
 
 ```python
 import google.generativeai as genai

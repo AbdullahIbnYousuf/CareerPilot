@@ -138,7 +138,7 @@ SUPABASE_SERVICE_ROLE_KEY=  # From Supabase Dashboard > Settings > API
 - `user_id` is a query parameter — real JWT auth added Day 6
 - Only one CV per user (old CV is replaced on upload)
 - File is stored privately — signed URLs may be needed for display
-- Gemini embeddings use `GOOGLE_API_KEY` and produce 768-dimensional vectors
+- Gemini `embedding-001` uses `GOOGLE_API_KEY` and produces 768-dimensional vectors
 
 ## Day 4 Will Add
 

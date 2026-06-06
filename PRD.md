@@ -90,7 +90,7 @@ Section-aware chunking
 {section: "education",  content: "BSc Computer Science..."}
 {section: "projects",   content: "Built a RAG pipeline..."}
     ↓
-Gemini text-embedding-004 embeddings (768 dimensions)
+Gemini embedding-001 embeddings (768 dimensions)
     ↓
 Store in Supabase pgvector with section metadata
     ↓
