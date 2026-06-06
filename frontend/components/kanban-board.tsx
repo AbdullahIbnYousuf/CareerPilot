@@ -125,10 +125,12 @@ function addBusinessDays(date: Date, days: number): Date {
 function ApplicationCard({
   app,
   onDelete,
+  onClick,
   isDragging = false,
 }: {
   app: Application;
   onDelete: (id: string) => void;
+  onClick?: () => void;
   isDragging?: boolean;
 }) {
   const {
@@ -160,7 +162,8 @@ function ApplicationCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group relative rounded-xl border border-white/[0.06] bg-[#141418] p-3.5 shadow-md shadow-black/20 transition-all duration-200 ${
+      onClick={onClick}
+      className={`group relative rounded-xl border border-white/[0.06] bg-[#141418] p-3.5 shadow-md shadow-black/20 transition-all duration-200 cursor-pointer ${
         isDragging
           ? "shadow-2xl shadow-primary/20 border-primary/40 rotate-1 scale-105"
           : "hover:border-white/[0.12] hover:shadow-lg hover:shadow-black/30"
@@ -171,6 +174,7 @@ function ApplicationCard({
         <button
           {...attributes}
           {...listeners}
+          onClick={(e) => e.stopPropagation()}
           className="mt-0.5 cursor-grab active:cursor-grabbing text-white/20 hover:text-white/50 transition-colors shrink-0 touch-none"
           aria-label="Drag to reorder"
         >
@@ -249,10 +253,12 @@ function KanbanColumn({
   column,
   apps,
   onDelete,
+  onCardClick,
 }: {
   column: (typeof COLUMNS)[0];
   apps: Application[];
   onDelete: (id: string) => void;
+  onCardClick: (app: Application) => void;
 }) {
   const Icon = column.icon;
   const { setNodeRef, isOver } = useDroppable({ id: column.key });
@@ -293,7 +299,7 @@ function KanbanColumn({
             </div>
           ) : (
             apps.map((app) => (
-              <ApplicationCard key={app.id} app={app} onDelete={onDelete} />
+              <ApplicationCard key={app.id} app={app} onDelete={onDelete} onClick={() => onCardClick(app)} />
             ))
           )}
         </SortableContext>
@@ -372,9 +378,18 @@ function ApplicationActionPrompt({
       </div>
     </div>
   );
+}interface ApplicationEvent {
+  id: string;
+  event_type: "created" | "status_changed" | "note_updated";
+  from_status?: string | null;
+  to_status?: string | null;
+  note?: string | null;
+  created_at: string;
 }
 
 export function KanbanBoard() {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
@@ -387,8 +402,61 @@ export function KanbanBoard() {
   const [actionPromptError, setActionPromptError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  const [notes, setNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [events, setEvents] = useState<ApplicationEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
 
+  const closeDetails = useCallback(() => {
+    setSelectedApp(null);
+    setEvents([]);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedApp) return;
+    const loadEvents = async () => {
+      setLoadingEvents(true);
+      try {
+        const res = await fetch(`${baseUrl}/tracker/applications/${selectedApp.id}/events`);
+        if (res.ok) {
+          const data = await res.json();
+          setEvents(data.events || []);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+    void loadEvents();
+  }, [selectedApp, baseUrl, eventsRefreshKey]);
+
+  const handleSaveNotes = async () => {
+    if (!selectedApp) return;
+    setSavingNotes(true);
+    try {
+      const res = await fetch(`${baseUrl}/tracker/applications/${selectedApp.id}/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.application as Application;
+        setApplications((prev) =>
+          prev.map((a) => (a.id === selectedApp.id ? { ...a, notes: updated.notes } : a))
+        );
+        setSelectedApp((prev) => (prev ? { ...prev, notes: updated.notes } : null));
+        setEventsRefreshKey((k) => k + 1);
+      }
+    } catch {
+      // fail silently
+    } finally {
+      setSavingNotes(false);
+    }
+  };
   // ── Sensors ────────────────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -461,6 +529,7 @@ export function KanbanBoard() {
                       ...a,
                       status: updated.status,
                       applied_at: updated.applied_at ?? a.applied_at,
+                      notes: updated.notes !== undefined ? updated.notes : a.notes,
                     }
                   : a
               )
@@ -735,6 +804,10 @@ export function KanbanBoard() {
                 column={col}
                 apps={colApps}
                 onDelete={deleteApplication}
+                onCardClick={(app) => {
+                  setSelectedApp(app);
+                  setNotes(app.notes || "");
+                }}
               />
             );
           })}
@@ -751,6 +824,147 @@ export function KanbanBoard() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {selectedApp && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={closeDetails}
+        >
+          <div 
+            className="relative w-full max-w-xl max-h-[85vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between p-5 border-b border-white/[0.06] bg-gradient-to-b from-white/[0.02] to-transparent">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                    {selectedApp.status}
+                  </span>
+                  {selectedApp.fit_score !== undefined && selectedApp.fit_score !== null && (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                      selectedApp.fit_score >= 70 
+                        ? "bg-emerald-500/10 text-emerald-400" 
+                        : selectedApp.fit_score >= 40 
+                          ? "bg-amber-500/10 text-amber-400" 
+                          : "bg-red-500/10 text-red-400"
+                    }`}>
+                      {selectedApp.fit_score}% fit
+                    </span>
+                  )}
+                </div>
+                <h2 className="text-lg font-bold text-white leading-snug line-clamp-2 pr-4">{selectedApp.title}</h2>
+                <p className="text-sm text-white/50 mt-0.5 font-medium">{selectedApp.company}</p>
+                {selectedApp.location && (
+                  <p className="text-xs text-white/30 mt-1">{selectedApp.location}</p>
+                )}
+              </div>
+              <button 
+                onClick={closeDetails}
+                className="h-8 w-8 flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/[0.06] transition-all"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              {/* Job Info Details */}
+              <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.02] border border-white/[0.04] p-3 text-xs">
+                <div>
+                  <p className="text-white/30 font-medium">Applied Date</p>
+                  <p className="text-white/80 mt-0.5 font-semibold">
+                    {selectedApp.applied_at 
+                      ? new Date(selectedApp.applied_at).toLocaleDateString("en-US", {
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric"
+                        })
+                      : "Not applied yet"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-white/30 font-medium">Link</p>
+                  {selectedApp.url ? (
+                    <a 
+                      href={selectedApp.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="inline-flex items-center gap-1 text-[#AFA9EC] hover:text-[#C5BFFF] hover:underline mt-0.5 font-semibold"
+                    >
+                      Open Posting <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    <p className="text-white/30 mt-0.5 italic">No link available</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Notes Textarea */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label htmlFor="app-modal-notes" className="text-xs font-bold text-white/70 uppercase tracking-wider">
+                    Notes
+                  </label>
+                  <button
+                    onClick={handleSaveNotes}
+                    disabled={savingNotes}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#534AB7] hover:bg-[#6B63CC] text-xs font-semibold text-white transition-all disabled:opacity-50"
+                  >
+                    {savingNotes && <Loader2 className="h-3 w-3 animate-spin" />}
+                    Save Notes
+                  </button>
+                </div>
+                <textarea
+                  id="app-modal-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Paste details, links, interview dates, recruiter info..."
+                  className="w-full min-h-[100px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2 text-xs text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
+                />
+              </div>
+
+              {/* History Timeline */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-bold text-white/70 uppercase tracking-wider">
+                  Activity History
+                </h3>
+                {loadingEvents ? (
+                  <div className="flex items-center gap-2 text-xs text-white/30 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading logs...
+                  </div>
+                ) : events.length === 0 ? (
+                  <p className="text-xs text-white/20 italic py-2">No activity events logged yet.</p>
+                ) : (
+                  <div className="relative border-l border-white/[0.06] ml-2 pl-4 py-1 space-y-4">
+                    {events.map((ev) => (
+                      <div key={ev.id} className="relative">
+                        {/* Dot indicator */}
+                        <div className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border border-white/10 bg-[#7C74DB]" />
+                        <div className="text-xs">
+                          <p className="font-semibold text-white/80">
+                            {ev.event_type === "created" && `Created in ${ev.to_status ? ev.to_status.charAt(0).toUpperCase() + ev.to_status.slice(1) : "Saved"}`}
+                            {ev.event_type === "status_changed" && `Moved from ${ev.from_status ? ev.from_status.charAt(0).toUpperCase() + ev.from_status.slice(1) : "Saved"} to ${ev.to_status ? ev.to_status.charAt(0).toUpperCase() + ev.to_status.slice(1) : "Applied"}`}
+                            {ev.event_type === "note_updated" && "Notes updated"}
+                          </p>
+                          <p className="text-[10px] text-white/30 mt-0.5">
+                            {new Date(ev.created_at).toLocaleString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
