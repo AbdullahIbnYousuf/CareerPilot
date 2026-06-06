@@ -32,6 +32,8 @@ import {
   ExternalLink,
   Plus,
   Sparkles,
+  CalendarPlus,
+  CheckCircle2,
 } from "lucide-react";
 
 // ─── Column config ──────────────────────────────────────────────────────────
@@ -87,6 +89,38 @@ const COLUMNS: {
 ];
 
 // ─── Sortable Card ───────────────────────────────────────────────────────────
+
+type ActionPromptState = {
+  type: "follow_up" | "interview_prep";
+  app: Application;
+  dueDate: string;
+};
+
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parseDateOrToday(value?: string | null): Date {
+  if (!value) return new Date();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function addBusinessDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  let added = 0;
+
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    const day = result.getDay();
+    if (day !== 0 && day !== 6) added += 1;
+  }
+
+  return result;
+}
 
 function ApplicationCard({
   app,
@@ -270,12 +304,88 @@ function KanbanColumn({
 
 // ─── Main Kanban Board ────────────────────────────────────────────────────────
 
+function ApplicationActionPrompt({
+  prompt,
+  isCreating,
+  error,
+  onDueDateChange,
+  onCreate,
+  onDismiss,
+}: {
+  prompt: ActionPromptState;
+  isCreating: boolean;
+  error: string;
+  onDueDateChange: (dueDate: string) => void;
+  onCreate: () => void;
+  onDismiss: () => void;
+}) {
+  const isFollowUp = prompt.type === "follow_up";
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-[#7C74DB]/20 bg-[#111018] p-3.5 shadow-lg shadow-black/20 md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#534AB7]/20 text-[#AFA9EC]">
+          <CalendarPlus className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">
+            {isFollowUp ? "Add follow-up task" : "Add interview prep tasks"}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-white/40">
+            {prompt.app.title || "Application"} at{" "}
+            {prompt.app.company || "Unknown Company"}
+          </p>
+          {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          type="date"
+          value={prompt.dueDate}
+          onChange={(e) => onDueDateChange(e.target.value)}
+          className="h-9 rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 text-xs text-white/70 transition-all [color-scheme:dark] focus:border-primary/50 focus:outline-none"
+          aria-label={
+            isFollowUp ? "Follow-up task due date" : "Interview prep due date"
+          }
+        />
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={isCreating}
+          className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#534AB7] px-3 text-xs font-semibold text-white transition-all hover:bg-[#6B63CC] disabled:opacity-50"
+        >
+          {isCreating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          )}
+          {isFollowUp ? "Add task" : "Add tasks"}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="h-9 rounded-xl bg-white/[0.04] px-3 text-xs font-semibold text-white/40 transition-all hover:text-white"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function KanbanBoard() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [activeApp, setActiveApp] = useState<Application | null>(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [actionPrompt, setActionPrompt] = useState<ActionPromptState | null>(
+    null
+  );
+  const [creatingTasks, setCreatingTasks] = useState(false);
+  const [actionPromptError, setActionPromptError] = useState("");
+  const [actionNotice, setActionNotice] = useState("");
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -346,7 +456,13 @@ export function KanbanBoard() {
             const updated = payload.new as Application;
             setApplications((prev) =>
               prev.map((a) =>
-                a.id === updated.id ? { ...a, status: updated.status } : a
+                a.id === updated.id
+                  ? {
+                      ...a,
+                      status: updated.status,
+                      applied_at: updated.applied_at ?? a.applied_at,
+                    }
+                  : a
               )
             );
           } else if (payload.eventType === "DELETE") {
@@ -369,6 +485,7 @@ export function KanbanBoard() {
   const deleteApplication = async (appId: string) => {
     // Optimistic
     setApplications((prev) => prev.filter((a) => a.id !== appId));
+    setActionPrompt((prev) => (prev?.app.id === appId ? null : prev));
     try {
       await fetch(`${baseUrl}/tracker/applications/${appId}`, {
         method: "DELETE",
@@ -428,6 +545,47 @@ export function KanbanBoard() {
             a.id === draggedId ? { ...a, status: draggedApp.status } : a
           )
         );
+        return;
+      }
+
+      const data = (await res.json().catch(() => ({}))) as {
+        application?: Partial<Application>;
+      };
+      const updatedApp: Application = {
+        ...draggedApp,
+        ...data.application,
+        status: data.application?.status ?? targetColumn,
+        applied_at:
+          data.application?.applied_at ??
+          (targetColumn === "saved"
+            ? null
+            : draggedApp.applied_at ?? new Date().toISOString()),
+      };
+
+      setApplications((prev) =>
+        prev.map((a) => (a.id === draggedId ? updatedApp : a))
+      );
+      setActionPromptError("");
+      setActionNotice("");
+
+      if (targetColumn === "applied") {
+        setActionPrompt({
+          type: "follow_up",
+          app: updatedApp,
+          dueDate: toLocalDateStr(
+            addBusinessDays(parseDateOrToday(updatedApp.applied_at), 5)
+          ),
+        });
+      } else if (targetColumn === "interviewing") {
+        setActionPrompt({
+          type: "interview_prep",
+          app: updatedApp,
+          dueDate: toLocalDateStr(addBusinessDays(new Date(), 1)),
+        });
+      } else {
+        setActionPrompt((prev) =>
+          prev?.app.id === draggedId ? null : prev
+        );
       }
     } catch {
       // Revert on failure
@@ -440,6 +598,56 @@ export function KanbanBoard() {
   };
 
   // ── Loading ────────────────────────────────────────────────────────────────
+  const createTodo = async (title: string, dueDate: string) => {
+    if (!userId) throw new Error("Please sign in to create tasks.");
+
+    const res = await fetch(`${baseUrl}/tracker/todos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        title,
+        due_date: dueDate || null,
+        goal_id: null,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Task creation failed.");
+    }
+  };
+
+  const handleCreatePromptTasks = async () => {
+    if (!actionPrompt) return;
+
+    setCreatingTasks(true);
+    setActionPromptError("");
+    try {
+      if (actionPrompt.type === "follow_up") {
+        await createTodo("Follow up with recruiter", actionPrompt.dueDate);
+        setActionNotice("Follow-up task added.");
+      } else {
+        await Promise.all(
+          [
+            "Research company",
+            "Practice role-specific questions",
+            "Prepare STAR stories",
+          ].map((title) => createTodo(title, actionPrompt.dueDate))
+        );
+        setActionNotice("Interview prep tasks added.");
+      }
+
+      setActionPrompt(null);
+      setTimeout(() => setActionNotice(""), 3500);
+    } catch (error) {
+      setActionPromptError(
+        error instanceof Error ? error.message : "Could not create tasks."
+      );
+    } finally {
+      setCreatingTasks(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -482,6 +690,33 @@ export function KanbanBoard() {
           </div>
         )}
       </div>
+
+      {actionNotice && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {actionNotice}
+        </div>
+      )}
+
+      {actionPrompt && (
+        <ApplicationActionPrompt
+          prompt={actionPrompt}
+          isCreating={creatingTasks}
+          error={actionPromptError}
+          onDueDateChange={(dueDate) =>
+            setActionPrompt((prev) =>
+              prev ? { ...prev, dueDate } : prev
+            )
+          }
+          onCreate={() => {
+            void handleCreatePromptTasks();
+          }}
+          onDismiss={() => {
+            setActionPrompt(null);
+            setActionPromptError("");
+          }}
+        />
+      )}
 
       {/* Kanban grid */}
       <DndContext
