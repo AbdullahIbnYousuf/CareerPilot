@@ -13,7 +13,7 @@ from datetime import date, timedelta, datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from db.supabase import supabase
-from services.nudges import generate_nudge_for_user
+from services.nudges import generate_nudge_for_user, get_overdue_goals, get_overdue_todos, has_applications_this_week, get_high_fit_saved_jobs, get_goals_due_soon, check_interviewing_without_prep
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -269,16 +269,72 @@ async def save_snapshot(req: SnapshotRequest):
     return {"snapshot": result.data[0]}
 
 
+async def _is_nudge_stale(user_id: str, nudge: dict) -> bool:
+    """
+    Return True if the condition that triggered this nudge no longer applies,
+    meaning the nudge should be auto-dismissed.
+    We classify by matching message patterns — fast and LLM-free.
+    """
+    msg = nudge.get("message", "")
+
+    # Rule 1: overdue goal
+    if "is overdue" in msg and "goal" in msg.lower():
+        still_overdue = await get_overdue_goals(user_id)
+        return len(still_overdue) == 0
+
+    # Rule 2: overdue todo
+    if "is overdue" in msg and "goal" not in msg.lower():
+        still_overdue = await get_overdue_todos(user_id)
+        return len(still_overdue) == 0
+
+    # Rule 3: no applications this week
+    if "not applied this week" in msg:
+        has_apps = await has_applications_this_week(user_id)
+        return has_apps  # stale if user has now applied
+
+    # Rule 4: high-fit saved jobs
+    if "saved jobs above 70% fit" in msg:
+        high_fit = await get_high_fit_saved_jobs(user_id)
+        return len(high_fit) == 0
+
+    # Rule 5: goal due soon
+    if "due soon" in msg:
+        due_soon = await get_goals_due_soon(user_id, days=3)
+        return len(due_soon) == 0
+
+    # Rule 6: interviewing without prep
+    if "interview-stage" in msg:
+        needs_prep = await check_interviewing_without_prep(user_id)
+        return not needs_prep
+
+    return False
+
+
 @router.get("/{user_id}/nudges")
 async def get_nudges(user_id: str):
-    """Fetch unseen AI nudges for the user."""
+    """Fetch unseen AI nudges for the user, auto-dismissing any that are stale."""
     result = await supabase.table("nudges").select(
         "id, message, job_ids, seen"
     ).eq("user_id", user_id).eq("seen", False).order(
         "created_at", desc=True
     ).execute()
 
-    return {"nudges": result.data or []}
+    unseen = result.data or []
+
+    fresh: list[dict] = []
+    stale_ids: list[str] = []
+
+    for nudge in unseen:
+        if await _is_nudge_stale(user_id, nudge):
+            stale_ids.append(nudge["id"])
+        else:
+            fresh.append(nudge)
+
+    # Bulk-mark stale nudges as seen so they never re-appear
+    if stale_ids:
+        await supabase.table("nudges").update({"seen": True}).in_("id", stale_ids).execute()
+
+    return {"nudges": fresh}
 
 
 @router.patch("/nudges/{nudge_id}/seen")
