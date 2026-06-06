@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { NudgeBanner } from "@/components/nudge-banner";
 import { JobCard } from "@/components/job-card";
-import type { Snapshot, StatusCounts, Nudge, Job } from "@/types";
+import type { Snapshot, Nudge, Job } from "@/types";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -21,7 +21,6 @@ import Link from "next/link";
 export default function HomePage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
-  const [statusCounts, setStatusCounts] = useState<StatusCounts | null>(null);
   const [newMatches, setNewMatches] = useState<number>(0);
   const [topJobs, setTopJobs] = useState<Job[]>([]);
   const [nudges, setNudges] = useState<Nudge[]>([]);
@@ -36,7 +35,6 @@ export default function HomePage() {
       if (res.ok) {
         const data = await res.json();
         setSnapshot(data.snapshot);
-        setStatusCounts(data.status_counts);
         setNewMatches(data.new_matches ?? 0);
       }
     } catch { /* silently fail */ }
@@ -55,12 +53,28 @@ export default function HomePage() {
   const fetchTopJobs = useCallback(async (uid: string) => {
     try {
       // Pull top-3 highest fit score jobs from Supabase directly
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("jobs")
         .select("id, title, company, location, fit_score, fit_explanation, source, url, description, salary_range, deadline")
         .eq("user_id", uid)
         .order("fit_score", { ascending: false })
         .limit(3);
+      if (
+        error
+        && error.message.toLowerCase().includes("url")
+        && (error.code === "PGRST204" || error.code === "42703" || error.message.toLowerCase().includes("does not exist"))
+      ) {
+        const fallback = await supabase
+          .from("jobs")
+          .select("id, title, company, location, fit_score, fit_explanation, source, description, salary_range, deadline")
+          .eq("user_id", uid)
+          .order("fit_score", { ascending: false })
+          .limit(3);
+        if (fallback.data) {
+          setTopJobs(fallback.data.map((job) => ({ ...job, url: "" })) as Job[]);
+        }
+        return;
+      }
       if (data) setTopJobs(data as Job[]);
     } catch { /* silently fail */ }
   }, []);
@@ -71,18 +85,31 @@ export default function HomePage() {
       const { data, error } = await supabase.auth.getUser();
       if (!error && data.user) {
         setUserId(data.user.id);
+      } else {
+        setLoading(false);
       }
     };
     loadUser();
   }, []);
 
   useEffect(() => {
-    if (!userId) { setLoading(false); return; }
-    Promise.all([
-      fetchDashboard(userId),
-      fetchNudges(userId),
-      fetchTopJobs(userId),
-    ]).finally(() => setLoading(false));
+    if (!userId) return;
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      Promise.all([
+        fetchDashboard(userId),
+        fetchNudges(userId),
+        fetchTopJobs(userId),
+      ]).finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
   }, [userId, fetchDashboard, fetchNudges, fetchTopJobs]);
 
   // ── Realtime — nudges table INSERT ────────────────────────────────────────
