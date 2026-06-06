@@ -289,7 +289,10 @@ export function KanbanBoard() {
   // ── Load user ──────────────────────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
-      if (!error) setUserId(data.user?.id ?? null);
+      if (!error) {
+        setUserId(data.user?.id ?? null);
+        if (!data.user) setLoading(false);
+      }
     });
   }, []);
 
@@ -314,11 +317,11 @@ export function KanbanBoard() {
   );
 
   useEffect(() => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-    fetchApplications(userId);
+    if (!userId) return;
+    const loadApplications = async () => {
+      await fetchApplications(userId);
+    };
+    void loadApplications();
   }, [userId, fetchApplications]);
 
   // ── Supabase Realtime ─────────────────────────────────────────────────────

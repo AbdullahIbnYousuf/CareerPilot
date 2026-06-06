@@ -25,6 +25,16 @@ from db.supabase import supabase
 
 router = APIRouter(prefix="/tracker", tags=["tracker"])
 
+
+def _is_missing_url_column_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "url" in text and "jobs" in text and (
+        "schema cache" in text
+        or "pgrst204" in text
+        or "42703" in text
+        or "does not exist" in text
+    )
+
 ApplicationStatus = Literal["saved", "applied", "interviewing", "offer", "rejected"]
 
 
@@ -87,11 +97,24 @@ async def get_applications(user_id: str = Query(...)):
 
     # Fetch job metadata for all job_ids in one query
     job_ids = list({a["job_id"] for a in applications})
-    jobs_result = await supabase.table("jobs").select(
-        "id, title, company, location, url, fit_score"
-    ).in_("id", job_ids).execute()
+    try:
+        jobs_result = await supabase.table("jobs").select(
+            "id, title, company, location, url, fit_score"
+        ).in_("id", job_ids).execute()
+    except Exception as exc:
+        if _is_missing_url_column_error(exc):
+            try:
+                jobs_result = await supabase.table("jobs").select(
+                    "id, title, company, location, fit_score"
+                ).in_("id", job_ids).execute()
+                for job in jobs_result.data or []:
+                    job["url"] = ""
+            except Exception:
+                jobs_result = None
+        else:
+            jobs_result = None
 
-    jobs_map = {j["id"]: j for j in (jobs_result.data or [])}
+    jobs_map = {j["id"]: j for j in ((jobs_result.data if jobs_result else []) or [])}
 
     # Merge job metadata into each application
     enriched = []
@@ -113,12 +136,22 @@ async def get_applications(user_id: str = Query(...)):
 async def create_application(req: CreateApplicationRequest):
     """Add a job to the tracker (Kanban board)."""
     # Check for duplicate
-    existing = await supabase.table("applications").select("id").eq(
+    existing = await supabase.table("applications").select("id, user_id, job_id, status, applied_at").eq(
         "user_id", req.user_id
     ).eq("job_id", req.job_id).execute()
 
     if existing.data:
-        return {"application": existing.data[0], "duplicate": True}
+        duplicate = existing.data[0]
+        return {
+            "application": {
+                "id": duplicate["id"],
+                "user_id": duplicate["user_id"],
+                "job_id": duplicate["job_id"],
+                "status": duplicate["status"],
+                "applied_at": duplicate.get("applied_at"),
+            },
+            "duplicate": True,
+        }
 
     result = await supabase.table("applications").insert({
         "user_id": req.user_id,
@@ -129,7 +162,7 @@ async def create_application(req: CreateApplicationRequest):
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create application.")
 
-    return {"application": result.data[0]}
+    return {"application": result.data[0], "duplicate": False}
 
 
 @router.patch("/applications/{application_id}")
