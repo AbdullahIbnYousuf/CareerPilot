@@ -13,8 +13,12 @@ from datetime import date, timedelta, datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from db.supabase import supabase
+from services.nudges import generate_nudge_for_user
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+APPLICATION_STATUSES = ["saved", "applied", "interviewing", "offer", "rejected"]
+APPLIED_STATUSES = ["applied", "interviewing", "offer", "rejected"]
 
 
 class SnapshotRequest(BaseModel):
@@ -52,7 +56,7 @@ async def get_dashboard(user_id: str):
     # and applied_at is within the current week.
     apps_sent_result = await supabase.table("applications").select(
         "id, status, applied_at"
-    ).eq("user_id", user_id).in_("status", ["applied", "interviewing", "offer", "rejected"]).execute()
+    ).eq("user_id", user_id).in_("status", APPLIED_STATUSES).execute()
 
     now_utc = datetime.now(timezone.utc)
     # Start of current week (Monday 00:00:00 UTC)
@@ -125,15 +129,56 @@ async def get_dashboard(user_id: str):
         "status"
     ).eq("user_id", user_id).execute()
 
-    status_counts: dict[str, int] = {
-        "saved": 0, "applied": 0, "interviewing": 0, "offer": 0, "rejected": 0
-    }
+    status_counts: dict[str, int] = {status: 0 for status in APPLICATION_STATUSES}
     for app in (apps_result.data or []):
         s = app.get("status", "")
         if s in status_counts:
             status_counts[s] += 1
 
-    # 6. New matches count from jobs table (fit_score >= 70)
+    # 6. Attention metrics for the dashboard insight row
+    saved_apps_result = await supabase.table("applications").select(
+        "job_id"
+    ).eq("user_id", user_id).eq("status", "saved").execute()
+
+    saved_job_ids = [
+        app["job_id"]
+        for app in (saved_apps_result.data or [])
+        if app.get("job_id")
+    ]
+
+    high_fit_saved = 0
+    if saved_job_ids:
+        high_fit_saved_result = await supabase.table("jobs").select(
+            "id"
+        ).eq("user_id", user_id).in_("id", saved_job_ids).gte(
+            "fit_score", 70
+        ).execute()
+        high_fit_saved = len(high_fit_saved_result.data or [])
+
+    today_iso = now_utc.date().isoformat()
+    overdue_tasks_result = await supabase.table("todos").select(
+        "id"
+    ).eq("user_id", user_id).eq("completed", False).not_.is_(
+        "due_date", "null"
+    ).lt("due_date", today_iso).execute()
+
+    goals_result = await supabase.table("goals").select(
+        "completed"
+    ).eq("user_id", user_id).execute()
+
+    goals_data = goals_result.data or []
+    completed_goals = sum(1 for goal in goals_data if goal.get("completed"))
+    active_goals = len(goals_data) - completed_goals
+
+    attention = {
+        "high_fit_saved": high_fit_saved,
+        "overdue_tasks": len(overdue_tasks_result.data or []),
+        "active_goals": active_goals,
+        "completed_goals": completed_goals,
+        "interviews": status_counts["interviewing"],
+    }
+
+    # 7. New matches count from jobs table (fit_score >= 70). Kept for compatibility.
     new_matches_result = await supabase.table("jobs").select(
         "id"
     ).eq("user_id", user_id).gte("fit_score", 70).execute()
@@ -141,6 +186,7 @@ async def get_dashboard(user_id: str):
     return {
         "snapshot":      computed_snapshot,
         "status_counts": status_counts,
+        "attention":     attention,
         "new_matches":   len(new_matches_result.data or []),
     }
 
@@ -173,9 +219,36 @@ async def get_stats_history(user_id: str):
         {"range": "85+",   "count": sum(1 for s in scores if s >= 85)},
     ]
 
+    apps_result = await supabase.table("applications").select(
+        "status"
+    ).eq("user_id", user_id).execute()
+
+    status_counts: dict[str, int] = {status: 0 for status in APPLICATION_STATUSES}
+    for app in (apps_result.data or []):
+        status = app.get("status", "")
+        if status in status_counts:
+            status_counts[status] += 1
+
+    status_labels = {
+        "saved": "Saved",
+        "applied": "Applied",
+        "interviewing": "Interviewing",
+        "offer": "Offer",
+        "rejected": "Rejected",
+    }
+    status_distribution = [
+        {
+            "status": status,
+            "label": status_labels[status],
+            "count": status_counts[status],
+        }
+        for status in APPLICATION_STATUSES
+    ]
+
     return {
-        "snapshots":    snapshots,
-        "distribution": distribution,
+        "snapshots":           snapshots,
+        "distribution":        distribution,
+        "status_distribution": status_distribution,
     }
 
 
@@ -219,3 +292,13 @@ async def mark_nudge_seen(nudge_id: str):
         raise HTTPException(status_code=404, detail="Nudge not found.")
 
     return {"status": "updated"}
+
+
+@router.post("/{user_id}/nudges/generate")
+async def generate_nudge(user_id: str):
+    """
+    Generate at most one new rule-based nudge for a user based on priorities.
+    Returns the inserted nudge or {"nudge": null}.
+    """
+    nudge = await generate_nudge_for_user(user_id)
+    return {"nudge": nudge}
