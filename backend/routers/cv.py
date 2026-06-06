@@ -283,6 +283,17 @@ async def upload_cv(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save profile: {str(e)}")
 
+    try:
+        await supabase.table("jobs").update({
+            "fit_score": None,
+            "fit_explanation": None,
+            "scored_cv_id": None,
+            "fit_score_calculated_at": None,
+            "fit_score_version": None,
+        }).eq("user_id", user_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to invalidate stale job scores: {str(e)}")
+
     return CVUploadResponse(
         cv_id=cv_id,
         file_name=filename,

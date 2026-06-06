@@ -87,7 +87,13 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
         throw new Error(errData.detail || "Failed to upload CV");
       }
 
-      const data = await response.json();
+      const data: CVUploadResult = await response.json();
+      localStorage.removeItem(`careerPilot_lastJobSearch:v2:${userId}`);
+      window.dispatchEvent(
+        new CustomEvent("careerpilot:cv-updated", {
+          detail: { userId, cvId: data.cv_id },
+        }),
+      );
       onUploadSuccess(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");

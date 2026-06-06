@@ -6,8 +6,11 @@ export interface Job {
   url: string;
   description: string;
   source: string;
-  fit_score?: number;
-  fit_explanation?: string;
+  fit_score?: number | null;
+  fit_explanation?: string | null;
+  scored_cv_id?: string | null;
+  fit_score_calculated_at?: string | null;
+  fit_score_version?: string | null;
   salary_range?: string;
   deadline?: string;
 }
@@ -42,7 +45,7 @@ export interface Application {
   company?: string;
   location?: string;
   url?: string;
-  fit_score?: number;
+  fit_score?: number | null;
 }
 
 export interface Snapshot {
