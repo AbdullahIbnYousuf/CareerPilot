@@ -77,12 +77,27 @@ async def get_dashboard(user_id: str):
     # 3. Compute streak_days live:
     # use todos completed_at dates, grouped by local date or UTC date consistently.
     # Count consecutive days ending today if today has a completed task, otherwise ending yesterday.
-    todos_completed_result = await supabase.table("todos").select(
-        "completed_at"
-    ).eq("user_id", user_id).eq("completed", True).execute()
+    try:
+        todos_completed_result = await supabase.table("todos").select(
+            "completed_at"
+        ).eq("user_id", user_id).eq("completed", True).execute()
+        todos_completed_data = todos_completed_result.data or []
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if "completed_at" in exc_str or "42703" in exc_str or "does not exist" in exc_str:
+            fallback_res = await supabase.table("todos").select(
+                "due_date"
+            ).eq("user_id", user_id).eq("completed", True).execute()
+            todos_completed_data = []
+            for t in (fallback_res.data or []):
+                todos_completed_data.append({
+                    "completed_at": t.get("due_date")
+                })
+        else:
+            raise
 
     completed_dates = set()
-    for t in (todos_completed_result.data or []):
+    for t in todos_completed_data:
         completed_at_str = t.get("completed_at")
         if completed_at_str:
             try:
@@ -183,12 +198,59 @@ async def get_dashboard(user_id: str):
         "id"
     ).eq("user_id", user_id).gte("fit_score", 70).execute()
 
+    # 8. Skill growth: count events this week + recent skill names + profile total
+    skills_added_this_week = 0
+    recent_skills_added: list[str] = []
+    profile_skills_count = 0
+
+    try:
+        skill_events_res = await supabase.table("profile_skill_events").select(
+            "skill, created_at"
+        ).eq("user_id", user_id).eq("event_type", "added").order(
+            "created_at", desc=True
+        ).execute()
+
+        all_events = skill_events_res.data or []
+
+        for evt in all_events:
+            evt_str = evt.get("created_at", "")
+            if evt_str:
+                try:
+                    dt_str = evt_str.replace("Z", "+00:00")
+                    evt_dt = datetime.fromisoformat(dt_str)
+                    if evt_dt >= start_of_week:
+                        skills_added_this_week += 1
+                        if len(recent_skills_added) < 3:
+                            recent_skills_added.append(evt.get("skill", ""))
+                except Exception:
+                    pass
+    except Exception:
+        # Table may not exist yet — degrade gracefully
+        pass
+
+    try:
+        profile_res = await supabase.table("profiles").select(
+            "skills"
+        ).eq("user_id", user_id).execute()
+        if profile_res.data:
+            profile_skills_count = len(profile_res.data[0].get("skills") or [])
+    except Exception:
+        pass
+
+    skill_growth = {
+        "skills_added_this_week": skills_added_this_week,
+        "recent_skills_added": recent_skills_added,
+        "profile_skills_count": profile_skills_count,
+    }
+
     return {
         "snapshot":      computed_snapshot,
         "status_counts": status_counts,
         "attention":     attention,
         "new_matches":   len(new_matches_result.data or []),
+        "skill_growth":  skill_growth,
     }
+
 
 
 @router.get("/{user_id}/stats")

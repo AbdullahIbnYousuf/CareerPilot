@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, useCallback, type FormEvent } from "react";
 import {
   BookOpen,
   Briefcase,
@@ -13,8 +13,10 @@ import {
   Map,
   Mic,
   Plus,
+  Sparkles,
   Target,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -182,18 +184,22 @@ export function GoalsSection({
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newTargetDate, setNewTargetDate] = useState("");
+  const [newTargetSkill, setNewTargetSkill] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [inlineMsg, setInlineMsg] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
+  // Track which goal IDs have had their skill successfully added this session
+  const [skillAddedGoalIds, setSkillAddedGoalIds] = useState<Set<string>>(new Set());
+  const [pendingSkillGoal, setPendingSkillGoal] = useState<Goal | null>(null);
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const flash = (type: "success" | "error", text: string) => {
     setInlineMsg({ type, text });
-    window.setTimeout(() => setInlineMsg(null), 3000);
+    window.setTimeout(() => setInlineMsg(null), 4000);
   };
 
   const createGoal = async (event: FormEvent<HTMLFormElement>) => {
@@ -202,14 +208,19 @@ export function GoalsSection({
 
     setSubmitting(true);
     try {
+      const body: Record<string, string | null> = {
+        user_id: userId,
+        title: newTitle.trim(),
+        target_date: newTargetDate || null,
+      };
+      if (newTargetSkill.trim()) {
+        body.target_skill = newTargetSkill.trim();
+      }
+
       const res = await fetch(`${baseUrl}/tracker/goals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_id: userId,
-          title: newTitle.trim(),
-          target_date: newTargetDate || null,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -221,6 +232,7 @@ export function GoalsSection({
 
       setNewTitle("");
       setNewTargetDate("");
+      setNewTargetSkill("");
       setShowForm(false);
       flash("success", "Goal created.");
       if (data.goal) {
@@ -237,15 +249,20 @@ export function GoalsSection({
   const toggleGoal = async (goal: Goal) => {
     setTogglingId(goal.id);
     try {
+      const nextCompleted = !goal.completed;
       const res = await fetch(`${baseUrl}/tracker/goals/${goal.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed: !goal.completed }),
+        body: JSON.stringify({ completed: nextCompleted }),
       });
 
       if (!res.ok) {
         flash("error", "Failed to update goal.");
         return;
+      }
+
+      if (nextCompleted && goal.target_skill && !skillAddedGoalIds.has(goal.id)) {
+        setPendingSkillGoal(goal);
       }
 
       onGoalsChange();
@@ -255,6 +272,40 @@ export function GoalsSection({
       setTogglingId(null);
     }
   };
+
+  const addSkillToProfile = useCallback(
+    async (goal: Goal) => {
+      try {
+        const encodedUserId = encodeURIComponent(userId);
+        const res = await fetch(
+          `${baseUrl}/tracker/goals/${goal.id}/add-skill?user_id=${encodedUserId}`,
+          { method: "POST" }
+        );
+
+        if (!res.ok) {
+          const errData = (await res.json().catch(() => ({}))) as { detail?: string };
+          flash("error", errData.detail ?? "Failed to add skill.");
+          return;
+        }
+
+        const data = (await res.json()) as {
+          skill: string;
+          added_to_profile: boolean;
+          event_created: boolean;
+        };
+
+        setSkillAddedGoalIds((prev) => new Set([...prev, goal.id]));
+        setPendingSkillGoal((curr) => (curr?.id === goal.id ? null : curr));
+        flash(
+          "success",
+          `${data.skill} added to your profile skills.`
+        );
+      } catch {
+        flash("error", "Failed to add skill to profile.");
+      }
+    },
+    [userId, baseUrl, setPendingSkillGoal]
+  );
 
   const totalGoals = goals.length;
   const completedGoals = goals.filter((goal) => goal.completed).length;
@@ -323,6 +374,41 @@ export function GoalsSection({
           </div>
         )}
 
+        {pendingSkillGoal && (
+          <div className="animate-in fade-in slide-in-from-top-2 duration-300 rounded-xl border border-violet-500/30 bg-violet-500/10 p-4">
+            <div className="flex items-start gap-3">
+              <Sparkles className="h-5 w-5 shrink-0 text-violet-300 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-white">Goal completed!</p>
+                <p className="text-xs text-white/70 mt-1 leading-relaxed">
+                  Congratulations on completing <span className="font-semibold text-violet-200">&ldquo;{pendingSkillGoal.title}&rdquo;</span>.
+                  Would you like to add <span className="font-bold text-violet-300">{pendingSkillGoal.target_skill}</span> to your profile skills?
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => addSkillToProfile(pendingSkillGoal)}
+                className="bg-[#534AB7] hover:bg-[#6B63CC] text-white gap-1 text-xs px-3 h-8"
+              >
+                <Sparkles className="h-3 w-3" />
+                Add {pendingSkillGoal.target_skill} to Profile
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setPendingSkillGoal(null)}
+                className="text-white/40 hover:bg-white/[0.04] hover:text-white text-xs px-3 h-8"
+              >
+                Skip
+              </Button>
+            </div>
+          </div>
+        )}
+
         {inlineMsg && (
           <div
             className={`rounded-lg border px-3 py-2 text-xs ${
@@ -357,6 +443,17 @@ export function GoalsSection({
                 value={newTargetDate}
                 onChange={(event) => setNewTargetDate(event.target.value)}
                 className="h-9 w-full rounded-xl border border-white/[0.06] bg-white/[0.04] pl-9 pr-3 text-xs text-white/70 transition-all [color-scheme:dark] focus:border-primary/50 focus:outline-none"
+              />
+            </div>
+            <div className="relative">
+              <Zap className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/20" />
+              <input
+                id="new-goal-target-skill"
+                type="text"
+                placeholder="Target skill (optional) — e.g. SQL, Docker, LangGraph"
+                value={newTargetSkill}
+                onChange={(event) => setNewTargetSkill(event.target.value)}
+                className="h-9 w-full rounded-xl border border-white/[0.06] bg-white/[0.04] pl-9 pr-3 text-xs text-white/70 transition-all placeholder:text-white/20 focus:border-primary/50 focus:outline-none"
               />
             </div>
             <div className="flex gap-2">
@@ -403,7 +500,9 @@ export function GoalsSection({
                   doneTodos={done}
                   pct={pct}
                   isToggling={togglingId === goal.id}
+                  skillAdded={skillAddedGoalIds.has(goal.id)}
                   onToggle={() => toggleGoal(goal)}
+                  onAddSkill={() => addSkillToProfile(goal)}
                 />
               );
             })}
@@ -420,14 +519,18 @@ function GoalCard({
   doneTodos,
   pct,
   isToggling,
+  skillAdded,
   onToggle,
+  onAddSkill,
 }: {
   goal: Goal;
   totalTodos: number;
   doneTodos: number;
   pct: number;
   isToggling: boolean;
+  skillAdded: boolean;
   onToggle: () => void;
+  onAddSkill: () => void;
 }) {
   const category = inferGoalCategory(goal.title);
   const CategoryIcon = categoryConfig[category].icon;
@@ -438,9 +541,26 @@ function GoalCard({
       ? "[&_[data-slot=progress-indicator]]:bg-emerald-400"
       : "[&_[data-slot=progress-indicator]]:bg-[#7C74DB]";
 
+  // Show the "Add to Profile" button only when:
+  //   - the goal has a target_skill
+  //   - the skill hasn't been added this session already
+  //   - the goal is completed OR all linked tasks are done (pct === 100 and totalTodos > 0)
+  const showAddSkillButton =
+    !!goal.target_skill &&
+    !skillAdded &&
+    (goal.completed || (totalTodos > 0 && pct === 100));
+
+  // If the goal is completed, it usually gets opacity-60.
+  // Keep opacity-100 (prominent) if there is a pending skill that hasn't been added yet.
+  const isCompletedPendingSkill = goal.completed && !!goal.target_skill && !skillAdded;
+  const cardClassName =
+    status === "completed" && isCompletedPendingSkill
+      ? "bg-white/[0.01] border-white/[0.03] opacity-100"
+      : statusDetails.cardClassName;
+
   return (
     <div
-      className={`rounded-xl border p-3.5 transition-all duration-200 hover:border-white/[0.10] ${statusDetails.cardClassName}`}
+      className={`rounded-xl border p-3.5 transition-all duration-200 hover:border-white/[0.10] ${cardClassName}`}
     >
       <div className="flex items-start gap-2.5">
         <button
@@ -482,6 +602,18 @@ function GoalCard({
               <CategoryIcon className="h-3 w-3" />
               {category}
             </Badge>
+
+            {/* Target skill badge */}
+            {goal.target_skill && (
+              <Badge
+                variant="outline"
+                className="border-violet-400/20 bg-violet-400/10 text-violet-300 gap-1"
+              >
+                <Sparkles className="h-2.5 w-2.5" />
+                {goal.target_skill}
+              </Badge>
+            )}
+
             {goal.target_date && (
               <span className="flex items-center gap-1 text-[10px] text-white/35">
                 <Calendar className="h-2.5 w-2.5" />
@@ -512,6 +644,27 @@ function GoalCard({
               </div>
             )}
           </div>
+
+          {/* Add skill to profile CTA — only shown when all tasks done */}
+          {showAddSkillButton && (
+            <button
+              id={`add-skill-btn-${goal.id}`}
+              type="button"
+              onClick={onAddSkill}
+              className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-400/20 bg-violet-400/10 px-3 py-1.5 text-xs font-semibold text-violet-300 transition-all hover:bg-violet-400/20 hover:border-violet-400/40"
+            >
+              <Sparkles className="h-3 w-3" />
+              Add {goal.target_skill} to Profile
+            </button>
+          )}
+
+          {/* Already added indicator */}
+          {skillAdded && goal.target_skill && (
+            <div className="mt-1 flex items-center gap-1.5 text-[10px] text-emerald-400">
+              <CheckCircle2 className="h-3 w-3" />
+              {goal.target_skill} added to your profile skills.
+            </div>
+          )}
         </div>
       </div>
     </div>

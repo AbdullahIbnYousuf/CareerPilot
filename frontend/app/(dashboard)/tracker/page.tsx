@@ -193,7 +193,20 @@ export default function JourneyPage() {
         const res = await fetch(`${baseUrl}/dashboard/${userId}/nudges`);
         if (res.ok) {
           const data = await res.json();
-          setNudges(data.nudges || []);
+          let currentNudges = data.nudges || [];
+          if (currentNudges.length === 0) {
+            const genRes = await fetch(`${baseUrl}/dashboard/${userId}/nudges/generate`, {
+              method: "POST",
+            });
+            if (genRes.ok) {
+              const res2 = await fetch(`${baseUrl}/dashboard/${userId}/nudges`);
+              if (res2.ok) {
+                const data2 = await res2.json();
+                currentNudges = data2.nudges || [];
+              }
+            }
+          }
+          setNudges(currentNudges);
         }
       } catch {
         /* silently fail */

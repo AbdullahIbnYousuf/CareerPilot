@@ -108,10 +108,63 @@ async def run_tests():
 
         # --- TEST RULE 3: No Applications This Week ---
         print("\nTesting Rule 3: No Applications This Week...")
+        import services.nudges
+        original_has_apps = services.nudges.has_applications_this_week
+        original_get_high_fit = services.nudges.get_high_fit_saved_jobs
+
+        async def mock_has_apps_false(uid):
+            return False
+        services.nudges.has_applications_this_week = mock_has_apps_false
+
+        # Case A: No high-fit saved jobs
+        async def mock_get_high_fit_empty(uid):
+            return []
+        services.nudges.get_high_fit_saved_jobs = mock_get_high_fit_empty
+
         nudge = await generate_nudge_for_user(user_id)
         assert nudge, "Expected nudge for no applications this week"
         assert "applied this week" in nudge["message"]
-        print(f"  [PASSED] '{nudge['message']}'")
+        assert "Pick one saved role" in nudge["message"]
+        print(f"  [PASSED] Case A (default): '{nudge['message']}'")
+
+        await flush_unseen_nudges(user_id)
+
+        # Case B: High-fit saved jobs exist
+        high_fit_job = await supabase.table("jobs").insert({
+            "user_id": user_id,
+            "title": "TEST_HIGH_FIT",
+            "company": "TEST_COMP",
+            "source": "JSearch",
+            "fit_score": 85
+        }).execute()
+        high_fit_job_id = high_fit_job.data[0]["id"]
+
+        saved_app = await supabase.table("applications").insert({
+            "user_id": user_id,
+            "job_id": high_fit_job_id,
+            "status": "saved"
+        }).execute()
+        assert saved_app.data, "Failed to insert saved application"
+
+        # Mock it to return our specific high-fit job
+        async def mock_get_high_fit_exist(uid):
+            return [{"id": high_fit_job_id, "title": "TEST_HIGH_FIT", "fit_score": 85}]
+        services.nudges.get_high_fit_saved_jobs = mock_get_high_fit_exist
+
+        nudge = await generate_nudge_for_user(user_id)
+        assert nudge, "Expected nudge for no applications this week (with high-fit saved jobs)"
+        assert "Start with one of these high-fit saved roles today" in nudge["message"]
+        assert nudge.get("job_ids") and high_fit_job_id in nudge["job_ids"]
+        print(f"  [PASSED] Case B (with high-fit): '{nudge['message']}'")
+
+        # Cleanup high fit job
+        await flush_unseen_nudges(user_id)
+        await supabase.table("applications").delete().eq("id", saved_app.data[0]["id"]).execute()
+        await supabase.table("jobs").delete().eq("id", high_fit_job_id).execute()
+
+        # Restore original functions
+        services.nudges.has_applications_this_week = original_has_apps
+        services.nudges.get_high_fit_saved_jobs = original_get_high_fit
 
         # Insert this-week application to suppress Rule 3 for subsequent tests
         job_res = await supabase.table("jobs").insert({

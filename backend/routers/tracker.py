@@ -5,17 +5,18 @@ Application status values (exactly these, no others):
   saved → applied → interviewing → offer → rejected
 
 Endpoints:
-  GET    /tracker/applications          — fetch all applications for user (with job metadata)
-  POST   /tracker/applications          — create new application
-  PATCH  /tracker/applications/:id      — update status (drag-and-drop)
-  DELETE /tracker/applications/:id      — delete application
-  GET    /tracker/goals                 — fetch goals
-  POST   /tracker/goals                 — create goal
-  GET    /tracker/todos                 — fetch todos
-  POST   /tracker/todos                 — create todo
-  PATCH  /tracker/todos/:id             — mark complete/incomplete
-  DELETE /tracker/todos/:id             — delete todo
-  PATCH  /tracker/goals/:id             — mark goal complete/incomplete
+  GET    /tracker/applications                    — fetch all applications for user (with job metadata)
+  POST   /tracker/applications                    — create new application
+  PATCH  /tracker/applications/:id                — update status (drag-and-drop)
+  DELETE /tracker/applications/:id                — delete application
+  GET    /tracker/goals                           — fetch goals
+  POST   /tracker/goals                           — create goal
+  POST   /tracker/goals/:id/add-skill             — add target_skill to profile
+  GET    /tracker/todos                           — fetch todos
+  POST   /tracker/todos                           — create todo
+  PATCH  /tracker/todos/:id                       — mark complete/incomplete
+  DELETE /tracker/todos/:id                       — delete todo
+  PATCH  /tracker/goals/:id                       — mark goal complete/incomplete
 """
 
 from datetime import datetime, timezone
@@ -86,6 +87,7 @@ class CreateGoalRequest(BaseModel):
     user_id: str
     title: str
     target_date: Optional[str] = None
+    target_skill: Optional[str] = None
 
 
 class CreateTodoRequest(BaseModel):
@@ -326,26 +328,142 @@ async def get_application_events(application_id: str):
 @router.get("/goals")
 async def get_goals(user_id: str = Query(...)):
     """Fetch all goals for a user."""
-    result = await supabase.table("goals").select(
-        "id, user_id, title, target_date, completed"
-    ).eq("user_id", user_id).order("target_date", desc=False).execute()
-    return {"goals": result.data or []}
+    try:
+        result = await supabase.table("goals").select(
+            "id, user_id, title, target_date, completed, target_skill"
+        ).eq("user_id", user_id).order("target_date", desc=False).execute()
+        return {"goals": result.data or []}
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if "target_skill" in exc_str or "42703" in exc_str or "does not exist" in exc_str:
+            result = await supabase.table("goals").select(
+                "id, user_id, title, target_date, completed"
+            ).eq("user_id", user_id).order("target_date", desc=False).execute()
+            data = result.data or []
+            for g in data:
+                g["target_skill"] = None
+            return {"goals": data}
+        else:
+            raise
 
 
 @router.post("/goals")
 async def create_goal(req: CreateGoalRequest):
     """Create a new goal."""
-    result = await supabase.table("goals").insert({
+    insert_payload: dict = {
         "user_id": req.user_id,
         "title": req.title,
         "target_date": req.target_date,
         "completed": False,
-    }).execute()
+    }
+    if req.target_skill:
+        insert_payload["target_skill"] = req.target_skill.strip()
+
+    try:
+        result = await supabase.table("goals").insert(insert_payload).execute()
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if "target_skill" in exc_str or "42703" in exc_str or "does not exist" in exc_str:
+            insert_payload.pop("target_skill", None)
+            result = await supabase.table("goals").insert(insert_payload).execute()
+            if result.data:
+                result.data[0]["target_skill"] = None
+        else:
+            raise
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create goal.")
 
     return {"goal": result.data[0]}
+
+
+@router.post("/goals/{goal_id}/add-skill")
+async def add_skill_from_goal(goal_id: str, user_id: str = Query(...)):
+    """
+    Add the target_skill of a completed goal to the user's profile skills.
+
+    Steps:
+      1. Fetch the goal and validate it has a target_skill.
+      2. Fetch the user's profile.
+      3. Add the skill to profiles.skills (case-insensitive dedup).
+      4. Insert a profile_skill_events row (unique index prevents dups).
+    Returns: {skill, added_to_profile, event_created}
+    """
+    # 1. Fetch goal
+    try:
+        goal_res = await supabase.table("goals").select(
+            "id, user_id, title, target_skill"
+        ).eq("id", goal_id).execute()
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if "target_skill" in exc_str or "42703" in exc_str or "does not exist" in exc_str:
+            raise HTTPException(
+                status_code=400,
+                detail="Your database schema is out of date. Please run the SQL migrations in Supabase.",
+            )
+        else:
+            raise
+
+    if not goal_res.data:
+        raise HTTPException(status_code=404, detail="Goal not found.")
+
+    goal = goal_res.data[0]
+
+    if goal.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorised.")
+
+    target_skill: str | None = goal.get("target_skill")
+    if not target_skill:
+        raise HTTPException(
+            status_code=400, detail="This goal has no target_skill set."
+        )
+
+    skill = target_skill.strip()
+
+    # 2. Fetch profile
+    profile_res = await supabase.table("profiles").select(
+        "user_id, skills"
+    ).eq("user_id", user_id).execute()
+
+    if not profile_res.data:
+        raise HTTPException(
+            status_code=404,
+            detail="Profile not found. Upload your CV first to create a profile.",
+        )
+
+    profile = profile_res.data[0]
+    current_skills: list = profile.get("skills") or []
+
+    # 3. Add skill to profile if not already present (case-insensitive)
+    existing_lower = {s.lower() for s in current_skills if isinstance(s, str)}
+    added_to_profile = False
+    if skill.lower() not in existing_lower:
+        updated_skills = current_skills + [skill]
+        await supabase.table("profiles").update(
+            {"skills": updated_skills}
+        ).eq("user_id", user_id).execute()
+        added_to_profile = True
+
+    # 4. Insert skill event (unique index silently prevents duplicates)
+    event_created = False
+    try:
+        event_res = await supabase.table("profile_skill_events").insert({
+            "user_id": user_id,
+            "skill": skill,
+            "event_type": "added",
+            "source_goal_id": goal_id,
+        }).execute()
+        if event_res.data:
+            event_created = True
+    except Exception:
+        # Unique constraint violation means event already exists — that is fine
+        pass
+
+    return {
+        "skill": skill,
+        "added_to_profile": added_to_profile,
+        "event_created": event_created,
+    }
 
 
 @router.patch("/goals/{goal_id}")

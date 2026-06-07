@@ -278,8 +278,15 @@ async def generate_nudge_for_user(user_id: str) -> dict | None:
     # Rule 3: No Applications This Week
     has_apps = await has_applications_this_week(user_id)
     if not has_apps:
-        msg = "You have not applied this week. Pick one saved role and send an application today."
-        return await insert_nudge_if_new(user_id, msg)
+        high_fit_jobs = await get_high_fit_saved_jobs(user_id)
+        if high_fit_jobs:
+            msg = "You have not applied this week. Start with one of these high-fit saved roles today."
+            job_ids = [job["id"] for job in high_fit_jobs]
+            return await insert_nudge_if_new(user_id, msg, job_ids)
+        else:
+            msg = "You have not applied this week. Pick one saved role and send an application today."
+            return await insert_nudge_if_new(user_id, msg)
+
 
     # Rule 4: High-Fit Saved Jobs
     high_fit_jobs = await get_high_fit_saved_jobs(user_id)

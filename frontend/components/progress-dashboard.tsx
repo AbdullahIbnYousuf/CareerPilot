@@ -8,6 +8,7 @@ import type {
   DashboardAttention,
   FitScoreDistribution,
   Nudge,
+  SkillGrowth,
   Snapshot,
   SnapshotHistory,
   StatusCounts,
@@ -23,6 +24,7 @@ import {
   Flame,
   Loader2,
   Send,
+  Sparkles,
   Target,
   Trophy,
   Users,
@@ -42,6 +44,7 @@ interface DashboardPayload {
   snapshot?: Snapshot;
   status_counts?: StatusCounts;
   attention?: DashboardAttention;
+  skill_growth?: SkillGrowth;
 }
 
 interface StatsPayload {
@@ -90,6 +93,11 @@ export function ProgressDashboard() {
   const [history, setHistory] = useState<SnapshotHistory[]>([]);
   const [distribution, setDistribution] = useState<FitScoreDistribution[]>([]);
   const [statusDistribution, setStatusDistribution] = useState<StatusDistribution[]>([]);
+  const [skillGrowth, setSkillGrowth] = useState<SkillGrowth>({
+    skills_added_this_week: 0,
+    recent_skills_added: [],
+    profile_skills_count: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -117,6 +125,9 @@ export function ProgressDashboard() {
         setSnapshot(data.snapshot ?? null);
         setStatusCounts(data.status_counts ?? EMPTY_STATUS_COUNTS);
         setAttention(data.attention ?? EMPTY_ATTENTION);
+        if (data.skill_growth) {
+          setSkillGrowth(data.skill_growth);
+        }
       }
     } catch {
       /* keep dashboard resilient when the API is unavailable */
@@ -128,7 +139,20 @@ export function ProgressDashboard() {
       const res = await fetch(`${baseUrl}/dashboard/${uid}/nudges`);
       if (res.ok) {
         const data = (await res.json()) as { nudges?: Nudge[] };
-        setNudges(data.nudges ?? []);
+        let currentNudges = data.nudges ?? [];
+        if (currentNudges.length === 0) {
+          const genRes = await fetch(`${baseUrl}/dashboard/${uid}/nudges/generate`, {
+            method: "POST",
+          });
+          if (genRes.ok) {
+            const res2 = await fetch(`${baseUrl}/dashboard/${uid}/nudges`);
+            if (res2.ok) {
+              const data2 = (await res2.json()) as { nudges?: Nudge[] };
+              currentNudges = data2.nudges ?? [];
+            }
+          }
+        }
+        setNudges(currentNudges);
       }
     } catch {
       /* keep dashboard resilient when the API is unavailable */
@@ -323,6 +347,20 @@ export function ProgressDashboard() {
           helper="Consecutive days with a done task"
           icon={Flame}
           iconClassName="text-orange-300"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-2">
+        <MetricCard
+          title="Skills Added"
+          value={skillGrowth.skills_added_this_week}
+          helper={
+            skillGrowth.recent_skills_added.length > 0
+              ? skillGrowth.recent_skills_added.join(", ")
+              : `${skillGrowth.profile_skills_count} profile skills tracked`
+          }
+          icon={Sparkles}
+          iconClassName="text-violet-300"
         />
       </div>
 

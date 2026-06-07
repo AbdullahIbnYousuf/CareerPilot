@@ -90,6 +90,12 @@ export interface DashboardAttention {
   interviews: number;
 }
 
+export interface SkillGrowth {
+  skills_added_this_week: number;
+  recent_skills_added: string[];
+  profile_skills_count: number;
+}
+
 export interface Nudge {
   id: string;
   message: string;
@@ -110,6 +116,7 @@ export interface Goal {
   title: string;
   target_date?: string;
   completed: boolean;
+  target_skill?: string | null;
 }
 
 export interface Todo {
