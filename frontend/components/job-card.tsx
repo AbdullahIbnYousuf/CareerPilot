@@ -20,16 +20,61 @@ import {
 import { supabase } from "@/lib/supabase";
 import type { Job } from "@/types";
 
+type ScoreUpdate = Pick<Job, "scored_cv_id" | "fit_score_calculated_at" | "fit_score_version">;
+
+interface ScoreResponse extends ScoreUpdate {
+  fit_score: number;
+  fit_explanation: string;
+}
+
+const htmlEntities: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+function decodeHtmlEntities(value: string) {
+  return value.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
+    if (entity.startsWith("#x")) {
+      const codePoint = Number.parseInt(entity.slice(2), 16);
+      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+    }
+
+    if (entity.startsWith("#")) {
+      const codePoint = Number.parseInt(entity.slice(1), 10);
+      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+    }
+
+    return htmlEntities[entity] ?? match;
+  });
+}
+
+function cleanJobDescription(description: string | null | undefined) {
+  const raw = description ?? "";
+  const withBreaks = raw.replace(/<\/?(br|p|div|li|ul|ol|section|article|h[1-4])[^>]*>/gi, "\n");
+
+  return decodeHtmlEntities(withBreaks.replace(/<[^>]+>/g, " "))
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t\r\f\v]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function JobCard({
   job,
   onScoreUpdated,
 }: {
   job: Job;
-  onScoreUpdated?: (jobId: string, fitScore: number, fitExplanation: string) => void;
+  onScoreUpdated?: (jobId: string, fitScore: number, fitExplanation: string, scoreUpdate: ScoreUpdate) => void;
 }) {
   const [showModal, setShowModal] = useState(false);
   const [savedToTracker, setSavedToTracker] = useState(false);
   const [savingToTracker, setSavingToTracker] = useState(false);
+  const [saveToTrackerError, setSaveToTrackerError] = useState("");
 
   // Local score states
   const [localFitScore, setLocalFitScore] = useState<number | null>(job.fit_score ?? null);
@@ -40,6 +85,7 @@ export function JobCard({
   // Sync state in render if props change (e.g. after parent batch calculations)
   const [prevJobScore, setPrevJobScore] = useState<number | undefined | null>(job.fit_score);
   const [prevJobExplanation, setPrevJobExplanation] = useState<string | undefined | null>(job.fit_explanation);
+  const hasFitScore = typeof localFitScore === "number";
 
   if (job.fit_score !== prevJobScore || job.fit_explanation !== prevJobExplanation) {
     setPrevJobScore(job.fit_score);
@@ -51,18 +97,22 @@ export function JobCard({
   const salary = job.salary_range || "Not Disclosed";
   const deadline = job.deadline || "Rolling / Open";
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const cleanDescription = cleanJobDescription(job.description);
 
   const handleSaveToTracker = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (savedToTracker || savingToTracker || !job.id) return;
 
     setSavingToTracker(true);
+    setSaveToTrackerError("");
     try {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id;
-      if (!userId || !job.id) return;
+      if (!userId || !job.id) {
+        throw new Error("Please sign in to save jobs to your tracker.");
+      }
 
-      await fetch(`${baseUrl}/tracker/applications`, {
+      const response = await fetch(`${baseUrl}/tracker/applications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -71,9 +121,21 @@ export function JobCard({
           status: "saved",
         }),
       });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to save job to tracker.");
+      }
+
+      const data = await response.json();
+      if (!data.application?.id) {
+        throw new Error("Tracker did not confirm the saved job.");
+      }
+
       setSavedToTracker(true);
-    } catch {
-      // silently fail
+    } catch (err) {
+      setSavedToTracker(false);
+      setSaveToTrackerError(err instanceof Error ? err.message : "Failed to save job to tracker.");
     } finally {
       setSavingToTracker(false);
     }
@@ -100,12 +162,16 @@ export function JobCard({
         throw new Error(errData.detail || "Failed to calculate fit score");
       }
 
-      const scoreData = await response.json();
+      const scoreData: ScoreResponse = await response.json();
       setLocalFitScore(scoreData.fit_score);
       setLocalFitExplanation(scoreData.fit_explanation);
 
       if (onScoreUpdated) {
-        onScoreUpdated(job.id, scoreData.fit_score, scoreData.fit_explanation);
+        onScoreUpdated(job.id, scoreData.fit_score, scoreData.fit_explanation, {
+          scored_cv_id: scoreData.scored_cv_id,
+          fit_score_calculated_at: scoreData.fit_score_calculated_at,
+          fit_score_version: scoreData.fit_score_version,
+        });
       }
     } catch (err) {
       setFitScoreError(err instanceof Error ? err.message : "An error occurred");
@@ -139,7 +205,7 @@ export function JobCard({
                 </span>
               </div>
             </div>
-            {localFitScore !== null && localFitScore > 0 && (
+            {hasFitScore && (
               <div className="shrink-0">
                 <FitScoreBadge score={localFitScore} explanation={localFitExplanation ?? undefined} />
               </div>
@@ -162,7 +228,7 @@ export function JobCard({
 
         {/* Description */}
         <div className="px-5 flex-1">
-          <p className="text-sm text-white/40 line-clamp-3 leading-relaxed">{job.description}</p>
+          <p className="text-sm text-white/40 line-clamp-3 leading-relaxed">{cleanDescription}</p>
         </div>
 
         {/* Footer */}
@@ -170,14 +236,14 @@ export function JobCard({
           <span className="text-[10px] text-white/20 bg-white/[0.04] px-2 py-0.5 rounded-md font-mono uppercase tracking-wider">
             {job.source}
           </span>
-          <div className="flex gap-2 ml-auto items-center">
+          <div className="flex flex-wrap justify-end gap-2 ml-auto items-center min-w-0">
             {/* Save to Tracker button */}
             {job.id && (
               <button
                 onClick={handleSaveToTracker}
                 disabled={savingToTracker || savedToTracker}
-                title={savedToTracker ? "Saved to tracker" : "Save to tracker"}
-                className={`h-7 flex items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium border transition-all duration-200 ${
+                title={savedToTracker ? "Saved to Tracker" : "Save to Tracker"}
+                className={`h-7 inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium border transition-all duration-200 ${
                   savedToTracker
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
                     : "border-white/[0.06] bg-white/[0.02] text-white/40 hover:text-white/70 hover:border-primary/30 hover:bg-primary/10"
@@ -185,13 +251,13 @@ export function JobCard({
               >
                 {savedToTracker ? (
                   <>
-                    <Check className="h-3 w-3" />
-                    Saved
+                    <Check className="h-3 w-3 shrink-0" />
+                    Saved to Tracker
                   </>
                 ) : (
                   <>
-                    <BookmarkPlus className="h-3 w-3" />
-                    Save
+                    <BookmarkPlus className="h-3 w-3 shrink-0" />
+                    Save to Tracker
                   </>
                 )}
               </button>
@@ -214,6 +280,9 @@ export function JobCard({
             </a>
           </div>
         </div>
+        {saveToTrackerError && (
+          <p className="px-5 pb-4 -mt-3 text-xs text-red-400">{saveToTrackerError}</p>
+        )}
       </div>
 
       {/* ── Detail Modal ── */}
@@ -250,7 +319,7 @@ export function JobCard({
             {/* Modal body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
               {/* Fit score calculation section */}
-              {localFitScore !== null && localFitScore > 0 ? (
+              {hasFitScore ? (
                 <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
                   <div className="shrink-0">
                     <FitScoreBadge score={localFitScore} />
@@ -306,13 +375,13 @@ export function JobCard({
                   <Briefcase className="h-3.5 w-3.5" /> Job Description
                 </h3>
                 <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-sm text-white/50 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
-                  {job.description}
+                  {cleanDescription}
                 </div>
               </div>
             </div>
 
             {/* Modal footer */}
-            <div className="p-4 border-t border-white/[0.06] flex justify-end gap-2 bg-white/[0.02]">
+            <div className="p-4 border-t border-white/[0.06] flex flex-col-reverse gap-2 bg-white/[0.02] sm:flex-row sm:justify-end">
               <Button variant="ghost" size="sm" onClick={() => setShowModal(false)} className="text-white/40 hover:text-white">
                 Close
               </Button>
@@ -320,16 +389,16 @@ export function JobCard({
                 <button
                   onClick={handleSaveToTracker}
                   disabled={savingToTracker || savedToTracker}
-                  className={`inline-flex items-center gap-1.5 rounded-lg border text-sm font-medium px-4 py-2 transition-all duration-200 ${
+                  className={`inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg border text-sm font-medium px-4 py-2 transition-all duration-200 ${
                     savedToTracker
                       ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
                       : "border-white/[0.08] bg-white/[0.04] text-white/60 hover:text-white hover:border-primary/40 hover:bg-primary/10"
                   } disabled:opacity-60`}
                 >
                   {savedToTracker ? (
-                    <><Check className="h-4 w-4" /> Saved to Tracker</>
+                    <><Check className="h-4 w-4 shrink-0" /> Saved to Tracker</>
                   ) : (
-                    <><BookmarkPlus className="h-4 w-4" /> Add to Tracker</>
+                    <><BookmarkPlus className="h-4 w-4 shrink-0" /> Save to Tracker</>
                   )}
                 </button>
               )}
@@ -337,11 +406,14 @@ export function JobCard({
                 href={job.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
+                className="inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
               >
-                Apply Now <ExternalLink className="h-3.5 w-3.5" />
+                Apply Now <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               </a>
             </div>
+            {saveToTrackerError && (
+              <p className="px-4 pb-4 -mt-2 text-right text-xs text-red-400">{saveToTrackerError}</p>
+            )}
           </div>
         </div>
       )}

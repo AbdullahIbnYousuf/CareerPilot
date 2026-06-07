@@ -11,16 +11,21 @@ Agent State and Graph structure built with LangGraph:
   Conditional Edge: should_retry
 """
 
+import asyncio
+import html
+import logging
 import os
-import json
+import re
 import httpx
-import hashlib
+from datetime import datetime
+from html.parser import HTMLParser
 from typing import TypedDict, List, Dict, Any, Literal
 from langchain_core.tools import tool
 from langgraph.graph import StateGraph, END
 
+from db.supabase import supabase
 from services.cache import get_cached_jobs, cache_jobs
-from services.fit_score import compute_fit_score
+from services.fit_score import FIT_SCORE_VERSION, compute_fit_score, generate_fit_explanations, get_active_cv_id
 from services.searcher import hybrid_search
 from groq import Groq
 
@@ -29,6 +34,50 @@ JSEARCH_API_KEY: str = os.environ.get("JSEARCH_API_KEY", "")
 TAVILY_API_KEY: str  = os.environ.get("TAVILY_API_KEY", "")
 _groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 _MODEL = "llama-3.3-70b-versatile"
+logger = logging.getLogger(__name__)
+
+
+class _HTMLToTextParser(HTMLParser):
+    block_tags = {"br", "div", "p", "li", "ul", "ol", "section", "article", "h1", "h2", "h3", "h4"}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in self.block_tags:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in self.block_tags:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        self.parts.append(data)
+
+    def get_text(self) -> str:
+        return "".join(self.parts)
+
+
+def _clean_job_description(value: Any, max_length: int = 1000) -> str:
+    raw = str(value or "")
+    if not raw:
+        return ""
+
+    parser = _HTMLToTextParser()
+    try:
+        parser.feed(raw)
+        parser.close()
+        text = parser.get_text()
+    except Exception:
+        text = re.sub(r"<[^>]+>", " ", raw)
+
+    text = html.unescape(text)
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"[ \t\r\f\v]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()[:max_length]
 
 
 # ---------------------------------------------------------------------------
@@ -58,7 +107,7 @@ async def _search_jsearch(query: str, location: str = "") -> list[dict]:
             "company":     item.get("employer_name", ""),
             "location":    item.get("job_city", "") or item.get("job_country", ""),
             "url":         item.get("job_apply_link", ""),
-            "description": item.get("job_description", "")[:1000],
+            "description": _clean_job_description(item.get("job_description", "")),
             "source":      "jsearch",
         })
     return jobs
@@ -79,7 +128,7 @@ async def _search_remotive(query: str) -> list[dict]:
             "company":     item.get("company_name", ""),
             "location":    item.get("candidate_required_location", "Remote"),
             "url":         item.get("url", ""),
-            "description": item.get("description", "")[:1000],
+            "description": _clean_job_description(item.get("description", "")),
             "source":      "remotive",
         })
     return jobs
@@ -105,7 +154,7 @@ async def _search_tavily(query: str, location: str = "") -> list[dict]:
             "company":     "",
             "location":    location or "Bangladesh",
             "url":         item.get("url", ""),
-            "description": item.get("content", "")[:1000],
+            "description": _clean_job_description(item.get("content", "")),
             "source":      "tavily",
         })
     return jobs
@@ -223,58 +272,8 @@ async def search_node(state: AgentState) -> Dict[str, Any]:
 
 
 async def filter_node(state: AgentState) -> Dict[str, Any]:
-    """Filter node - keeps first 30 unscored search result jobs and caches in Supabase."""
-    jobs = list(state["jobs"])
-    # Slice first 30 jobs from the search result order (no fit_score sorting)
-    filtered_jobs = jobs[:30]
-
-    from db.supabase import supabase
-    user_id = state["user_id"]
-    enriched_jobs = []
-
-    for job in filtered_jobs:
-        try:
-            title = job.get("title", "")
-            company = job.get("company", "")
-            existing = await supabase.table("jobs").select("id").eq("user_id", user_id).eq("title", title).eq("company", company).execute()
-
-            if existing.data:
-                job_id = existing.data[0]["id"]
-                # If job already exists, reuse its id but do not overwrite existing score/explanation
-            else:
-                # Insert the job into DB without fit_score and fit_explanation
-                insert_data = {
-                    "user_id": user_id,
-                    "title": title,
-                    "company": company,
-                    "location": job.get("location", ""),
-                    "salary_range": job.get("salary_range", "Not Disclosed"),
-                    "deadline": job.get("deadline", "Rolling / Open"),
-                    "description": job.get("description", ""),
-                    "source": job.get("source", "jsearch"),
-                    "url": job.get("url", "")
-                }
-                res = await supabase.table("jobs").insert(insert_data).execute()
-                if res.data:
-                    job_id = res.data[0]["id"]
-                else:
-                    job_id = None
-
-            job_copy = dict(job)
-            if job_id:
-                job_copy["id"] = job_id
-            # Strip fit_score and fit_explanation to guarantee they are unscored initial cards
-            job_copy.pop("fit_score", None)
-            job_copy.pop("fit_explanation", None)
-            enriched_jobs.append(job_copy)
-        except Exception:
-            # Fallback (strip fit score columns too)
-            job_copy = dict(job)
-            job_copy.pop("fit_score", None)
-            job_copy.pop("fit_explanation", None)
-            enriched_jobs.append(job_copy)
-
-    return {"jobs": enriched_jobs}
+    """Keep the first 10 raw search results for scoring and presentation."""
+    return {"jobs": [_sanitize_raw_job(job) for job in list(state["jobs"])[:10]]}
 
 
 def should_retry(state: AgentState) -> Literal["retry", "end"]:
@@ -293,6 +292,219 @@ async def retry_node(state: AgentState) -> Dict[str, Any]:
         "query": broader_query,
         "retries": state["retries"] + 1
     }
+
+
+def _sanitize_raw_job(job: dict) -> dict:
+    job_copy = dict(job)
+    for key in (
+        "id",
+        "user_id",
+        "fit_score",
+        "fit_explanation",
+        "scored_cv_id",
+        "fit_score_calculated_at",
+        "fit_score_version",
+    ):
+        job_copy.pop(key, None)
+    return {
+        "title": job_copy.get("title") or "Untitled role",
+        "company": job_copy.get("company") or "",
+        "location": job_copy.get("location") or "",
+        "url": job_copy.get("url") or "",
+        "description": _clean_job_description(job_copy.get("description")),
+        "source": job_copy.get("source") or "jsearch",
+        "salary_range": job_copy.get("salary_range") or "Not Disclosed",
+        "deadline": job_copy.get("deadline") or "Rolling / Open",
+    }
+
+
+def _unavailable_score_explanation() -> str:
+    return "Fit score is unavailable because the CV evidence could not be scored right now."
+
+
+def _reused_score_explanation(score: int) -> str:
+    return f"Fit score is {score}/100 based on weighted CV similarity across skills, experience, education, and projects."
+
+
+def _is_missing_url_column_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "url" in text and "jobs" in text and (
+        "schema cache" in text
+        or "pgrst204" in text
+        or "42703" in text
+        or "does not exist" in text
+    )
+
+
+def _is_missing_provenance_columns_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "jobs" in text and (
+        "scored_cv_id" in text or "fit_score_calculated_at" in text or "fit_score_version" in text
+    ) and (
+        "schema cache" in text
+        or "pgrst204" in text
+        or "42703" in text
+        or "does not exist" in text
+    )
+
+
+async def _insert_or_reuse_job(raw_job: dict, user_id: str) -> tuple[dict, dict | None]:
+    title = raw_job["title"]
+    company = raw_job["company"]
+    try:
+        existing = await supabase.table("jobs").select(
+            "id, fit_score, fit_explanation, scored_cv_id, fit_score_calculated_at, fit_score_version"
+        ).eq("user_id", user_id).eq("title", title).eq("company", company).execute()
+    except Exception as exc:
+        if not _is_missing_provenance_columns_error(exc):
+            raise
+        try:
+            existing = await supabase.table("jobs").select(
+                "id, fit_score, fit_explanation"
+            ).eq("user_id", user_id).eq("title", title).eq("company", company).execute()
+            for row in existing.data or []:
+                row["scored_cv_id"] = None
+                row["fit_score_calculated_at"] = None
+                row["fit_score_version"] = None
+        except Exception:
+            existing = None
+
+    if existing and existing.data:
+        return {**raw_job, "id": existing.data[0]["id"]}, existing.data[0]
+
+    insert_data = {
+        "user_id": user_id,
+        "title": title,
+        "company": company,
+        "location": raw_job["location"],
+        "salary_range": raw_job["salary_range"],
+        "deadline": raw_job["deadline"],
+        "description": raw_job["description"],
+        "source": raw_job["source"],
+        "url": raw_job["url"],
+    }
+    try:
+        inserted = await supabase.table("jobs").insert(insert_data).execute()
+    except Exception as exc:
+        if not _is_missing_url_column_error(exc):
+            raise
+        fallback_insert_data = dict(insert_data)
+        fallback_insert_data.pop("url", None)
+        inserted = await supabase.table("jobs").insert(fallback_insert_data).execute()
+
+    if inserted.data:
+        return {**raw_job, "id": inserted.data[0]["id"]}, None
+    return raw_job, None
+
+
+def _score_can_be_reused(existing: dict | None, active_cv_id: str) -> bool:
+    if not existing or existing.get("fit_score") is None:
+        return False
+    return (
+        existing.get("scored_cv_id") == active_cv_id
+        and existing.get("fit_score_version") == FIT_SCORE_VERSION
+    )
+
+
+async def _score_and_rank_jobs(raw_jobs: list[dict], user_id: str, search_query: str) -> list[dict]:
+    scored_jobs = []
+    explanation_inputs = []
+    explanation_targets = []
+    active_cv_id = await get_active_cv_id(user_id)
+
+    for raw_job in raw_jobs[:10]:
+        job, existing = await _insert_or_reuse_job(_sanitize_raw_job(raw_job), user_id)
+        existing_score = existing.get("fit_score") if existing else None
+        existing_explanation = existing.get("fit_explanation") if existing else None
+
+        if _score_can_be_reused(existing, active_cv_id):
+            explanation = existing_explanation or _reused_score_explanation(int(existing_score))
+            job_with_existing_score = {
+                **job,
+                "fit_score": existing_score,
+                "fit_explanation": explanation,
+                "scored_cv_id": existing.get("scored_cv_id"),
+                "fit_score_calculated_at": existing.get("fit_score_calculated_at"),
+                "fit_score_version": existing.get("fit_score_version"),
+            }
+            scored_jobs.append(job_with_existing_score)
+            if not existing_explanation and job.get("id"):
+                await supabase.table("jobs").update({
+                    "fit_explanation": explanation,
+                }).eq("id", job["id"]).execute()
+            continue
+
+        try:
+            job_text = "\n".join(
+                value for value in [job.get("title", ""), job.get("description", "")] if value
+            )
+            score_res = await compute_fit_score(
+                job_description=job_text or job.get("title") or "",
+                user_id=user_id,
+                include_explanation=False,
+                search_query=search_query,
+                active_cv_id=active_cv_id,
+            )
+            score = score_res["score"]
+            calculated_at = datetime.utcnow().isoformat()
+            job_with_score = {
+                **job,
+                "fit_score": score,
+                "fit_explanation": score_res["explanation"],
+                "scored_cv_id": score_res["active_cv_id"],
+                "fit_score_calculated_at": calculated_at,
+                "fit_score_version": score_res["fit_score_version"],
+            }
+            scored_jobs.append(job_with_score)
+            explanation_inputs.append({
+                "title": job.get("title", ""),
+                "score": score,
+                "job_description": job_text or job.get("title") or "",
+                "evidence_snippets": score_res.get("evidence_snippets", []),
+            })
+            explanation_targets.append((job_with_score, job.get("id"), calculated_at))
+            await asyncio.sleep(0.25)
+        except Exception as exc:
+            logger.warning(
+                "Fit scoring failed for job '%s' (%s): %s",
+                job.get("title", ""),
+                job.get("id", "no-id"),
+                exc,
+            )
+            scored_jobs.append({
+                **job,
+                "fit_score": None,
+                "fit_explanation": _unavailable_score_explanation(),
+            })
+
+    explanations = generate_fit_explanations(explanation_inputs)
+    for (job, job_id, calculated_at), explanation in zip(explanation_targets, explanations):
+        job["fit_explanation"] = explanation
+        if job_id:
+            try:
+                await supabase.table("jobs").update({
+                    "fit_score": job["fit_score"],
+                    "fit_explanation": explanation,
+                    "scored_cv_id": job["scored_cv_id"],
+                    "fit_score_calculated_at": calculated_at,
+                    "fit_score_version": job["fit_score_version"],
+                }).eq("id", job_id).execute()
+            except Exception as exc:
+                if not _is_missing_provenance_columns_error(exc):
+                    raise
+                await supabase.table("jobs").update({
+                    "fit_score": job["fit_score"],
+                    "fit_explanation": explanation,
+                }).eq("id", job_id).execute()
+
+    return sorted(
+        scored_jobs,
+        key=lambda item: (
+            item.get("fit_score") is not None,
+            item.get("fit_score") or 0,
+        ),
+        reverse=True,
+    )
 
 
 # Build LangGraph workflow
@@ -333,10 +545,10 @@ async def hunt_jobs(query: str, location: str, user_id: str) -> list[dict]:
     Hunt jobs using the compiled LangGraph workflow.
     Checks Upstash Redis cache first.
     """
-    # 1. Check cache first
+    # 1. Check raw search cache first
     cached = await get_cached_jobs(query, location)
     if cached is not None:
-        return cached
+        return await _score_and_rank_jobs(cached, user_id, query)
 
     # 2. Run LangGraph pipeline
     initial_state: AgentState = {
@@ -351,7 +563,7 @@ async def hunt_jobs(query: str, location: str, user_id: str) -> list[dict]:
     final_state = await graph.ainvoke(initial_state)
     jobs = final_state.get("jobs", [])
 
-    # 3. Cache results
+    # 3. Cache raw results, then personalize scores for this user
     await cache_jobs(jobs, query, location)
 
-    return jobs
+    return await _score_and_rank_jobs(jobs, user_id, query)

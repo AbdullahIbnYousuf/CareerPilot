@@ -13,8 +13,12 @@ from datetime import date, timedelta, datetime, timezone
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from db.supabase import supabase
+from services.nudges import generate_nudge_for_user, get_overdue_goals, get_overdue_todos, has_applications_this_week, get_high_fit_saved_jobs, get_goals_due_soon, check_interviewing_without_prep
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
+
+APPLICATION_STATUSES = ["saved", "applied", "interviewing", "offer", "rejected"]
+APPLIED_STATUSES = ["applied", "interviewing", "offer", "rejected"]
 
 
 class SnapshotRequest(BaseModel):
@@ -52,7 +56,7 @@ async def get_dashboard(user_id: str):
     # and applied_at is within the current week.
     apps_sent_result = await supabase.table("applications").select(
         "id, status, applied_at"
-    ).eq("user_id", user_id).in_("status", ["applied", "interviewing", "offer", "rejected"]).execute()
+    ).eq("user_id", user_id).in_("status", APPLIED_STATUSES).execute()
 
     now_utc = datetime.now(timezone.utc)
     # Start of current week (Monday 00:00:00 UTC)
@@ -73,12 +77,27 @@ async def get_dashboard(user_id: str):
     # 3. Compute streak_days live:
     # use todos completed_at dates, grouped by local date or UTC date consistently.
     # Count consecutive days ending today if today has a completed task, otherwise ending yesterday.
-    todos_completed_result = await supabase.table("todos").select(
-        "completed_at"
-    ).eq("user_id", user_id).eq("completed", True).execute()
+    try:
+        todos_completed_result = await supabase.table("todos").select(
+            "completed_at"
+        ).eq("user_id", user_id).eq("completed", True).execute()
+        todos_completed_data = todos_completed_result.data or []
+    except Exception as exc:
+        exc_str = str(exc).lower()
+        if "completed_at" in exc_str or "42703" in exc_str or "does not exist" in exc_str:
+            fallback_res = await supabase.table("todos").select(
+                "due_date"
+            ).eq("user_id", user_id).eq("completed", True).execute()
+            todos_completed_data = []
+            for t in (fallback_res.data or []):
+                todos_completed_data.append({
+                    "completed_at": t.get("due_date")
+                })
+        else:
+            raise
 
     completed_dates = set()
-    for t in (todos_completed_result.data or []):
+    for t in todos_completed_data:
         completed_at_str = t.get("completed_at")
         if completed_at_str:
             try:
@@ -125,24 +144,113 @@ async def get_dashboard(user_id: str):
         "status"
     ).eq("user_id", user_id).execute()
 
-    status_counts: dict[str, int] = {
-        "saved": 0, "applied": 0, "interviewing": 0, "offer": 0, "rejected": 0
-    }
+    status_counts: dict[str, int] = {status: 0 for status in APPLICATION_STATUSES}
     for app in (apps_result.data or []):
         s = app.get("status", "")
         if s in status_counts:
             status_counts[s] += 1
 
-    # 6. New matches count from jobs table (fit_score >= 70)
+    # 6. Attention metrics for the dashboard insight row
+    saved_apps_result = await supabase.table("applications").select(
+        "job_id"
+    ).eq("user_id", user_id).eq("status", "saved").execute()
+
+    saved_job_ids = [
+        app["job_id"]
+        for app in (saved_apps_result.data or [])
+        if app.get("job_id")
+    ]
+
+    high_fit_saved = 0
+    if saved_job_ids:
+        high_fit_saved_result = await supabase.table("jobs").select(
+            "id"
+        ).eq("user_id", user_id).in_("id", saved_job_ids).gte(
+            "fit_score", 70
+        ).execute()
+        high_fit_saved = len(high_fit_saved_result.data or [])
+
+    today_iso = now_utc.date().isoformat()
+    overdue_tasks_result = await supabase.table("todos").select(
+        "id"
+    ).eq("user_id", user_id).eq("completed", False).not_.is_(
+        "due_date", "null"
+    ).lt("due_date", today_iso).execute()
+
+    goals_result = await supabase.table("goals").select(
+        "completed"
+    ).eq("user_id", user_id).execute()
+
+    goals_data = goals_result.data or []
+    completed_goals = sum(1 for goal in goals_data if goal.get("completed"))
+    active_goals = len(goals_data) - completed_goals
+
+    attention = {
+        "high_fit_saved": high_fit_saved,
+        "overdue_tasks": len(overdue_tasks_result.data or []),
+        "active_goals": active_goals,
+        "completed_goals": completed_goals,
+        "interviews": status_counts["interviewing"],
+    }
+
+    # 7. New matches count from jobs table (fit_score >= 70). Kept for compatibility.
     new_matches_result = await supabase.table("jobs").select(
         "id"
     ).eq("user_id", user_id).gte("fit_score", 70).execute()
 
+    # 8. Skill growth: count events this week + recent skill names + profile total
+    skills_added_this_week = 0
+    recent_skills_added: list[str] = []
+    profile_skills_count = 0
+
+    try:
+        skill_events_res = await supabase.table("profile_skill_events").select(
+            "skill, created_at"
+        ).eq("user_id", user_id).eq("event_type", "added").order(
+            "created_at", desc=True
+        ).execute()
+
+        all_events = skill_events_res.data or []
+
+        for evt in all_events:
+            evt_str = evt.get("created_at", "")
+            if evt_str:
+                try:
+                    dt_str = evt_str.replace("Z", "+00:00")
+                    evt_dt = datetime.fromisoformat(dt_str)
+                    if evt_dt >= start_of_week:
+                        skills_added_this_week += 1
+                        if len(recent_skills_added) < 3:
+                            recent_skills_added.append(evt.get("skill", ""))
+                except Exception:
+                    pass
+    except Exception:
+        # Table may not exist yet — degrade gracefully
+        pass
+
+    try:
+        profile_res = await supabase.table("profiles").select(
+            "skills"
+        ).eq("user_id", user_id).execute()
+        if profile_res.data:
+            profile_skills_count = len(profile_res.data[0].get("skills") or [])
+    except Exception:
+        pass
+
+    skill_growth = {
+        "skills_added_this_week": skills_added_this_week,
+        "recent_skills_added": recent_skills_added,
+        "profile_skills_count": profile_skills_count,
+    }
+
     return {
         "snapshot":      computed_snapshot,
         "status_counts": status_counts,
+        "attention":     attention,
         "new_matches":   len(new_matches_result.data or []),
+        "skill_growth":  skill_growth,
     }
+
 
 
 @router.get("/{user_id}/stats")
@@ -173,9 +281,36 @@ async def get_stats_history(user_id: str):
         {"range": "85+",   "count": sum(1 for s in scores if s >= 85)},
     ]
 
+    apps_result = await supabase.table("applications").select(
+        "status"
+    ).eq("user_id", user_id).execute()
+
+    status_counts: dict[str, int] = {status: 0 for status in APPLICATION_STATUSES}
+    for app in (apps_result.data or []):
+        status = app.get("status", "")
+        if status in status_counts:
+            status_counts[status] += 1
+
+    status_labels = {
+        "saved": "Saved",
+        "applied": "Applied",
+        "interviewing": "Interviewing",
+        "offer": "Offer",
+        "rejected": "Rejected",
+    }
+    status_distribution = [
+        {
+            "status": status,
+            "label": status_labels[status],
+            "count": status_counts[status],
+        }
+        for status in APPLICATION_STATUSES
+    ]
+
     return {
-        "snapshots":    snapshots,
-        "distribution": distribution,
+        "snapshots":           snapshots,
+        "distribution":        distribution,
+        "status_distribution": status_distribution,
     }
 
 
@@ -196,16 +331,108 @@ async def save_snapshot(req: SnapshotRequest):
     return {"snapshot": result.data[0]}
 
 
+async def _is_nudge_stale(user_id: str, nudge: dict) -> bool:
+    """
+    Return True if the condition that triggered this nudge no longer applies,
+    meaning the nudge should be auto-dismissed.
+    We classify by matching message patterns — fast and LLM-free.
+    """
+    msg = nudge.get("message", "")
+
+    # Rule 1: overdue goal
+    if "is overdue" in msg and "goal" in msg.lower():
+        still_overdue = await get_overdue_goals(user_id)
+        return len(still_overdue) == 0
+
+    # Rule 2: overdue todo
+    if "is overdue" in msg and "goal" not in msg.lower():
+        still_overdue = await get_overdue_todos(user_id)
+        return len(still_overdue) == 0
+
+    # Rule 3: no applications this week
+    if "not applied this week" in msg:
+        has_apps = await has_applications_this_week(user_id)
+        return has_apps  # stale if user has now applied
+
+    # Rule 4: high-fit saved jobs
+    if "saved jobs above 70% fit" in msg:
+        high_fit = await get_high_fit_saved_jobs(user_id)
+        return len(high_fit) == 0
+
+    # Rule 5: goal due soon
+    if "due soon" in msg:
+        due_soon = await get_goals_due_soon(user_id, days=3)
+        return len(due_soon) == 0
+
+    # Rule 6: interviewing without prep
+    if "interview-stage" in msg:
+        needs_prep = await check_interviewing_without_prep(user_id)
+        return not needs_prep
+
+    return False
+
+
 @router.get("/{user_id}/nudges")
 async def get_nudges(user_id: str):
-    """Fetch unseen AI nudges for the user."""
+    """Fetch unseen AI nudges for the user, auto-dismissing any that are stale."""
     result = await supabase.table("nudges").select(
         "id, message, job_ids, seen"
     ).eq("user_id", user_id).eq("seen", False).order(
         "created_at", desc=True
     ).execute()
 
-    return {"nudges": result.data or []}
+    unseen = result.data or []
+
+    fresh: list[dict] = []
+    stale_ids: list[str] = []
+
+    for nudge in unseen:
+        if await _is_nudge_stale(user_id, nudge):
+            stale_ids.append(nudge["id"])
+        else:
+            fresh.append(nudge)
+
+    # Bulk-mark stale nudges as seen so they never re-appear
+    if stale_ids:
+        await supabase.table("nudges").update({"seen": True}).in_("id", stale_ids).execute()
+
+    # Enrich fresh nudges with job details if job_ids exist
+    all_job_ids = set()
+    for nudge in fresh:
+        jids = nudge.get("job_ids")
+        if jids:
+            for jid in jids:
+                if jid:
+                    all_job_ids.add(str(jid))
+
+    jobs_map = {}
+    if all_job_ids:
+        try:
+            jobs_res = await supabase.table("jobs").select(
+                "id, title, company, fit_score, url"
+            ).in_("id", list(all_job_ids)).execute()
+            if jobs_res.data:
+                jobs_map = {j["id"]: j for j in jobs_res.data}
+        except Exception:
+            try:
+                jobs_res = await supabase.table("jobs").select(
+                    "id, title, company, fit_score"
+                ).in_("id", list(all_job_ids)).execute()
+                if jobs_res.data:
+                    jobs_map = {j["id"]: {**j, "url": ""} for j in jobs_res.data}
+            except Exception:
+                pass
+
+    for nudge in fresh:
+        nudge_jobs = []
+        jids = nudge.get("job_ids")
+        if jids:
+            for jid in jids:
+                if str(jid) in jobs_map:
+                    nudge_jobs.append(jobs_map[str(jid)])
+        nudge["jobs"] = nudge_jobs
+
+    return {"nudges": fresh}
 
 
 @router.patch("/nudges/{nudge_id}/seen")
@@ -219,3 +446,13 @@ async def mark_nudge_seen(nudge_id: str):
         raise HTTPException(status_code=404, detail="Nudge not found.")
 
     return {"status": "updated"}
+
+
+@router.post("/{user_id}/nudges/generate")
+async def generate_nudge(user_id: str):
+    """
+    Generate at most one new rule-based nudge for a user based on priorities.
+    Returns the inserted nudge or {"nudge": null}.
+    """
+    nudge = await generate_nudge_for_user(user_id)
+    return {"nudge": nudge}

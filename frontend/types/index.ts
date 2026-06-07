@@ -6,8 +6,11 @@ export interface Job {
   url: string;
   description: string;
   source: string;
-  fit_score?: number;
-  fit_explanation?: string;
+  fit_score?: number | null;
+  fit_explanation?: string | null;
+  scored_cv_id?: string | null;
+  fit_score_calculated_at?: string | null;
+  fit_score_version?: string | null;
   salary_range?: string;
   deadline?: string;
 }
@@ -15,6 +18,13 @@ export interface Job {
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ApplicationStatus =
@@ -29,13 +39,15 @@ export interface Application {
   user_id: string;
   job_id: string;
   status: ApplicationStatus;
-  applied_at: string;
+  applied_at: string | null;
+  notes?: string | null;
   // Joined from jobs table
   title?: string;
   company?: string;
   location?: string;
   url?: string;
-  fit_score?: number;
+  fit_score?: number | null;
+  deadline?: string | null;
 }
 
 export interface Snapshot {
@@ -56,6 +68,12 @@ export interface FitScoreDistribution {
   count: number;
 }
 
+export interface StatusDistribution {
+  status: ApplicationStatus;
+  label: string;
+  count: number;
+}
+
 export interface StatusCounts {
   saved: number;
   applied: number;
@@ -64,11 +82,32 @@ export interface StatusCounts {
   rejected: number;
 }
 
+export interface DashboardAttention {
+  high_fit_saved: number;
+  overdue_tasks: number;
+  active_goals: number;
+  completed_goals: number;
+  interviews: number;
+}
+
+export interface SkillGrowth {
+  skills_added_this_week: number;
+  recent_skills_added: string[];
+  profile_skills_count: number;
+}
+
 export interface Nudge {
   id: string;
   message: string;
   seen: boolean;
   job_ids?: string[];
+  jobs?: {
+    id: string;
+    title: string;
+    company: string;
+    fit_score?: number | null;
+    url?: string;
+  }[];
 }
 
 export interface Goal {
@@ -77,6 +116,7 @@ export interface Goal {
   title: string;
   target_date?: string;
   completed: boolean;
+  target_skill?: string | null;
 }
 
 export interface Todo {
@@ -86,4 +126,75 @@ export interface Todo {
   title: string;
   due_date?: string;
   completed: boolean;
+  completed_at?: string | null;
+}
+
+export interface ProfileLink {
+  label: string;
+  url: string;
+}
+
+export interface ProfileExperience {
+  title: string;
+  company: string;
+  location: string;
+  start_date: string;
+  end_date: string;
+  description: string;
+}
+
+export interface ProfileEducation {
+  institution: string;
+  degree: string;
+  field: string;
+  start_year: string;
+  end_year: string;
+  details: string;
+}
+
+export interface ProfileProject {
+  title: string;
+  description: string;
+  technologies: string[];
+  url: string;
+}
+
+export interface ProfilePayload {
+  full_name: string;
+  headline: string;
+  location: string;
+  email: string;
+  phone: string;
+  links: ProfileLink[];
+  summary: string;
+  skills: string[];
+  experience: ProfileExperience[];
+  education: ProfileEducation[];
+  projects: ProfileProject[];
+  certifications: string[];
+}
+
+export interface UserProfile extends ProfilePayload {
+  user_id: string;
+  active_cv_id?: string | null;
+  raw_sections: Record<string, string>;
+  generated_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface CVUploadResult {
+  cv_id: string;
+  file_name: string;
+  file_url: string | null;
+  parsed_data: {
+    skills: string;
+    experience: string;
+    education: string;
+    projects: string;
+  };
+  profile: UserProfile;
+  chunks_stored: number;
+  parsed_at: string;
+  message: string;
 }

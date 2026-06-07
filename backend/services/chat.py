@@ -9,6 +9,7 @@ Handles business logic for conversational assistant:
 
 import os
 import json
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 from groq import Groq
 from db.supabase import supabase
@@ -16,6 +17,49 @@ from db.supabase import supabase
 _groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 _MODEL = "llama-3.3-70b-versatile"
 _MEMORY_LIMIT = 10
+_DEFAULT_SESSION_TITLE = "New conversation"
+_SESSION_TITLE_LIMIT = 42
+
+
+def _now_iso() -> str:
+    """Return a timezone-aware timestamp for Supabase updates."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _title_from_message(message: str) -> str:
+    """Derive the persisted session title from the first user message."""
+    title = " ".join(message.strip().split())
+    if not title:
+        return _DEFAULT_SESSION_TITLE
+    if len(title) > _SESSION_TITLE_LIMIT:
+        return f"{title[:_SESSION_TITLE_LIMIT]}..."
+    return title
+
+
+async def ensure_chat_session(user_id: str, session_id: str, message: str) -> None:
+    """Create or refresh the durable chat session row."""
+    existing = await supabase.table("chat_sessions").select(
+        "title"
+    ).eq("id", session_id).eq("user_id", user_id).limit(1).execute()
+
+    rows = existing.data or []
+    if rows:
+        update_payload = {"updated_at": _now_iso()}
+        if rows[0].get("title") == _DEFAULT_SESSION_TITLE:
+            update_payload["title"] = _title_from_message(message)
+
+        await supabase.table("chat_sessions").update(
+            update_payload
+        ).eq("id", session_id).eq("user_id", user_id).execute()
+        return
+
+    await supabase.table("chat_sessions").insert({
+        "id":         session_id,
+        "user_id":    user_id,
+        "title":      _title_from_message(message),
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }).execute()
 
 
 async def get_chat_history(user_id: str, session_id: str) -> list[dict]:
@@ -66,7 +110,8 @@ async def stream_chat(
         groq_messages.append({"role": msg["role"], "content": msg["content"]})
     groq_messages.append({"role": "user", "content": message})
 
-    # 3. Save user's question to Supabase
+    # 3. Ensure durable session tab and save user's question to Supabase
+    await ensure_chat_session(user_id, session_id, message)
     await save_message(user_id, session_id, "user", message)
 
     # 4. Stream response from Groq

@@ -10,15 +10,15 @@ load_dotenv()
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 
-async def test_voyage():
-    print("Testing Voyage AI Embedding...")
+async def test_gemini_embeddings():
+    print("Testing Gemini Embeddings...")
     try:
         from services.embedder import embed_query
         emb = embed_query("Python Developer")
-        print(f"  [SUCCESS] Voyage AI works! Vector dimensions: {len(emb)}")
+        print(f"  [SUCCESS] Gemini embeddings work! Vector dimensions: {len(emb)}")
         return True
     except Exception as e:
-        print(f"  [ERROR] Voyage AI failed: {e}")
+        print(f"  [ERROR] Gemini embeddings failed: {e}")
         return False
 
 
@@ -98,7 +98,7 @@ async def main():
     print("=" * 60)
     
     results = {}
-    results["Voyage AI"] = await test_voyage()
+    results["Gemini Embeddings"] = await test_gemini_embeddings()
     results["Upstash Redis"] = await test_redis()
     results["Groq"] = await test_groq()
     results["JSearch"] = await test_jsearch()

@@ -8,7 +8,7 @@ Base prefix: `/api/cv`
 
 ### POST /api/cv/upload
 
-Upload and parse a CV file. Stores the file in Supabase Storage, saves metadata to `cvs`, chunks by section, generates Voyage AI embeddings, and stores chunks in `cv_chunks`.
+Upload and parse a CV file. Stores the file in Supabase Storage, saves metadata to `cvs`, chunks by section, generates Gemini embeddings, and stores chunks in `cv_chunks`.
 
 **Request:**
 
@@ -120,8 +120,7 @@ Get a specific CV by ID.
 ## Environment Variables Required
 
 ```
-GOOGLE_API_KEY=          # For Gemini 2.0 Flash (PDF + DOCX parsing)
-VOYAGE_API_KEY=          # For voyage-3 embeddings
+GOOGLE_API_KEY=          # For Gemini parsing, profile extraction, and embeddings
 SUPABASE_URL=            # e.g. https://xxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=  # From Supabase Dashboard > Settings > API
 ```
@@ -139,7 +138,7 @@ SUPABASE_SERVICE_ROLE_KEY=  # From Supabase Dashboard > Settings > API
 - `user_id` is a query parameter — real JWT auth added Day 6
 - Only one CV per user (old CV is replaced on upload)
 - File is stored privately — signed URLs may be needed for display
-- Voyage AI free tier: 50M tokens/month
+- Gemini `gemini-embedding-001` uses `GOOGLE_API_KEY` and produces 768-dimensional vectors
 
 ## Day 4 Will Add
 

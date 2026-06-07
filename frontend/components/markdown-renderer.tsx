@@ -169,7 +169,7 @@ export function MarkdownRenderer({
       // Numbered list — collect consecutive numbered items
       if (line.match(/^\d+\.\s+/)) {
         const items: string[] = [];
-        let startNum = i;
+        const startNum = i;
         while (i < lines.length && lines[i].match(/^\d+\.\s+/)) {
           items.push(lines[i].replace(/^\d+\.\s+/, ""));
           i++;

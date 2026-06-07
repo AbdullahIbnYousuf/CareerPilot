@@ -14,16 +14,16 @@
 | Reasoning LLM   | Gemini 2.0 Flash                             | ✅ Locked |
 | PDF Parser      | Gemini 2.0 Flash (multimodal)                | ✅ Locked |
 | DOCX Parser     | python-docx                                  | ✅ Locked |
-| Embeddings      | Voyage AI voyage-3                           | ✅ Locked |
+| Embeddings      | Gemini gemini-embedding-001                  | ✅ Locked |
 | Vector DB       | Supabase pgvector                            | ✅ Locked |
 | Vector Search   | Hybrid dense + BM25 + RRF                    | ✅ Locked |
 | Job Search      | JSearch + Remotive + Tavily                  | ✅ Locked |
 | Agent           | LangGraph                                    | ✅ Locked |
 | Caching         | Upstash Redis                                | ✅ Locked |
 | Chat Memory     | Supabase `chat_messages` table               | ✅ Locked |
-| AI Nudges       | Supabase pg_cron                             | ✅ Locked |
+| Suggested nudges | Rule-based generator + Supabase Realtime; scheduler later | ✅ Locked |
 | Frontend        | Next.js 14 App Router + Tailwind + shadcn/ui | ✅ Locked |
-| Kanban          | dnd-kit                                      | ✅ Locked |
+| Applications DnD | dnd-kit                                     | ✅ Locked |
 | Charts          | Recharts                                     | ✅ Locked |
 | Backend         | FastAPI (Python 3.11)                        | ✅ Locked |
 | CV Scope        | Upload only — PDF and DOCX                   | ✅ Locked |
@@ -169,26 +169,34 @@ An in-platform CV builder done well requires 3–4 days minimum (rich text edito
 
 | Choice      | Model                | Free Tier                    | Why                                                                                               |
 | ----------- | -------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
-| ✅ Selected | Voyage AI `voyage-3` | 200M tokens — no credit card | Purpose-built for RAG retrieval. Outperforms OpenAI on retrieval benchmarks. Generous free limit. |
+| ✅ Selected | Gemini `gemini-embedding-001` | Free tier through Google AI Studio | Reuses the existing Gemini API key and produces 768-dimensional vectors for pgvector. |
 
 **Rejected:** OpenAI `text-embedding-3-small` — paid, requires credit card upfront.
 
 ```bash
-pip install voyageai
+pip install google-generativeai
 ```
 
 ```python
-import voyageai
+import google.generativeai as genai
 
-vo = voyageai.Client()
+genai.configure(api_key=GOOGLE_API_KEY)
 
 def embed_chunks(chunks: list[str]) -> list[list[float]]:
-    result = vo.embed(chunks, model="voyage-3", input_type="document")
-    return result.embeddings
+    result = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=chunks,
+        task_type="retrieval_document",
+    )
+    return result["embedding"]
 
 def embed_query(query: str) -> list[float]:
-    result = vo.embed([query], model="voyage-3", input_type="query")
-    return result.embeddings[0]
+    result = genai.embed_content(
+        model="models/gemini-embedding-001",
+        content=query,
+        task_type="retrieval_query",
+    )
+    return result["embedding"]
 ```
 
 ---
@@ -249,7 +257,7 @@ create table cv_chunks (
   cv_id uuid,
   section text,
   content text,
-  embedding vector(1024),
+  embedding vector(768),
   fts tsvector generated always as (to_tsvector('english', content)) stored,
   created_at timestamptz default now()
 );
@@ -260,7 +268,7 @@ create index on cv_chunks using gin (fts);
 
 -- Hybrid search stored procedure (RRF merge)
 create or replace function hybrid_search(
-  query_embedding vector(1024),
+  query_embedding vector(768),
   query_text text,
   match_count int,
   p_user_id uuid
@@ -570,6 +578,34 @@ async def chat(user_id: str, session_id: str, user_message: str, cv_context: str
 
 ## 10. AI Nudges — Proactive Reminders
 
+### Current V1 Direction
+
+V1 nudges are deterministic rule-based suggestions, not LLM-generated messages.
+They should read like normal product guidance and must not show `AI Nudge:` as
+visible copy.
+
+The backend may expose `POST /dashboard/{user_id}/nudges/generate` for manual
+demo/testing, but that trigger must not be visible in the normal production UI.
+A scheduler such as Supabase `pg_cron` can call the generator later.
+
+Rule priority:
+
+1. Overdue goal
+2. Overdue todo
+3. No applications this week
+4. Saved high-fit jobs not applied
+5. Goal due soon
+6. Interviewing application without prep task
+7. Positive task streak reinforcement
+
+The nudge row is inserted -> Supabase Realtime fires -> frontend banner appears.
+No polling is required.
+
+### Legacy pg_cron SQL Note
+
+The older SQL-first nudge sketch below is retained only as historical context.
+The current implementation direction is the rule-based generator above.
+
 The problem statement requires: _"Agent proactively reminds: 'You haven't applied this week. Here are 3 openings matching your profile.'"_
 
 Proactive = runs on a schedule, not on user request. Use Supabase `pg_cron` (built-in, no new service).
@@ -788,7 +824,7 @@ npm install lucide-react                       # Icons (already with shadcn)
 | Job Hunter      | `/jobs`    | Search bar, job cards grid, fit score badge            |
 | CV Intelligence | `/cv`      | Upload dropzone, parsed sections preview               |
 | AI Assistant    | `/chat`    | Chat interface with streaming, session switcher        |
-| Tracker         | `/tracker` | Kanban board, Calendar, To-do list, Progress dashboard |
+| My Journey      | `/tracker` | Today, Applications, Goals & Tasks, Calendar, Progress |
 
 ### Streaming Chat Setup
 
@@ -818,7 +854,7 @@ export default function ChatPage() {
 }
 ```
 
-### Kanban with Supabase Realtime
+### Applications Drag-and-Drop with Supabase Realtime
 
 ```typescript
 // Drag a card → update Supabase → Realtime fires → all clients update
@@ -849,7 +885,7 @@ careerpilot-backend/
 │   └── dashboard.py        # Progress snapshot endpoints
 ├── services/
 │   ├── parser.py           # PDF (Gemini) + DOCX (python-docx) routing
-│   ├── embedder.py         # Voyage AI embedding functions
+│   ├── embedder.py         # Gemini embedding functions
 │   ├── searcher.py         # Hybrid search RPC call
 │   ├── fit_score.py        # Weighted cosine similarity algorithm
 │   ├── agent.py            # LangGraph or Python tool loop (TBD)
@@ -868,7 +904,6 @@ uvicorn==0.30.6
 python-multipart==0.0.9
 httpx==0.27.0
 google-generativeai==0.8.3
-voyageai==0.3.2
 python-docx==1.1.2
 supabase==2.7.4
 upstash-redis==1.1.0
@@ -884,7 +919,6 @@ python-dotenv==1.0.1
 # FastAPI backend (.env)
 GROQ_API_KEY=
 GOOGLE_API_KEY=
-VOYAGE_API_KEY=
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 UPSTASH_REDIS_REST_URL=
@@ -945,7 +979,7 @@ PHASE 1 — Infrastructure (Days 1–5)
 ────────────────────────────────────────────────────────────
 Day 1   Supabase schema setup · Auth · Environment variables
 Day 2   CV upload endpoint · PDF parser (Gemini) · DOCX parser (python-docx)
-Day 3   Voyage AI embeddings · Section-aware chunking · Store to pgvector
+Day 3   Gemini embeddings · Section-aware chunking · Store to pgvector
 Day 4   Hybrid search RPC · Fit score algorithm · Job search APIs
 Day 5   ✅ LangGraph agent setup · Tool integration · Chat memory
 
@@ -1041,7 +1075,7 @@ Cover: data flow diagram, scaling analysis to 10,000 users, cost per user per mo
 | Layer        | Hackathon (free)             | At 10,000 users                | Monthly cost     |
 | ------------ | ---------------------------- | ------------------------------ | ---------------- |
 | LLM          | Groq free                    | Groq paid or self-hosted Llama | ~$50–200         |
-| Embeddings   | Voyage AI free (200M tokens) | Voyage AI paid                 | ~$0.06/1M tokens |
+| Embeddings   | Gemini free tier             | Gemini paid tier               | ~$0.15/1M tokens |
 | Vector DB    | Supabase free (500 MB)       | Supabase Pro — ~2–4 GB         | $25              |
 | Job Search   | JSearch free (200/day)       | RapidAPI paid + Redis cache    | ~$10             |
 | Cache        | Upstash free                 | Upstash paid                   | ~$10             |
@@ -1082,15 +1116,15 @@ Key bottleneck: LLM rate limits and JSearch API quotas. Mitigation: Upstash Redi
 │ (chat)  │   └────────────┘ │ Storage    │ │ TTL: 2h        │
 │         │                  │ Realtime   │ └────────────────┘
 │ Gemini  │   ┌────────────┐ │ pg_cron    │
-│ 2.0     │   │ Voyage AI  │ └────────────┘
-│ Flash   │   │ voyage-3   │
+│ 2.0     │   │ Gemini     │ └────────────┘
+│ Flash   │   │ Embedding  │
 │ (parse  │   │ Embeddings │
 │  reason)│   └────────────┘
 └─────────┘
 
 CV Upload Flow:
-PDF → Gemini multimodal → structured JSON → Voyage AI → pgvector
-DOCX → python-docx → text → Gemini → structured JSON → Voyage AI → pgvector
+PDF → Gemini multimodal → structured JSON → Gemini embeddings → pgvector
+DOCX → python-docx → text → Gemini → structured JSON → Gemini embeddings → pgvector
 
 Chat Flow:
 User message → fetch last 10 messages (Supabase) → RAG query (hybrid search) →

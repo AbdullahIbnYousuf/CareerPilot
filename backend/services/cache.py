@@ -34,9 +34,11 @@ async def get_cached_jobs(query: str, location: str = "") -> list[dict] | None:
     try:
         jobs = json.loads(value)
         if isinstance(jobs, list):
-            # Strip potential stale score fields to guarantee they are on-demand
+            # Strip user-specific fields so Redis remains a raw search cache.
             for job in jobs:
                 if isinstance(job, dict):
+                    job.pop("id", None)
+                    job.pop("user_id", None)
                     job.pop("fit_score", None)
                     job.pop("fit_explanation", None)
         return jobs

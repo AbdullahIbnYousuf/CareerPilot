@@ -14,14 +14,21 @@ Day 3 additions:
 import uuid
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 from fastapi import APIRouter, UploadFile, File, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from db.supabase import supabase
-from services.parser import parse_cv
+from services.parser import parse_cv_with_profile
 from services.storage import upload_cv_file
 from services.chunker import chunk_cv_sections
 from services.embedder import embed_documents
 from services.searcher import hybrid_search
+from services.profile import (
+    build_profile_from_sections,
+    get_profile as fetch_profile,
+    update_profile as save_profile_edits,
+    upsert_profile,
+)
 
 router = APIRouter(prefix="/api/cv", tags=["cv"])
 
@@ -31,12 +38,71 @@ MAX_FILE_SIZE = 5 * 1024 * 1024
 
 # ── Response Models ──────────────────────────────────────────────────────────
 
+class ProfileLink(BaseModel):
+    label: str = ""
+    url: str = ""
+
+
+class ProfileExperience(BaseModel):
+    title: str = ""
+    company: str = ""
+    location: str = ""
+    start_date: str = ""
+    end_date: str = ""
+    description: str = ""
+
+
+class ProfileEducation(BaseModel):
+    institution: str = ""
+    degree: str = ""
+    field: str = ""
+    start_year: str = ""
+    end_year: str = ""
+    details: str = ""
+
+
+class ProfileProject(BaseModel):
+    title: str = ""
+    description: str = ""
+    technologies: list[str] = Field(default_factory=list)
+    url: str = ""
+
+
+class ProfilePayload(BaseModel):
+    full_name: str = ""
+    headline: str = ""
+    location: str = ""
+    email: str = ""
+    phone: str = ""
+    links: list[ProfileLink] = Field(default_factory=list)
+    summary: str = ""
+    skills: list[str] = Field(default_factory=list)
+    experience: list[ProfileExperience] = Field(default_factory=list)
+    education: list[ProfileEducation] = Field(default_factory=list)
+    projects: list[ProfileProject] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+
+
+class UserProfile(ProfilePayload):
+    user_id: str
+    active_cv_id: Optional[str] = None
+    raw_sections: dict[str, str] = Field(default_factory=dict)
+    generated_at: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ProfileResponse(BaseModel):
+    profile: Optional[UserProfile]
+
+
 class CVUploadResponse(BaseModel):
     """Response model for CV upload (Day 3: includes chunks_stored and file_url)"""
     cv_id: str
     file_name: str
     file_url: Optional[str]
-    parsed_data: dict
+    parsed_data: dict[str, str]
+    profile: UserProfile
     chunks_stored: int
     parsed_at: str
     message: str
@@ -70,7 +136,7 @@ async def upload_cv(
     5. Delete old cvs row for this user (cascade removes old cv_chunks)
     6. Insert metadata into cvs table
     7. Chunk parsed JSON by section
-    8. Embed each chunk with Voyage AI voyage-3
+    8. Embed each chunk with Gemini gemini-embedding-001
     9. Insert chunks + embeddings into cv_chunks
     10. Return structured response
     """
@@ -106,7 +172,9 @@ async def upload_cv(
 
     # ── 3. Parse CV → structured JSON ────────────────────────────────────────
     try:
-        parsed_data = parse_cv(file_bytes, filename)
+        parsed_result = parse_cv_with_profile(file_bytes, filename)
+        parsed_data = parsed_result["parsed_data"]
+        profile_data = parsed_result.get("profile") or build_profile_from_sections(parsed_data)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=f"CV parsing failed: {str(e)}")
     except Exception as e:
@@ -178,7 +246,7 @@ async def upload_cv(
     chunks_stored = 0
 
     if chunks:
-        # ── 8. Embed each chunk with Voyage AI voyage-3 ───────────────────────
+        # ── 8. Embed each chunk with Gemini gemini-embedding-001 ─────────────
         try:
             chunk_texts = [c["content"] for c in chunks]
             embeddings = embed_documents(chunk_texts)
@@ -204,11 +272,53 @@ async def upload_cv(
             raise HTTPException(status_code=500, detail=f"Failed to store CV chunks: {str(e)}")
 
     # ── 10. Return ────────────────────────────────────────────────────────────
+    try:
+        profile_data = profile_data or build_profile_from_sections(parsed_data)
+        profile = await upsert_profile(
+            user_id=user_id,
+            cv_id=cv_id,
+            profile_data=profile_data,
+            parsed_data=parsed_data,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save profile: {str(e)}")
+
+    def _is_missing_provenance_columns_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "jobs" in text and (
+            "scored_cv_id" in text or "fit_score_calculated_at" in text or "fit_score_version" in text
+        ) and (
+            "schema cache" in text
+            or "pgrst204" in text
+            or "42703" in text
+            or "does not exist" in text
+        )
+
+    try:
+        try:
+            await supabase.table("jobs").update({
+                "fit_score": None,
+                "fit_explanation": None,
+                "scored_cv_id": None,
+                "fit_score_calculated_at": None,
+                "fit_score_version": None,
+            }).eq("user_id", user_id).execute()
+        except Exception as exc:
+            if not _is_missing_provenance_columns_error(exc):
+                raise
+            await supabase.table("jobs").update({
+                "fit_score": None,
+                "fit_explanation": None,
+            }).eq("user_id", user_id).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to invalidate stale job scores: {str(e)}")
+
     return CVUploadResponse(
         cv_id=cv_id,
         file_name=filename,
         file_url=file_url,
         parsed_data=parsed_data,
+        profile=profile,
         chunks_stored=chunks_stored,
         parsed_at=parsed_at,
         message="CV uploaded, parsed, embedded, and stored successfully"
@@ -259,16 +369,42 @@ async def search_cv(
 
 # ── Get Single CV ─────────────────────────────────────────────────────────────
 
-@router.get("/{cv_id}", response_model=CVMetadata)
+@router.get("/profile", response_model=ProfileResponse)
+async def get_profile(
+    user_id: str = Query(..., description="User UUID from Supabase Auth"),
+):
+    """Get the editable profile generated from the user's active CV."""
+    try:
+        profile = await fetch_profile(user_id)
+        return ProfileResponse(profile=profile)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {str(e)}")
+
+
+@router.patch("/profile", response_model=UserProfile)
+async def update_profile(
+    request: ProfilePayload,
+    user_id: str = Query(..., description="User UUID from Supabase Auth"),
+):
+    """Save user edits to the editable profile."""
+    try:
+        return await save_profile_edits(user_id, request.model_dump())
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
+
+
+@router.get("/{cv_id:uuid}", response_model=CVMetadata)
 async def get_cv(
-    cv_id: str,
+    cv_id: UUID,
     user_id: str = Query(..., description="User UUID from Supabase Auth"),
 ):
     """Get a specific CV by ID."""
     try:
         result = await supabase.table("cvs") \
             .select("id, user_id, file_name, file_url, parsed_at, created_at") \
-            .eq("id", cv_id) \
+            .eq("id", str(cv_id)) \
             .eq("user_id", user_id) \
             .single() \
             .execute()

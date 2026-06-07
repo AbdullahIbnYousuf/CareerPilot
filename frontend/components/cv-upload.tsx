@@ -4,9 +4,10 @@ import { useState, useRef, useEffect } from "react";
 import { UploadCloud, Loader2, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
+import type { CVUploadResult } from "@/types";
 
 interface CvUploadProps {
-  onUploadSuccess: (data: any) => void;
+  onUploadSuccess: (data: CVUploadResult) => void;
 }
 
 export function CvUpload({ onUploadSuccess }: CvUploadProps) {
@@ -86,7 +87,13 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
         throw new Error(errData.detail || "Failed to upload CV");
       }
 
-      const data = await response.json();
+      const data: CVUploadResult = await response.json();
+      localStorage.removeItem(`careerPilot_lastJobSearch:v2:${userId}`);
+      window.dispatchEvent(
+        new CustomEvent("careerpilot:cv-updated", {
+          detail: { userId, cvId: data.cv_id },
+        }),
+      );
       onUploadSuccess(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");

@@ -5,7 +5,20 @@ import { JobCard } from "@/components/job-card";
 import { supabase } from "@/lib/supabase";
 import type { Job } from "@/types";
 import { Input } from "@/components/ui/input";
-import { Loader2, Search, Briefcase, MapPin, Sparkles, CheckCircle2 } from "lucide-react";
+import { Loader2, Search, Briefcase, MapPin, Sparkles } from "lucide-react";
+
+interface LastJobSearchState {
+  jobs: Job[];
+  query: string;
+  location: string;
+  timestamp: number;
+  active_cv_id: string | null;
+}
+
+interface CvUpdatedDetail {
+  userId: string;
+  cvId: string;
+}
 
 export default function JobsPage() {
   const [query, setQuery] = useState("");
@@ -15,13 +28,9 @@ export default function JobsPage() {
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
-
-  // Batch scoring state
-  const [calculatingAll, setCalculatingAll] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [totalToScoreCount, setTotalToScoreCount] = useState(0);
-  const [allScored, setAllScored] = useState(false);
-  const [scoreError, setScoreError] = useState("");
+  const [activeCvId, setActiveCvId] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState("Hunting roles...");
+  const storageKey = userId ? `careerPilot_lastJobSearch:v2:${userId}` : null;
 
   useEffect(() => {
     const loadUserAndHistory = async () => {
@@ -30,15 +39,39 @@ export default function JobsPage() {
         const id = data.user.id;
         setUserId(id);
 
-        // Load saved jobs search history from localStorage
-        const saved = localStorage.getItem(`careerPilot_lastJobSearch:${id}`);
+        localStorage.removeItem(`careerPilot_lastJobSearch:${id}`);
+
+        let currentCvId: string | null = null;
+        try {
+          const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+          const profileResponse = await fetch(
+            `${baseUrl}/api/cv/profile?user_id=${encodeURIComponent(id)}`,
+          );
+          if (profileResponse.ok) {
+            const body: { profile?: { active_cv_id?: string | null } | null } = await profileResponse.json();
+            currentCvId = body.profile?.active_cv_id ?? null;
+            setActiveCvId(currentCvId);
+          }
+        } catch (e) {
+          console.error("Failed to load active CV metadata", e);
+        }
+
+        // Load saved scored jobs search history from localStorage
+        const saved = localStorage.getItem(`careerPilot_lastJobSearch:v2:${id}`);
         if (saved) {
           try {
-            const parsed = JSON.parse(saved);
-            if (parsed.jobs) setJobs(parsed.jobs);
+            const parsed = JSON.parse(saved) as Partial<LastJobSearchState>;
+            const savedJobs = Array.isArray(parsed.jobs) ? parsed.jobs : [];
+            const hasNumericScores = savedJobs.some((job: Job) => typeof job.fit_score === "number");
+            const isSameCv = !currentCvId || parsed.active_cv_id === currentCvId;
+            if (!hasNumericScores || !isSameCv) {
+              localStorage.removeItem(`careerPilot_lastJobSearch:v2:${id}`);
+              return;
+            }
+            setJobs(savedJobs);
             if (parsed.query) setQuery(parsed.query);
             if (parsed.location) setLocation(parsed.location);
-            if (parsed.jobs && parsed.jobs.length > 0) {
+            if (savedJobs.length > 0) {
               setSearched(true);
             }
           } catch (e) {
@@ -49,6 +82,26 @@ export default function JobsPage() {
     };
     loadUserAndHistory();
   }, []);
+
+  useEffect(() => {
+    const handleCvUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<CvUpdatedDetail>).detail;
+      if (!userId || !detail || detail.userId !== userId) return;
+
+      if (storageKey) {
+        localStorage.removeItem(storageKey);
+      }
+      setActiveCvId(detail.cvId);
+      setJobs([]);
+      setSearched(false);
+      setError("");
+    };
+
+    window.addEventListener("careerpilot:cv-updated", handleCvUpdated);
+    return () => {
+      window.removeEventListener("careerpilot:cv-updated", handleCvUpdated);
+    };
+  }, [storageKey, userId]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,9 +114,10 @@ export default function JobsPage() {
     setLoading(true);
     setError("");
     setSearched(true);
-    setAllScored(false);
-    setProgress(0);
-    setScoreError("");
+    setLoadingMessage("Hunting roles...");
+    const scoringTimer = window.setTimeout(() => {
+      setLoadingMessage("Scoring matches...");
+    }, 900);
 
     try {
       const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -78,109 +132,37 @@ export default function JobsPage() {
         throw new Error(errData.detail || "Failed to fetch jobs");
       }
 
-      const data = await response.json();
-      const huntedJobs = data.jobs || [];
+      const data: { jobs?: Job[] } = await response.json();
+      const huntedJobs = data.jobs ?? [];
+      const scoredCvId = huntedJobs.find((job: Job) => job.scored_cv_id)?.scored_cv_id ?? activeCvId;
+      setActiveCvId(scoredCvId ?? null);
       setJobs(huntedJobs);
 
       // Save to localStorage immediately after search
-      const state = {
+      const state: LastJobSearchState = {
         jobs: huntedJobs,
         query: query.trim(),
         location: location.trim(),
         timestamp: Date.now(),
+        active_cv_id: scoredCvId ?? null,
       };
-      localStorage.setItem(`careerPilot_lastJobSearch:${userId}`, JSON.stringify(state));
+      if (storageKey) {
+        localStorage.setItem(storageKey, JSON.stringify(state));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
+      window.clearTimeout(scoringTimer);
       setLoading(false);
     }
   };
 
-  const handleCalculateAllScores = async () => {
-    if (!userId) return;
-    const unscoredJobs = jobs.filter(
-      (job) => job.id && (job.fit_score === undefined || job.fit_score === null || job.fit_score <= 0)
-    );
-    if (unscoredJobs.length === 0) {
-      setAllScored(true);
-      return;
-    }
-
-    setCalculatingAll(true);
-    setScoreError("");
-    setAllScored(false);
-    setProgress(0);
-    setTotalToScoreCount(unscoredJobs.length);
-
-    let currentJobsState = [...jobs];
-    let completedCount = 0;
-    const chunkSize = 2;
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-    try {
-      for (let i = 0; i < unscoredJobs.length; i += chunkSize) {
-        const chunk = unscoredJobs.slice(i, i + chunkSize);
-
-        const promises = chunk.map(async (job) => {
-          if (!job.id) return;
-          const response = await fetch(`${baseUrl}/jobs/score/${job.id}?user_id=${userId}`, {
-            method: "POST",
-          });
-          if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.detail || `Failed to score job ${job.title}`);
-          }
-          const scoreData = await response.json();
-          currentJobsState = currentJobsState.map((j) => {
-            if (j.id === job.id) {
-              return {
-                ...j,
-                fit_score: scoreData.fit_score,
-                fit_explanation: scoreData.fit_explanation,
-              };
-            }
-            return j;
-          });
-          completedCount += 1;
-          setProgress(completedCount);
-          setJobs(currentJobsState);
-        });
-
-        await Promise.all(promises);
-
-        // Brief delay between batches to respect rate limits
-        if (i + chunkSize < unscoredJobs.length) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        }
-      }
-
-      // Sort by fit score descending
-      const sortedJobs = [...currentJobsState].sort((a, b) => {
-        const scoreA = a.fit_score ?? 0;
-        const scoreB = b.fit_score ?? 0;
-        return scoreB - scoreA;
-      });
-
-      setJobs(sortedJobs);
-      setAllScored(true);
-
-      // Persist sorted state to localStorage
-      const state = {
-        jobs: sortedJobs,
-        query: query.trim(),
-        location: location.trim(),
-        timestamp: Date.now(),
-      };
-      localStorage.setItem(`careerPilot_lastJobSearch:${userId}`, JSON.stringify(state));
-    } catch (err) {
-      setScoreError(err instanceof Error ? err.message : "An error occurred while calculating fit scores.");
-    } finally {
-      setCalculatingAll(false);
-    }
-  };
-
-  const handleScoreUpdated = (jobId: string, fitScore: number, fitExplanation: string) => {
+  const handleScoreUpdated = (
+    jobId: string,
+    fitScore: number,
+    fitExplanation: string,
+    scoreUpdate: Pick<Job, "scored_cv_id" | "fit_score_calculated_at" | "fit_score_version">,
+  ) => {
     setJobs((prevJobs) => {
       const updatedJobs = prevJobs.map((j) => {
         if (j.id === jobId) {
@@ -188,28 +170,28 @@ export default function JobsPage() {
             ...j,
             fit_score: fitScore,
             fit_explanation: fitExplanation,
+            ...scoreUpdate,
           };
         }
         return j;
       });
+      const updatedCvId = scoreUpdate.scored_cv_id ?? activeCvId;
+      setActiveCvId(updatedCvId ?? null);
 
       // Save updated to localStorage
-      if (userId) {
-        const state = {
+      if (storageKey) {
+        const state: LastJobSearchState = {
           jobs: updatedJobs,
           query: query.trim(),
           location: location.trim(),
           timestamp: Date.now(),
+          active_cv_id: updatedCvId ?? null,
         };
-        localStorage.setItem(`careerPilot_lastJobSearch:${userId}`, JSON.stringify(state));
+        localStorage.setItem(storageKey, JSON.stringify(state));
       }
       return updatedJobs;
     });
   };
-
-  const unscoredCount = jobs.filter(
-    (job) => job.id && (job.fit_score === undefined || job.fit_score === null || job.fit_score <= 0)
-  ).length;
 
   return (
     <div className="space-y-8">
@@ -253,7 +235,16 @@ export default function JobsPage() {
             disabled={loading}
             className="h-11 px-6 flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] hover:from-[#5E55CC] hover:to-[#7A73DD] disabled:opacity-50 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-primary/20 shrink-0"
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Sparkles className="h-4 w-4" /> Search</>}
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {loadingMessage}
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" /> Search
+              </>
+            )}
           </button>
         </div>
       </form>
@@ -264,56 +255,18 @@ export default function JobsPage() {
           {error}
         </div>
       )}
-      {scoreError && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          {scoreError}
-        </div>
-      )}
 
       {/* Results */}
       {jobs.length > 0 ? (
         <>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-white/[0.06] bg-[#0E0E12]/80 backdrop-blur-md">
             <div>
-              <p className="text-sm text-white/40">
-                Found <span className="text-white font-semibold">{jobs.length}</span> matching roles
-              </p>
-              {unscoredCount > 0 && (
-                <p className="text-xs text-white/25 mt-0.5">
-                  {unscoredCount} jobs do not have fit scores calculated.
-                </p>
-              )}
+              <p className="text-sm font-semibold text-white">Top ranked matches</p>
+              <p className="text-xs text-white/30 mt-0.5">Sorted by your CV fit score.</p>
             </div>
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {calculatingAll && (
-                <div className="flex flex-col sm:items-end gap-1 px-2 shrink-0">
-                  <div className="flex items-center gap-2 text-xs text-primary">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Calculating scores: {progress} / {totalToScoreCount}</span>
-                  </div>
-                  <div className="w-40 h-1.5 rounded-full bg-white/5 overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-[#534AB7] to-[#6B63CC] transition-all duration-300"
-                      style={{ width: `${(progress / totalToScoreCount) * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-              {allScored && (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-400 px-2">
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>All jobs scored & ranked!</span>
-                </div>
-              )}
-              {unscoredCount > 0 && !calculatingAll && (
-                <button
-                  onClick={handleCalculateAllScores}
-                  className="h-9 px-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#534AB7]/20 to-[#6B63CC]/20 hover:from-[#534AB7]/30 hover:to-[#6B63CC]/30 border border-primary/30 text-white text-xs font-medium transition-all duration-200"
-                >
-                  <Sparkles className="h-3.5 w-3.5 text-primary animate-pulse" />
-                  Calculate Fit Scores & Rank
-                </button>
-              )}
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400 px-2">
+              <Sparkles className="h-4 w-4" />
+              <span>Scored and ranked</span>
             </div>
           </div>
 

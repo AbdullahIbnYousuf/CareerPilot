@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/lib/supabase";
+import { FitScoreBadge } from "./fit-score-badge";
 import type { Application, ApplicationStatus } from "@/types";
 import {
   Loader2,
@@ -32,9 +33,17 @@ import {
   ExternalLink,
   Plus,
   Sparkles,
+  CalendarPlus,
+  CheckCircle2,
+  MapPin,
+  Building2,
+  DollarSign,
+  Calendar,
+  BookmarkCheck,
+  X,
 } from "lucide-react";
 
-// ─── Column config ──────────────────────────────────────────────────────────
+// â”€â”€â”€ Column config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const COLUMNS: {
   key: ApplicationStatus;
@@ -86,15 +95,49 @@ const COLUMNS: {
   },
 ];
 
-// ─── Sortable Card ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Sortable Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+type ActionPromptState = {
+  type: "follow_up" | "interview_prep";
+  app: Application;
+  dueDate: string;
+};
+
+function toLocalDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function parseDateOrToday(value?: string | null): Date {
+  if (!value) return new Date();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function addBusinessDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  let added = 0;
+
+  while (added < days) {
+    result.setDate(result.getDate() + 1);
+    const day = result.getDay();
+    if (day !== 0 && day !== 6) added += 1;
+  }
+
+  return result;
+}
 
 function ApplicationCard({
   app,
   onDelete,
+  onClick,
   isDragging = false,
 }: {
   app: Application;
   onDelete: (id: string) => void;
+  onClick?: () => void;
   isDragging?: boolean;
 }) {
   const {
@@ -126,7 +169,8 @@ function ApplicationCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`group relative rounded-xl border border-white/[0.06] bg-[#141418] p-3.5 shadow-md shadow-black/20 transition-all duration-200 ${
+      onClick={onClick}
+      className={`group relative rounded-xl border border-white/[0.06] bg-[#141418] p-3.5 shadow-md shadow-black/20 transition-all duration-200 cursor-pointer ${
         isDragging
           ? "shadow-2xl shadow-primary/20 border-primary/40 rotate-1 scale-105"
           : "hover:border-white/[0.12] hover:shadow-lg hover:shadow-black/30"
@@ -137,6 +181,7 @@ function ApplicationCard({
         <button
           {...attributes}
           {...listeners}
+          onClick={(e) => e.stopPropagation()}
           className="mt-0.5 cursor-grab active:cursor-grabbing text-white/20 hover:text-white/50 transition-colors shrink-0 touch-none"
           aria-label="Drag to reorder"
         >
@@ -179,7 +224,7 @@ function ApplicationCard({
                 month: "short",
                 day: "numeric",
               })
-            : "—"}
+            : "â€”"}
         </span>
 
         <div className="flex items-center gap-2">
@@ -190,17 +235,17 @@ function ApplicationCard({
             </span>
           )}
 
-          {/* External link */}
-          {app.url && (
+          {/* External link / Apply text button - only for saved column */}
+          {app.status === "saved" && (
             <a
-              href={app.url}
+              href={app.url || `https://www.google.com/search?q=${encodeURIComponent(`${app.title || "Job"} ${app.company || ""}`)}`}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="h-5 w-5 flex items-center justify-center rounded-md text-white/20 hover:text-primary hover:bg-primary/10 transition-all"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#AFA9EC] hover:text-[#C5BFFF] hover:bg-primary/10 transition-all border border-white/[0.08] hover:border-primary/40 bg-white/[0.02]"
               aria-label="Open job posting"
             >
-              <ExternalLink className="h-3 w-3" />
+              Apply <ExternalLink className="h-2.5 w-2.5 shrink-0" />
             </a>
           )}
         </div>
@@ -209,16 +254,18 @@ function ApplicationCard({
   );
 }
 
-// ─── Column ──────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function KanbanColumn({
   column,
   apps,
   onDelete,
+  onCardClick,
 }: {
   column: (typeof COLUMNS)[0];
   apps: Application[];
   onDelete: (id: string) => void;
+  onCardClick: (app: Application) => void;
 }) {
   const Icon = column.icon;
   const { setNodeRef, isOver } = useDroppable({ id: column.key });
@@ -259,7 +306,7 @@ function KanbanColumn({
             </div>
           ) : (
             apps.map((app) => (
-              <ApplicationCard key={app.id} app={app} onDelete={onDelete} />
+              <ApplicationCard key={app.id} app={app} onDelete={onDelete} onClick={() => onCardClick(app)} />
             ))
           )}
         </SortableContext>
@@ -268,32 +315,254 @@ function KanbanColumn({
   );
 }
 
-// ─── Main Kanban Board ────────────────────────────────────────────────────────
+// â”€â”€â”€ Main Kanban Board â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+function ApplicationActionPrompt({
+  prompt,
+  isCreating,
+  error,
+  onDueDateChange,
+  onCreate,
+  onDismiss,
+}: {
+  prompt: ActionPromptState;
+  isCreating: boolean;
+  error: string;
+  onDueDateChange: (dueDate: string) => void;
+  onCreate: () => void;
+  onDismiss: () => void;
+}) {
+  const isFollowUp = prompt.type === "follow_up";
+
+  return (
+    <div className="flex flex-col gap-3 rounded-2xl border border-[#7C74DB]/20 bg-[#111018] p-3.5 shadow-lg shadow-black/20 md:flex-row md:items-center md:justify-between">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#534AB7]/20 text-[#AFA9EC]">
+          <CalendarPlus className="h-4 w-4" />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-white">
+            {isFollowUp ? "Add follow-up task" : "Add interview prep tasks"}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-white/40">
+            {prompt.app.title || "Application"} at{" "}
+            {prompt.app.company || "Unknown Company"}
+          </p>
+          {error && <p className="mt-1 text-xs text-red-300">{error}</p>}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          type="date"
+          value={prompt.dueDate}
+          onChange={(e) => onDueDateChange(e.target.value)}
+          className="h-9 rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 text-xs text-white/70 transition-all [color-scheme:dark] focus:border-primary/50 focus:outline-none"
+          aria-label={
+            isFollowUp ? "Follow-up task due date" : "Interview prep due date"
+          }
+        />
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={isCreating}
+          className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#534AB7] px-3 text-xs font-semibold text-white transition-all hover:bg-[#6B63CC] disabled:opacity-50"
+        >
+          {isCreating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <CheckCircle2 className="h-3.5 w-3.5" />
+          )}
+          {isFollowUp ? "Add task" : "Add tasks"}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="h-9 rounded-xl bg-white/[0.04] px-3 text-xs font-semibold text-white/40 transition-all hover:text-white"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+}
+
+interface ApplicationEvent {
+  id: string;
+  event_type: "created" | "status_changed" | "note_updated";
+  from_status?: string | null;
+  to_status?: string | null;
+  note?: string | null;
+  created_at: string;
+}
+
+interface JobDetails {
+  description?: string | null;
+  salary_range?: string | null;
+  fit_explanation?: string | null;
+}
+
+const htmlEntities: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+
+function decodeHtml(value: string) {
+  return value.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
+    if (entity.startsWith("#x")) {
+      const cp = Number.parseInt(entity.slice(2), 16);
+      return Number.isNaN(cp) ? match : String.fromCodePoint(cp);
+    }
+    if (entity.startsWith("#")) {
+      const cp = Number.parseInt(entity.slice(1), 10);
+      return Number.isNaN(cp) ? match : String.fromCodePoint(cp);
+    }
+    return htmlEntities[entity] ?? match;
+  });
+}
+
+function cleanDesc(raw: string | null | undefined) {
+  if (!raw) return "";
+  const withBreaks = raw.replace(/<\/?(?:br|p|div|li|ul|ol|section|article|h[1-4])[^>]*>/gi, "\n");
+  return decodeHtml(withBreaks.replace(/<[^>]+>/g, " "))
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t\r\f\v]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function capitalize(s?: string | null) {
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 export function KanbanBoard() {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [activeApp, setActiveApp] = useState<Application | null>(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [actionPrompt, setActionPrompt] = useState<ActionPromptState | null>(
+    null
+  );
+  const [creatingTasks, setCreatingTasks] = useState(false);
+  const [actionPromptError, setActionPromptError] = useState("");
+  const [actionNotice, setActionNotice] = useState("");
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const [selectedApp, setSelectedApp] = useState<Application | null>(null);
+  const [notes, setNotes] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [events, setEvents] = useState<ApplicationEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
+  const [notesSaveError, setNotesSaveError] = useState("");
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [jobDetails, setJobDetails] = useState<JobDetails | null>(null);
+  const [loadingJobDetails, setLoadingJobDetails] = useState(false);
 
-  // ── Sensors ────────────────────────────────────────────────────────────────
+  const closeDetails = useCallback(() => {
+    setSelectedApp(null);
+    setEvents([]);
+    setNotesSaveError("");
+    setNotesSaved(false);
+    setJobDetails(null);
+  }, []);
+
+  useEffect(() => {
+    if (!selectedApp) return;
+    const loadEvents = async () => {
+      setLoadingEvents(true);
+      try {
+        const res = await fetch(`${baseUrl}/tracker/applications/${selectedApp.id}/events`);
+        if (res.ok) {
+          const data = await res.json();
+          setEvents(data.events || []);
+        }
+      } catch {
+        // silently fail
+      } finally {
+        setLoadingEvents(false);
+      }
+    };
+    void loadEvents();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedApp?.id, baseUrl, eventsRefreshKey]);
+
+  // Fetch full job details (description, salary, fit explanation) when modal opens
+  useEffect(() => {
+    if (!selectedApp?.job_id) return;
+    const loadJobDetails = async () => {
+      setLoadingJobDetails(true);
+      try {
+        const res = await fetch(`${baseUrl}/jobs/${selectedApp.job_id}/details`);
+        if (res.ok) {
+          const data = await res.json() as JobDetails;
+          setJobDetails(data);
+        }
+      } catch {
+        // silently fail â€” modal still works without these extras
+      } finally {
+        setLoadingJobDetails(false);
+      }
+    };
+    void loadJobDetails();
+  }, [selectedApp?.job_id, baseUrl]);
+
+  const handleSaveNotes = async () => {
+    if (!selectedApp) return;
+    setSavingNotes(true);
+    setNotesSaveError("");
+    setNotesSaved(false);
+    try {
+      const res = await fetch(`${baseUrl}/tracker/applications/${selectedApp.id}/notes`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.application as Application;
+        setApplications((prev) =>
+          prev.map((a) => (a.id === selectedApp.id ? { ...a, notes: updated.notes } : a))
+        );
+        setSelectedApp((prev) => (prev ? { ...prev, notes: updated.notes } : null));
+        setEventsRefreshKey((k) => k + 1);
+        setNotesSaved(true);
+        setTimeout(() => setNotesSaved(false), 2500);
+      } else {
+        const errData = await res.json().catch(() => ({})) as { detail?: string };
+        setNotesSaveError(errData.detail || `Save failed (${res.status})`);
+      }
+    } catch (err) {
+      setNotesSaveError(err instanceof Error ? err.message : "Network error â€” check connection.");
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+  // â”€â”€ Sensors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  // ── Load user ──────────────────────────────────────────────────────────────
+  // â”€â”€ Load user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
-      if (!error) setUserId(data.user?.id ?? null);
+      if (!error) {
+        setUserId(data.user?.id ?? null);
+        if (!data.user) setLoading(false);
+      }
     });
   }, []);
 
-  // ── Fetch applications ────────────────────────────────────────────────────
+  // â”€â”€ Fetch applications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const fetchApplications = useCallback(
     async (uid: string) => {
       try {
@@ -305,7 +574,7 @@ export function KanbanBoard() {
           setApplications(data.applications || []);
         }
       } catch {
-        // silently fail — Realtime will keep us in sync
+        // silently fail â€” Realtime will keep us in sync
       } finally {
         setLoading(false);
       }
@@ -314,14 +583,14 @@ export function KanbanBoard() {
   );
 
   useEffect(() => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-    fetchApplications(userId);
+    if (!userId) return;
+    const loadApplications = async () => {
+      await fetchApplications(userId);
+    };
+    void loadApplications();
   }, [userId, fetchApplications]);
 
-  // ── Supabase Realtime ─────────────────────────────────────────────────────
+  // â”€â”€ Supabase Realtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {
     if (!userId) return;
 
@@ -343,7 +612,14 @@ export function KanbanBoard() {
             const updated = payload.new as Application;
             setApplications((prev) =>
               prev.map((a) =>
-                a.id === updated.id ? { ...a, status: updated.status } : a
+                a.id === updated.id
+                  ? {
+                      ...a,
+                      status: updated.status,
+                      applied_at: updated.applied_at ?? a.applied_at,
+                      notes: updated.notes !== undefined ? updated.notes : a.notes,
+                    }
+                  : a
               )
             );
           } else if (payload.eventType === "DELETE") {
@@ -362,10 +638,11 @@ export function KanbanBoard() {
     };
   }, [userId, fetchApplications]);
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const deleteApplication = async (appId: string) => {
     // Optimistic
     setApplications((prev) => prev.filter((a) => a.id !== appId));
+    setActionPrompt((prev) => (prev?.app.id === appId ? null : prev));
     try {
       await fetch(`${baseUrl}/tracker/applications/${appId}`, {
         method: "DELETE",
@@ -375,7 +652,7 @@ export function KanbanBoard() {
     }
   };
 
-  // ── DnD handlers ──────────────────────────────────────────────────────────
+  // â”€â”€ DnD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
     setActiveApp(applications.find((a) => a.id === id) ?? null);
@@ -391,7 +668,7 @@ export function KanbanBoard() {
     const draggedId = active.id as string;
     const overedId = over.id as string;
 
-    // Determine target column — overedId is either a column key or a card id
+    // Determine target column â€” overedId is either a column key or a card id
     const targetColumn = COLUMNS.find((c) => c.key === overedId)
       ? (overedId as ApplicationStatus)
       : applications.find((a) => a.id === overedId)?.status ?? null;
@@ -425,6 +702,47 @@ export function KanbanBoard() {
             a.id === draggedId ? { ...a, status: draggedApp.status } : a
           )
         );
+        return;
+      }
+
+      const data = (await res.json().catch(() => ({}))) as {
+        application?: Partial<Application>;
+      };
+      const updatedApp: Application = {
+        ...draggedApp,
+        ...data.application,
+        status: data.application?.status ?? targetColumn,
+        applied_at:
+          data.application?.applied_at ??
+          (targetColumn === "saved"
+            ? null
+            : draggedApp.applied_at ?? new Date().toISOString()),
+      };
+
+      setApplications((prev) =>
+        prev.map((a) => (a.id === draggedId ? updatedApp : a))
+      );
+      setActionPromptError("");
+      setActionNotice("");
+
+      if (targetColumn === "applied") {
+        setActionPrompt({
+          type: "follow_up",
+          app: updatedApp,
+          dueDate: toLocalDateStr(
+            addBusinessDays(parseDateOrToday(updatedApp.applied_at), 5)
+          ),
+        });
+      } else if (targetColumn === "interviewing") {
+        setActionPrompt({
+          type: "interview_prep",
+          app: updatedApp,
+          dueDate: toLocalDateStr(addBusinessDays(new Date(), 1)),
+        });
+      } else {
+        setActionPrompt((prev) =>
+          prev?.app.id === draggedId ? null : prev
+        );
       }
     } catch {
       // Revert on failure
@@ -436,13 +754,63 @@ export function KanbanBoard() {
     }
   };
 
-  // ── Loading ────────────────────────────────────────────────────────────────
+  // â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  const createTodo = async (title: string, dueDate: string) => {
+    if (!userId) throw new Error("Please sign in to create tasks.");
+
+    const res = await fetch(`${baseUrl}/tracker/todos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id: userId,
+        title,
+        due_date: dueDate || null,
+        goal_id: null,
+      }),
+    });
+
+    if (!res.ok) {
+      throw new Error("Task creation failed.");
+    }
+  };
+
+  const handleCreatePromptTasks = async () => {
+    if (!actionPrompt) return;
+
+    setCreatingTasks(true);
+    setActionPromptError("");
+    try {
+      if (actionPrompt.type === "follow_up") {
+        await createTodo("Follow up with recruiter", actionPrompt.dueDate);
+        setActionNotice("Follow-up task added.");
+      } else {
+        await Promise.all(
+          [
+            "Research company",
+            "Practice role-specific questions",
+            "Prepare STAR stories",
+          ].map((title) => createTodo(title, actionPrompt.dueDate))
+        );
+        setActionNotice("Interview prep tasks added.");
+      }
+
+      setActionPrompt(null);
+      setTimeout(() => setActionNotice(""), 3500);
+    } catch (error) {
+      setActionPromptError(
+        error instanceof Error ? error.message : "Could not create tasks."
+      );
+    } finally {
+      setCreatingTasks(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-white/30">Loading your applications…</p>
+          <p className="text-sm text-white/30">Loading your applicationsâ€¦</p>
         </div>
       </div>
     );
@@ -480,6 +848,33 @@ export function KanbanBoard() {
         )}
       </div>
 
+      {actionNotice && (
+        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300">
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {actionNotice}
+        </div>
+      )}
+
+      {actionPrompt && (
+        <ApplicationActionPrompt
+          prompt={actionPrompt}
+          isCreating={creatingTasks}
+          error={actionPromptError}
+          onDueDateChange={(dueDate) =>
+            setActionPrompt((prev) =>
+              prev ? { ...prev, dueDate } : prev
+            )
+          }
+          onCreate={() => {
+            void handleCreatePromptTasks();
+          }}
+          onDismiss={() => {
+            setActionPrompt(null);
+            setActionPromptError("");
+          }}
+        />
+      )}
+
       {/* Kanban grid */}
       <DndContext
         sensors={sensors}
@@ -497,12 +892,16 @@ export function KanbanBoard() {
                 column={col}
                 apps={colApps}
                 onDelete={deleteApplication}
+                onCardClick={(app) => {
+                  setSelectedApp(app);
+                  setNotes(app.notes || "");
+                }}
               />
             );
           })}
         </div>
 
-        {/* Drag overlay — card ghost that follows cursor */}
+        {/* Drag overlay â€” card ghost that follows cursor */}
         <DragOverlay dropAnimation={{ duration: 200, easing: "ease" }}>
           {activeApp ? (
             <ApplicationCard
@@ -513,6 +912,213 @@ export function KanbanBoard() {
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {selectedApp && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && closeDetails()}
+        >
+          <div className="w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 overflow-hidden">
+
+            {/* â”€â”€ Header (exact Job Hunter modal header) â”€â”€ */}
+            <div className="flex justify-between items-start p-6 border-b border-white/[0.06] bg-white/[0.02]">
+              <div className="flex-1 min-w-0 pr-4">
+                {/* Status + source badge row */}
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] text-white/20 bg-white/[0.05] px-2 py-0.5 rounded font-mono uppercase tracking-wider">
+                    {selectedApp.status}
+                  </span>
+                </div>
+                <h2 className="text-xl font-bold text-white mt-1 leading-snug">{selectedApp.title || "Unknown Role"}</h2>
+                <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-white/40">
+                  <span className="flex items-center gap-1.5 text-white/70 font-medium">
+                    <Building2 className="h-4 w-4 text-white/30" /> {selectedApp.company}
+                  </span>
+                  {selectedApp.location && (
+                    <span className="flex items-center gap-1.5">
+                      <MapPin className="h-4 w-4" /> {selectedApp.location}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={closeDetails}
+                className="h-8 w-8 flex items-center justify-center rounded-lg border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* â”€â”€ Scrollable body â”€â”€ */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+
+              {/* Fit score panel â€” exact Job Hunter style using FitScoreBadge */}
+              {selectedApp.fit_score !== undefined && selectedApp.fit_score !== null ? (
+                <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
+                  <div className="shrink-0">
+                    <FitScoreBadge score={selectedApp.fit_score} explanation={jobDetails?.fit_explanation ?? undefined} />
+                  </div>
+                  <div className="space-y-1 text-center md:text-left flex-1">
+                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">Fit Match</p>
+                    {loadingJobDetails ? (
+                      <div className="flex items-center gap-1.5 text-xs text-white/30">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Loading analysis...
+                      </div>
+                    ) : jobDetails?.fit_explanation ? (
+                      <p className="text-sm text-white/60 italic leading-relaxed">
+                        &ldquo;{jobDetails.fit_explanation}&rdquo;
+                      </p>
+                    ) : (
+                      <p className="text-xs text-white/30 italic">Run &ldquo;Check My Fit Score&rdquo; in Job Hunter to see analysis here.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Quick info â€” salary / deadline / applied (exact Job Hunter grid) */}
+              <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.03] border border-white/[0.05] p-4 text-xs">
+                <div className="space-y-1">
+                  <span className="text-white/30 block">Salary Range</span>
+                  <span className="text-white font-semibold flex items-center gap-1.5">
+                    <DollarSign className="h-3.5 w-3.5 text-primary" />
+                    {loadingJobDetails ? "â€¦" : (jobDetails?.salary_range || "Not Disclosed")}
+                  </span>
+                </div>
+                <div className="space-y-1 pl-4 border-l border-white/[0.05]">
+                  <span className="text-white/30 block">Deadline</span>
+                  <span className="text-white font-semibold flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-primary" />
+                    {selectedApp.deadline || "Rolling / Open"}
+                  </span>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-white/30 block">Applied</span>
+                  <span className="text-white font-semibold">
+                    {selectedApp.applied_at
+                      ? new Date(selectedApp.applied_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                      : "Not yet"}
+                  </span>
+                </div>
+                <div className="space-y-1 pl-4 border-l border-white/[0.05]">
+                  <span className="text-white/30 block">Job Link</span>
+                  <a
+                    href={selectedApp.url || `https://www.google.com/search?q=${encodeURIComponent(`${selectedApp.title || "Job"} ${selectedApp.company || ""}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[#AFA9EC] hover:text-[#C5BFFF] hover:underline font-semibold"
+                  >
+                    Open Posting <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+
+              {/* â”€â”€ Notes (app-specific) â”€â”€ */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider">My Notes</h3>
+                  <button
+                    onClick={handleSaveNotes}
+                    disabled={savingNotes}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#534AB7] hover:bg-[#6B63CC] text-xs font-semibold text-white transition-all disabled:opacity-50"
+                  >
+                    {savingNotes && <Loader2 className="h-3 w-3 animate-spin" />}
+                    Save
+                  </button>
+                </div>
+                <textarea
+                  id="app-modal-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Interview dates, recruiter contacts, prep notes, links..."
+                  className="w-full min-h-[80px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2.5 text-sm text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
+                />
+                {notesSaved && (
+                  <p className="text-[11px] text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Notes saved
+                  </p>
+                )}
+                {notesSaveError && (
+                  <p className="text-[11px] text-red-400">{notesSaveError}</p>
+                )}
+              </div>
+
+              {/* â”€â”€ Activity History (app-specific) â”€â”€ */}
+              <div className="space-y-2">
+                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
+                  Activity History
+                </h3>
+                {loadingEvents ? (
+                  <div className="flex items-center gap-2 text-xs text-white/30 py-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading history...
+                  </div>
+                ) : events.length === 0 ? (
+                  <p className="text-xs text-white/20 italic py-1">No activity recorded yet. Move this card between columns to log history.</p>
+                ) : (
+                  <div className="relative border-l border-white/[0.06] ml-2 pl-4 py-1 space-y-3.5">
+                    {events.map((ev) => (
+                      <div key={ev.id} className="relative">
+                        <div className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border border-white/10 bg-[#7C74DB]" />
+                        <p className="text-xs font-semibold text-white/80">
+                          {ev.event_type === "created" && `Created in ${capitalize(ev.to_status) || "Saved"}`}
+                          {ev.event_type === "status_changed" && `Moved from ${capitalize(ev.from_status)} to ${capitalize(ev.to_status)}`}
+                          {ev.event_type === "note_updated" && "Notes updated"}
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-0.5">
+                          {new Date(ev.created_at).toLocaleString("en-US", {
+                            month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* â”€â”€ Job Description (at the bottom, exact Job Hunter style) â”€â”€ */}
+              <div className="space-y-2">
+                <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
+                  <Briefcase className="h-3.5 w-3.5" /> Job Description
+                </h3>
+                {loadingJobDetails ? (
+                  <div className="flex items-center gap-2 rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-xs text-white/30">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading...
+                  </div>
+                ) : (jobDetails?.description) ? (
+                  <div className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-4 text-sm text-white/50 leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
+                    {cleanDesc(jobDetails.description) || jobDetails.description}
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/20 italic">No description stored for this job.</p>
+                )}
+              </div>
+            </div>
+
+            {/* â”€â”€ Footer (exact Job Hunter modal footer) â”€â”€ */}
+            <div className="p-4 border-t border-white/[0.06] flex flex-col-reverse gap-2 bg-white/[0.02] sm:flex-row sm:justify-end">
+              <button
+                onClick={closeDetails}
+                className="inline-flex items-center justify-center rounded-lg border border-white/[0.08] text-sm font-medium px-4 py-2 text-white/40 hover:text-white hover:bg-white/[0.06] transition-colors sm:mr-auto"
+              >
+                Close
+              </button>
+              <span className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-sm font-medium px-4 py-2">
+                <BookmarkCheck className="h-4 w-4 shrink-0" /> Saved to Tracker
+              </span>
+              {selectedApp.status === "saved" && (
+                <a
+                  href={selectedApp.url || `https://www.google.com/search?q=${encodeURIComponent(`${selectedApp.title || "Job"} ${selectedApp.company || ""}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
+                >
+                  Apply Now <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

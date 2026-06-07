@@ -110,6 +110,7 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
 
         if (!error && data) {
           setMessages(data as ChatMessage[]);
+          isFirstMessageRef.current = data.length === 0;
         }
       } finally {
         setIsLoadingHistory(false);
@@ -193,7 +194,7 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
         setIsStreaming(false);
       }
     },
-    [input, isStreaming, userId, sessionId]
+    [input, isStreaming, onFirstMessage, userId, sessionId]
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
