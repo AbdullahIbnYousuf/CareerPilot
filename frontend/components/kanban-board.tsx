@@ -1060,7 +1060,7 @@ export function KanbanBoard() {
                         <div className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border border-white/10 bg-[#7C74DB]" />
                         <p className="text-xs font-semibold text-white/80">
                           {ev.event_type === "created" && `Created in ${capitalize(ev.to_status) || "Saved"}`}
-                          {ev.event_type === "status_changed" && `Moved from ${capitalize(ev.from_status)} â†’ ${capitalize(ev.to_status)}`}
+                          {ev.event_type === "status_changed" && `Moved from ${capitalize(ev.from_status)} to ${capitalize(ev.to_status)}`}
                           {ev.event_type === "note_updated" && "Notes updated"}
                         </p>
                         <p className="text-[10px] text-white/30 mt-0.5">
@@ -1104,14 +1104,16 @@ export function KanbanBoard() {
               <span className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-sm font-medium px-4 py-2">
                 <BookmarkCheck className="h-4 w-4 shrink-0" /> Saved to Tracker
               </span>
-              <a
-                href={selectedApp.url || `https://www.google.com/search?q=${encodeURIComponent(`${selectedApp.title || "Job"} ${selectedApp.company || ""}`)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
-              >
-                Apply Now <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-              </a>
+              {selectedApp.status === "saved" && (
+                <a
+                  href={selectedApp.url || `https://www.google.com/search?q=${encodeURIComponent(`${selectedApp.title || "Job"} ${selectedApp.company || ""}`)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
+                >
+                  Apply Now <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                </a>
+              )}
             </div>
           </div>
         </div>
