@@ -128,3 +128,44 @@
     @apply font-sans scroll-smooth;
   }
 }
+
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  html,
+  body {
+    background: white !important;
+    color: #0f172a !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .resume-print-root,
+  .resume-print-root * {
+    visibility: visible;
+  }
+
+  .resume-print-root {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: white !important;
+  }
+
+  .resume-print-root article {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+}

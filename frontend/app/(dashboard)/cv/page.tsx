@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import {
   Briefcase,
   CheckCircle2,
+  Eye,
   FileUp,
   GraduationCap,
   Link as LinkIcon,
@@ -15,6 +16,7 @@ import {
   Pencil,
   Phone,
   Plus,
+  Printer,
   Save,
   Sparkles,
   Trash2,
@@ -22,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { CvUpload } from "@/components/cv-upload";
+import { ResumePreview } from "@/components/resume-preview";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,6 +33,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
 import type {
   CVUploadResult,
+  ProfileSaveResult,
   ProfileEducation,
   ProfileExperience,
   ProfileLink,
@@ -68,6 +72,24 @@ const emptyLink = (): ProfileLink => ({
   url: "",
 });
 
+const emptyUserProfile = (userId: string): UserProfile => ({
+  user_id: userId,
+  active_cv_id: null,
+  full_name: "",
+  headline: "",
+  location: "",
+  email: "",
+  phone: "",
+  links: [],
+  summary: "",
+  skills: [],
+  experience: [],
+  education: [],
+  projects: [],
+  certifications: [],
+  raw_sections: {},
+});
+
 const listToText = (items: string[]) => items.join(", ");
 
 const textToList = (value: string) =>
@@ -100,11 +122,14 @@ function ProfilePageContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
+  const [showResumePreview, setShowResumePreview] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const shouldOpenUploader = searchParams.get("upload") === "1";
+  const shouldOpenBuilder = searchParams.get("build") === "1";
+  const shouldOpenPreview = searchParams.get("preview") === "1";
 
   useEffect(() => {
     if (shouldOpenUploader) {
@@ -139,8 +164,20 @@ function ProfilePageContent() {
         }
 
         const body: { profile: UserProfile | null } = await response.json();
-        setProfile(body.profile);
-        setDraft(body.profile);
+        const loadedProfile = body.profile;
+        setProfile(loadedProfile);
+
+        if (shouldOpenBuilder) {
+          setDraft(loadedProfile ?? emptyUserProfile(id));
+          setIsEditing(true);
+          setShowUploader(false);
+        } else {
+          setDraft(loadedProfile);
+        }
+
+        if (shouldOpenPreview && loadedProfile) {
+          setShowResumePreview(true);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load profile");
       } finally {
@@ -149,9 +186,10 @@ function ProfilePageContent() {
     };
 
     loadProfile();
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, shouldOpenBuilder, shouldOpenPreview]);
 
-  const hasProfile = Boolean(profile && draft);
+  const hasProfile = Boolean(profile);
+  const hasDraft = Boolean(draft);
 
   const generatedLabel = profile?.updated_at
     ? new Date(profile.updated_at).toLocaleDateString(undefined, {
@@ -166,8 +204,28 @@ function ProfilePageContent() {
     setDraft(data.profile);
     setIsEditing(false);
     setShowUploader(false);
+    setShowResumePreview(false);
     setNotice(`${data.file_name} parsed into your profile.`);
     setError("");
+  };
+
+  const startManualBuild = () => {
+    if (!userId) return;
+    setDraft(profile ?? emptyUserProfile(userId));
+    setIsEditing(true);
+    setShowUploader(false);
+    setShowResumePreview(false);
+    setError("");
+    setNotice("");
+  };
+
+  const clearStaleJobSearchCache = () => {
+    if (userId) {
+      window.localStorage.removeItem(`careerPilot_lastJobSearch:v2:${userId}`);
+    }
+    Object.keys(window.localStorage)
+      .filter((key) => key.startsWith("careerpilot:jobs:"))
+      .forEach((key) => window.localStorage.removeItem(key));
   };
 
   const updateDraft = <K extends keyof ProfilePayload>(
@@ -266,7 +324,7 @@ function ProfilePageContent() {
       const response = await fetch(
         `${apiBaseUrl}/api/cv/profile?user_id=${encodeURIComponent(userId)}`,
         {
-          method: "PATCH",
+          method: profile ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(profileToPayload(draft)),
         },
@@ -277,11 +335,22 @@ function ProfilePageContent() {
         throw new Error(errData.detail || "Failed to save profile");
       }
 
-      const saved: UserProfile = await response.json();
+      const body: ProfileSaveResult | UserProfile = await response.json();
+      const saved: UserProfile = "profile" in body ? body.profile : body;
       setProfile(saved);
       setDraft(saved);
       setIsEditing(false);
-      setNotice("Profile saved.");
+      clearStaleJobSearchCache();
+      window.dispatchEvent(
+        new CustomEvent("careerpilot:cv-updated", {
+          detail: { userId, cvId: "cv_id" in body ? body.cv_id : saved.active_cv_id },
+        }),
+      );
+      setNotice(
+        "message" in body
+          ? body.message
+          : "Profile saved and CV intelligence updated.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile");
     } finally {
@@ -292,6 +361,9 @@ function ProfilePageContent() {
   const cancelEditing = () => {
     setDraft(profile);
     setIsEditing(false);
+    if (!profile) {
+      setShowResumePreview(false);
+    }
     setError("");
   };
 
@@ -313,7 +385,7 @@ function ProfilePageContent() {
           </p>
         </div>
 
-        {hasProfile && (
+        {hasDraft && (
           <div className="flex flex-wrap items-center gap-2">
             {isEditing ? (
               <>
@@ -341,6 +413,28 @@ function ProfilePageContent() {
               </>
             ) : (
               <>
+                {profile && (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={() => setShowResumePreview((current) => !current)}
+                      className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      Preview Resume
+                    </Button>
+                    {showResumePreview && (
+                      <Button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
+                      >
+                        <Printer className="mr-2 h-4 w-4" />
+                        Print / Download PDF
+                      </Button>
+                    )}
+                  </>
+                )}
                 <Button
                   type="button"
                   onClick={() => setIsEditing(true)}
@@ -387,7 +481,7 @@ function ProfilePageContent() {
         <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 text-sm text-white/50">
           Please sign in to manage your profile.
         </div>
-      ) : !hasProfile || showUploader ? (
+      ) : showUploader ? (
         <div className="space-y-4">
           {hasProfile && (
             <Button
@@ -400,6 +494,33 @@ function ProfilePageContent() {
             </Button>
           )}
           <CvUpload onUploadSuccess={handleUploadSuccess} />
+        </div>
+      ) : !hasDraft ? (
+        <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 shadow-xl shadow-black/30">
+          <div className="max-w-2xl space-y-3">
+            <h2 className="text-xl font-bold text-white">Start your career profile</h2>
+            <p className="text-sm leading-6 text-white/50">
+              Upload an existing CV or build one here. CareerPilot uses this profile for job matching, chat, and your resume export.
+            </p>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button
+              type="button"
+              onClick={() => setShowUploader(true)}
+              className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
+            >
+              <FileUp className="mr-2 h-4 w-4" />
+              Upload CV
+            </Button>
+            <Button
+              type="button"
+              onClick={startManualBuild}
+              className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Build profile manually
+            </Button>
+          </div>
         </div>
       ) : draft ? (
         <div className="space-y-5">
@@ -715,6 +836,28 @@ function ProfilePageContent() {
               </div>
             ))}
           </ProfileSection>
+
+          {showResumePreview && profile && (
+            <section className="resume-print-root space-y-4">
+              <div className="no-print flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">Resume Preview</h2>
+                  <p className="text-sm text-white/45">
+                    Your resume preview uses your latest saved profile.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Print / Download PDF
+                </Button>
+              </div>
+              <ResumePreview profile={profile} />
+            </section>
+          )}
         </div>
       ) : null}
     </div>

@@ -12,7 +12,7 @@ Routers (one per pillar, as per AGENTS.md):
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from routers import cv, jobs, chat, tracker, dashboard
+from routers import cv, jobs, chat, tracker, dashboard, copilot
 
 app = FastAPI(
     title="CareerPilot API",
@@ -34,6 +34,7 @@ app.include_router(jobs.router)
 app.include_router(chat.router)
 app.include_router(tracker.router)
 app.include_router(dashboard.router)
+app.include_router(copilot.router)
 
 
 @app.get("/health")

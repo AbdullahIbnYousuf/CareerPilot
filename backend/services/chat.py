@@ -24,6 +24,10 @@ _ACTION_PATTERN = re.compile(
     r"<careerpilot_action>\s*[\s\S]*?\s*</careerpilot_action>",
     re.MULTILINE,
 )
+_ONBOARDING_PATTERN = re.compile(
+    r"<careerpilot_onboarding>\s*[\s\S]*?\s*</careerpilot_onboarding>",
+    re.MULTILINE,
+)
 
 
 def _now_iso() -> str:
@@ -42,8 +46,10 @@ def _title_from_message(message: str) -> str:
 
 
 def _strip_copilot_actions(content: str) -> str:
-    """Remove hidden UI action directives before persisting assistant memory."""
-    return _ACTION_PATTERN.sub("", content).strip()
+    """Remove hidden UI directives before persisting assistant memory."""
+    content = _ACTION_PATTERN.sub("", content)
+    content = _ONBOARDING_PATTERN.sub("", content)
+    return content.strip()
 
 
 def _format_client_context(client_context: Optional[dict[str, Any]]) -> str:
@@ -146,14 +152,31 @@ Allowed hidden action directive format:
 {{"type":"open_route","label":"Upload your CV","href":"/cv?upload=1"}}
 </careerpilot_action>
 
+Allowed hidden onboarding directive format:
+<careerpilot_onboarding>
+{{"name":"Alex","targetRoles":["Frontend Engineer"],"location":"Dhaka","workMode":"remote","careerStage":"fresh graduate","completed":false}}
+</careerpilot_onboarding>
+
 Allowed action types:
 - open_route: href must be a CareerPilot route from the app map.
 - prefill_job_search: include label, query, optional location, optional auto.
 - create_goal_with_todos: include one goal and at most five todos. This only proposes; the user must confirm.
 - create_todo: include one todo. This only proposes; the user must confirm.
+- save_application: include label, job_id, optional status. This only proposes; the user must confirm.
+- update_application_status: include label, application_id, status. This only proposes; the user must confirm.
+- save_application_note: include label, application_id, note. This only proposes; the user must confirm.
 
 Do not show or explain the hidden directive in visible text. Keep visible replies
 concise, practical, and page-aware.
+
+For first-run onboarding, behave like a smart conversation, not a rigid form:
+- Infer only fields the user actually provided or corrected.
+- If the user says "hi im alex" or "my name is alex", store the name as "Alex", never the full sentence.
+- If the user corrects a prior value, acknowledge the correction and update it.
+- If the user asks what is happening, pause onboarding and briefly explain that you are learning a few preferences to personalize job matches and next steps.
+- Ask for only the most useful missing detail, and do not advance through hard-coded questions when the user is confused.
+- Set completed to true only when name, targetRoles, location/workMode, and careerStage are known.
+- Include at most one onboarding directive at the very end when a field should be updated.
 """
 
     system_prompt = (

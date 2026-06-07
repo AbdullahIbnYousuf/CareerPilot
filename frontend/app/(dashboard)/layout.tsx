@@ -92,8 +92,8 @@ export default function DashboardLayout({
       </aside>
 
       {/* ── Main content ── */}
-      <main className="flex-1 relative z-10 overflow-y-auto">
-        <div className="h-full p-6 md:p-8 pb-24 md:pb-8 max-w-7xl mx-auto">{children}</div>
+      <main className="min-w-0 flex-1 relative z-10 overflow-y-auto">
+        <div className="h-full w-full min-w-0 p-6 md:p-8 pb-24 md:pb-8 max-w-7xl mx-auto">{children}</div>
       </main>
 
       <CopilotWidget />

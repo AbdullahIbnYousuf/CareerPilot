@@ -36,13 +36,12 @@ import {
   validateCopilotAction,
 } from "@/lib/copilot/app-map";
 import type {
+  CareerPreferences,
   CopilotAction,
   CopilotClientContext,
   CopilotOnboardingState,
   CopilotProfileStatus,
-  CopilotTodoDraft,
-  Goal,
-  Todo,
+  CopilotValidatedAction,
 } from "@/types";
 
 type PanelState = "closed" | "open" | "minimized";
@@ -51,6 +50,14 @@ type LocalMessage = {
   role: "user" | "assistant";
   content: string;
   actions?: CopilotAction[];
+};
+type ChatMessageRow = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+type ChatSessionRow = {
+  id: string;
 };
 type ActionExecutionState = {
   status: "idle" | "loading" | "success" | "error";
@@ -63,6 +70,10 @@ type PanelPosition = {
 };
 
 const ACTION_PATTERN = /<careerpilot_action>\s*([\s\S]*?)\s*<\/careerpilot_action>/g;
+const ONBOARDING_PATTERN = /<careerpilot_onboarding>\s*([\s\S]*?)\s*<\/careerpilot_onboarding>/g;
+const DEFAULT_SESSION_TITLE = "CareerPilot";
+const COPILOT_SESSION_KEY_PREFIX = "careerpilot:copilot-chat:";
+const ACTIVE_SESSION_KEY_PREFIX = "careerpilot:active-chat:";
 
 const DEFAULT_ONBOARDING: CopilotOnboardingState = {
   completed: false,
@@ -73,6 +84,19 @@ const DEFAULT_ONBOARDING: CopilotOnboardingState = {
   careerStage: "",
   lastStep: "name",
   updatedAt: "",
+};
+
+const DEFAULT_PREFERENCES: CareerPreferences = {
+  user_id: "",
+  preferred_name: null,
+  target_roles: [],
+  preferred_locations: [],
+  work_modes: [],
+  seniority: null,
+  weekly_capacity_hours: null,
+  target_start_date: null,
+  industries: [],
+  updated_at: null,
 };
 
 const PANEL_MARGIN = 16;
@@ -95,6 +119,14 @@ function onboardingKey(userId: string): string {
   return `careerpilot:onboarding:v1:${userId}`;
 }
 
+function copilotSessionKey(userId: string): string {
+  return `${COPILOT_SESSION_KEY_PREFIX}${userId}`;
+}
+
+function activeSessionStorageKey(userId: string): string {
+  return `${ACTIVE_SESSION_KEY_PREFIX}${userId}`;
+}
+
 function normalizeOnboarding(value: unknown): CopilotOnboardingState {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { ...DEFAULT_ONBOARDING };
@@ -115,26 +147,25 @@ function normalizeOnboarding(value: unknown): CopilotOnboardingState {
   };
 }
 
-function initialAssistantMessage(onboarding: CopilotOnboardingState): LocalMessage {
+function initialAssistantContent(onboarding: CopilotOnboardingState): string {
   if (onboarding.completed) {
     const name = onboarding.name ? `, ${onboarding.name}` : "";
-    return {
-      id: messageId(),
-      role: "assistant",
-      content: `Welcome back${name}. What should we move forward today?`,
-    };
+    return `Welcome back${name}. What should we move forward today?`;
   }
 
+  return "Hi, I am CareerPilot. I will help turn your CV into job matches, applications, goals, and next steps. What can I call you?";
+}
+
+function initialAssistantMessage(onboarding: CopilotOnboardingState): LocalMessage {
   return {
     id: messageId(),
     role: "assistant",
-    content:
-      "Hi, I am CareerPilot. I will help turn your CV into job matches, applications, goals, and next steps. What can I call you?",
+    content: initialAssistantContent(onboarding),
   };
 }
 
-function stripActionDirectives(content: string): string {
-  return content.replace(ACTION_PATTERN, "").trim();
+function stripHiddenDirectives(content: string): string {
+  return content.replace(ACTION_PATTERN, "").replace(ONBOARDING_PATTERN, "").trim();
 }
 
 function extractActions(content: string): CopilotAction[] {
@@ -154,29 +185,133 @@ function extractActions(content: string): CopilotAction[] {
   return actions;
 }
 
-function parseTargetRoles(input: string): string[] {
-  return input
-    .split(/,|\/|\band\b/i)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 4);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseLocationAndMode(input: string): Pick<CopilotOnboardingState, "location" | "workMode"> {
-  const normalized = input.toLowerCase();
-  const modes = ["remote", "hybrid", "on-site", "onsite", "any"];
-  const matchedMode = modes.find((mode) => normalized.includes(mode));
-  const workMode = matchedMode === "onsite" ? "on-site" : matchedMode ?? "any";
-  const location = input
-    .replace(/\b(remote|hybrid|on-site|onsite|any)\b/gi, "")
-    .replace(/[(),]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function cleanText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  return cleaned.length > 0 ? cleaned : undefined;
+}
 
-  return {
-    location: location || input.trim(),
-    workMode,
+function normalizeName(value: unknown): string | undefined {
+  const cleaned = cleanText(value);
+  if (!cleaned) return undefined;
+
+  const lower = cleaned.toLowerCase();
+  const looksLikeSentence =
+    /\s/.test(cleaned) &&
+    !/^[a-z]+(?:[-'][a-z]+)?(?:\s+[a-z]+(?:[-'][a-z]+)?){0,2}$/i.test(cleaned);
+  if (looksLikeSentence || /^(hi|hello|hey|my name|i am|i'm|im)\b/.test(lower)) {
+    return undefined;
+  }
+
+  return cleaned
+    .split(" ")
+    .slice(0, 3)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function normalizeRoles(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const roles = value
+    .map(cleanText)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 4);
+  return roles.length > 0 ? roles : undefined;
+}
+
+function normalizeWorkMode(value: unknown): string | undefined {
+  const cleaned = cleanText(value)?.toLowerCase();
+  if (!cleaned) return undefined;
+  if (cleaned === "onsite") return "on-site";
+  if (["remote", "hybrid", "on-site", "any"].includes(cleaned)) return cleaned;
+  return undefined;
+}
+
+function deriveLastStep(onboarding: CopilotOnboardingState): CopilotOnboardingState["lastStep"] {
+  if (onboarding.completed) return "complete";
+  if (!onboarding.name) return "name";
+  if (onboarding.targetRoles.length === 0) return "target_role";
+  if (!onboarding.location && !onboarding.workMode) return "location_work_mode";
+  if (!onboarding.careerStage) return "career_stage";
+  return "complete";
+}
+
+function applyOnboardingPatch(
+  current: CopilotOnboardingState,
+  patch: Record<string, unknown>,
+): CopilotOnboardingState {
+  const next: CopilotOnboardingState = {
+    ...current,
+    updatedAt: new Date().toISOString(),
   };
+
+  const name = normalizeName(patch.name);
+  if (name) next.name = name;
+
+  const targetRoles = normalizeRoles(patch.targetRoles ?? patch.target_roles);
+  if (targetRoles) next.targetRoles = targetRoles;
+
+  const location = cleanText(patch.location);
+  if (location) next.location = location;
+
+  const workMode = normalizeWorkMode(patch.workMode ?? patch.work_mode);
+  if (workMode) next.workMode = workMode;
+
+  const careerStage = cleanText(patch.careerStage ?? patch.career_stage);
+  if (careerStage) next.careerStage = careerStage;
+
+  const hasRequiredFields =
+    Boolean(next.name) &&
+    next.targetRoles.length > 0 &&
+    Boolean(next.location || next.workMode) &&
+    Boolean(next.careerStage);
+  next.completed = patch.completed === true && hasRequiredFields ? true : hasRequiredFields;
+  next.lastStep = deriveLastStep(next);
+
+  return next;
+}
+
+function mergePreferencesIntoOnboarding(
+  current: CopilotOnboardingState,
+  preferences: CareerPreferences,
+): CopilotOnboardingState {
+  const next: CopilotOnboardingState = {
+    ...current,
+    name: current.name || preferences.preferred_name || "",
+    targetRoles: current.targetRoles.length > 0 ? current.targetRoles : preferences.target_roles,
+    location: current.location || preferences.preferred_locations[0] || "",
+    workMode: current.workMode || preferences.work_modes[0] || "",
+    updatedAt: new Date().toISOString(),
+  };
+  next.completed =
+    Boolean(next.name) &&
+    next.targetRoles.length > 0 &&
+    Boolean(next.location || next.workMode) &&
+    Boolean(next.careerStage);
+  next.lastStep = deriveLastStep(next);
+  return next;
+}
+
+function extractOnboardingPatch(content: string): Record<string, unknown> | null {
+  let patch: Record<string, unknown> | null = null;
+  const matches = content.matchAll(ONBOARDING_PATTERN);
+
+  for (const match of matches) {
+    try {
+      const parsed = JSON.parse(match[1]) as unknown;
+      if (isPlainObject(parsed)) {
+        patch = { ...(patch ?? {}), ...parsed };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return patch;
 }
 
 function formatDraftDate(date?: string | null): string {
@@ -198,6 +333,7 @@ export function CopilotWidget() {
   const [userId, setUserId] = useState<string | null>(null);
   const [profileStatus, setProfileStatus] = useState<CopilotProfileStatus>("unknown");
   const [onboarding, setOnboarding] = useState<CopilotOnboardingState>(DEFAULT_ONBOARDING);
+  const [preferences, setPreferences] = useState<CareerPreferences | null>(null);
   const [actionStates, setActionStates] = useState<Record<string, ActionExecutionState>>({});
   const [connectionError, setConnectionError] = useState("");
   const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
@@ -340,8 +476,86 @@ export function CopilotWidget() {
         }
       }
       setOnboarding(parsed);
-      setMessages([initialAssistantMessage(parsed)]);
       setPanelState(parsed.completed ? "minimized" : "open");
+
+      try {
+        const prefResponse = await fetch(
+          `${apiBaseUrl}/copilot/preferences?user_id=${encodeURIComponent(id)}`,
+        );
+        if (prefResponse.ok) {
+          const prefBody = (await prefResponse.json()) as { preferences?: CareerPreferences };
+          const loadedPreferences = prefBody.preferences ?? { ...DEFAULT_PREFERENCES, user_id: id };
+          setPreferences(loadedPreferences);
+          const merged = mergePreferencesIntoOnboarding(parsed, loadedPreferences);
+          parsed = merged;
+          setOnboarding(merged);
+        }
+      } catch {
+        setPreferences({ ...DEFAULT_PREFERENCES, user_id: id });
+      }
+
+      const storedSessionId = window.localStorage.getItem(copilotSessionKey(id));
+      let nextSessionId = storedSessionId || generateUUID();
+      let sessionReady = false;
+
+      if (storedSessionId) {
+        const { data: sessionRows } = await supabase
+          .from("chat_sessions")
+          .select("id")
+          .eq("user_id", id)
+          .eq("id", storedSessionId)
+          .limit(1);
+
+        sessionReady = ((sessionRows as ChatSessionRow[] | null) ?? []).length > 0;
+      }
+
+      if (!sessionReady) {
+        nextSessionId = generateUUID();
+        const now = new Date().toISOString();
+        const { error: insertSessionError } = await supabase.from("chat_sessions").insert({
+          id: nextSessionId,
+          user_id: id,
+          title: DEFAULT_SESSION_TITLE,
+          created_at: now,
+          updated_at: now,
+        });
+        sessionReady = !insertSessionError;
+      }
+
+      sessionIdRef.current = nextSessionId;
+      window.localStorage.setItem(copilotSessionKey(id), nextSessionId);
+
+      const { data: messageRows } = await supabase
+        .from("chat_messages")
+        .select("id, role, content")
+        .eq("user_id", id)
+        .eq("session_id", nextSessionId)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+      const persistedMessages = ((messageRows as ChatMessageRow[] | null) ?? [])
+        .filter((row) => row.role === "user" || row.role === "assistant")
+        .map((row) => ({
+          id: row.id,
+          role: row.role,
+          content: row.content,
+        }));
+
+      if (persistedMessages.length > 0) {
+        setMessages(persistedMessages);
+      } else {
+        const greeting = initialAssistantMessage(parsed);
+        setMessages([greeting]);
+
+        if (sessionReady) {
+          await supabase.from("chat_messages").insert({
+            user_id: id,
+            session_id: nextSessionId,
+            role: "assistant",
+            content: greeting.content,
+          });
+        }
+      }
 
       try {
         const response = await fetch(
@@ -409,8 +623,9 @@ export function CopilotWidget() {
         currentPath: pathname,
         profileStatus,
         onboarding,
+        preferences: preferences ?? undefined,
       }),
-    [onboarding, pathname, profileStatus],
+    [onboarding, pathname, preferences, profileStatus],
   );
 
   const appendAssistantMessage = useCallback((content: string, actions?: CopilotAction[]) => {
@@ -425,89 +640,64 @@ export function CopilotWidget() {
     ]);
   }, []);
 
-  const finishOnboardingWithCvStatus = useCallback(
-    (nextOnboarding: CopilotOnboardingState) => {
-      const name = nextOnboarding.name ? `${nextOnboarding.name}, ` : "";
-      if (profileStatus === "has_profile") {
-        const role = nextOnboarding.targetRoles[0] ?? "software engineer";
-        appendAssistantMessage(`${name}you are set. Want me to start with matching jobs?`, [
-          {
-            type: "prefill_job_search",
-            label: `Search ${role} roles`,
-            query: role,
-            location: nextOnboarding.location,
-            auto: true,
-          },
-        ]);
-        return;
-      }
+  const persistPreferencesFromOnboarding = useCallback(
+    async (nextOnboarding: CopilotOnboardingState) => {
+      if (!userId) return;
 
-      appendAssistantMessage(`${name}your CV is the foundation for fit scores and grounded advice. Upload it first.`, [
-        {
-          type: "open_route",
-          label: "Upload your CV",
-          href: "/cv?upload=1",
-        },
-      ]);
+      const payload = {
+        preferred_name: nextOnboarding.name || undefined,
+        target_roles: nextOnboarding.targetRoles,
+        preferred_locations: nextOnboarding.location ? [nextOnboarding.location] : [],
+        work_modes: nextOnboarding.workMode ? [nextOnboarding.workMode] : [],
+        seniority: nextOnboarding.careerStage || undefined,
+      };
+
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/copilot/preferences?user_id=${encodeURIComponent(userId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        );
+        if (response.ok) {
+          const body = (await response.json()) as { preferences?: CareerPreferences };
+          if (body.preferences) setPreferences(body.preferences);
+        }
+      } catch {
+        /* Preference persistence should not block chat. */
+      }
     },
-    [appendAssistantMessage, profileStatus],
+    [apiBaseUrl, userId],
   );
 
-  const handleOnboardingAnswer = useCallback(
-    (text: string): boolean => {
-      if (onboarding.completed) return false;
+  const validateActions = useCallback(
+    async (actions: CopilotAction[]): Promise<CopilotAction[]> => {
+      if (!userId || actions.length === 0) return [];
 
-      const now = new Date().toISOString();
-      if (onboarding.lastStep === "name") {
-        const next = {
-          ...onboarding,
-          name: text.trim(),
-          lastStep: "target_role" as const,
-          updatedAt: now,
-        };
-        setOnboarding(next);
-        appendAssistantMessage(`Nice to meet you, ${next.name}. What role are you aiming for?`);
-        return true;
+      const validated: CopilotAction[] = [];
+      for (const action of actions) {
+        try {
+          const response = await fetch(`${apiBaseUrl}/copilot/actions/validate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              source: "widget",
+              action,
+            }),
+          });
+          if (!response.ok) continue;
+          const body = (await response.json()) as CopilotValidatedAction;
+          if (body.valid) validated.push(body.action);
+        } catch {
+          continue;
+        }
       }
-
-      if (onboarding.lastStep === "target_role") {
-        const roles = parseTargetRoles(text);
-        const next = {
-          ...onboarding,
-          targetRoles: roles.length > 0 ? roles : [text.trim()],
-          lastStep: "location_work_mode" as const,
-          updatedAt: now,
-        };
-        setOnboarding(next);
-        appendAssistantMessage("Where do you want to work, and do you prefer on-site, hybrid, remote, or any?");
-        return true;
-      }
-
-      if (onboarding.lastStep === "location_work_mode") {
-        const locationAndMode = parseLocationAndMode(text);
-        const next = {
-          ...onboarding,
-          ...locationAndMode,
-          lastStep: "career_stage" as const,
-          updatedAt: now,
-        };
-        setOnboarding(next);
-        appendAssistantMessage("What stage are you in right now: student, fresh graduate, experienced, switching career, or urgent search?");
-        return true;
-      }
-
-      const next = {
-        ...onboarding,
-        careerStage: text.trim(),
-        completed: true,
-        lastStep: "complete" as const,
-        updatedAt: now,
-      };
-      setOnboarding(next);
-      finishOnboardingWithCvStatus(next);
-      return true;
+      return validated;
     },
-    [appendAssistantMessage, finishOnboardingWithCvStatus, onboarding],
+    [apiBaseUrl, userId],
   );
 
   const sendChatMessage = useCallback(
@@ -551,20 +741,33 @@ export function CopilotWidget() {
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId
-                ? { ...message, content: stripActionDirectives(fullReply) }
+                ? { ...message, content: stripHiddenDirectives(fullReply) }
                 : message,
             ),
           );
         }
 
         const actions = extractActions(fullReply);
+        const onboardingPatch = extractOnboardingPatch(fullReply);
+        if (onboardingPatch) {
+          let nextOnboarding: CopilotOnboardingState | null = null;
+          setOnboarding((current) => {
+            nextOnboarding = applyOnboardingPatch(current, onboardingPatch);
+            return nextOnboarding;
+          });
+          if (nextOnboarding) {
+            void persistPreferencesFromOnboarding(nextOnboarding);
+          }
+        }
+        const validatedActions = await validateActions(actions);
+
         setMessages((current) =>
           current.map((message) =>
             message.id === assistantId
               ? {
                   ...message,
-                  content: stripActionDirectives(fullReply),
-                  actions: actions.length > 0 ? actions : undefined,
+                  content: stripHiddenDirectives(fullReply),
+                  actions: validatedActions.length > 0 ? validatedActions : undefined,
                 }
               : message,
           ),
@@ -585,7 +788,7 @@ export function CopilotWidget() {
         setIsStreaming(false);
       }
     },
-    [appendAssistantMessage, clientContext, userId],
+    [appendAssistantMessage, clientContext, persistPreferencesFromOnboarding, userId, validateActions],
   );
 
   const submitCurrentInput = useCallback(async () => {
@@ -595,9 +798,8 @@ export function CopilotWidget() {
     setMessages((current) => [...current, { id: messageId(), role: "user", content: text }]);
     setInput("");
 
-    if (handleOnboardingAnswer(text)) return;
     await sendChatMessage(text);
-  }, [handleOnboardingAnswer, input, isStreaming, sendChatMessage]);
+  }, [input, isStreaming, sendChatMessage]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -605,6 +807,9 @@ export function CopilotWidget() {
   };
 
   const openFullAssistant = () => {
+    if (userId && sessionIdRef.current) {
+      window.localStorage.setItem(activeSessionStorageKey(userId), sessionIdRef.current);
+    }
     setPanelState("minimized");
     router.push("/chat");
   };
@@ -697,33 +902,6 @@ export function CopilotWidget() {
     setActionStates((current) => ({ ...current, [actionKey]: state }));
   };
 
-  const executeCreateTodo = async (actionKey: string, todo: CopilotTodoDraft, goalId?: string) => {
-    if (!userId) throw new Error("Please sign in first.");
-    const response = await fetch(`${apiBaseUrl}/tracker/todos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: userId,
-        title: todo.title,
-        due_date: todo.due_date ?? null,
-        goal_id: goalId ?? null,
-      }),
-    });
-
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { detail?: string };
-      throw new Error(body.detail ?? "Failed to create task.");
-    }
-
-    const body = (await response.json()) as { todo?: Todo };
-    if (!body.todo?.id) throw new Error("Task was not confirmed.");
-    updateActionState(actionKey, {
-      status: "success",
-      message: "Task added.",
-      href: "/tracker?view=goals_tasks",
-    });
-  };
-
   const executeAction = async (messageIdValue: string, index: number, action: CopilotAction) => {
     const actionKey = `${messageIdValue}-${index}`;
 
@@ -750,53 +928,33 @@ export function CopilotWidget() {
 
     updateActionState(actionKey, { status: "loading" });
     try {
-      if (action.type === "create_todo") {
-        await executeCreateTodo(actionKey, action.todo);
-        return;
-      }
-
       if (!userId) throw new Error("Please sign in first.");
-      const goalResponse = await fetch(`${apiBaseUrl}/tracker/goals`, {
+      const response = await fetch(`${apiBaseUrl}/copilot/actions/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          title: action.goal.title,
-          target_date: action.goal.target_date ?? null,
+          source: "widget",
+          action,
         }),
       });
 
-      if (!goalResponse.ok) {
-        const body = (await goalResponse.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail ?? "Failed to create goal.");
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? "I could not confirm that action.");
       }
 
-      const goalBody = (await goalResponse.json()) as { goal?: Goal };
-      const goalId = goalBody.goal?.id;
-      if (!goalId) throw new Error("Goal was not confirmed.");
-
-      for (const todo of action.todos) {
-        const todoResponse = await fetch(`${apiBaseUrl}/tracker/todos`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: userId,
-            goal_id: goalId,
-            title: todo.title,
-            due_date: todo.due_date ?? null,
-          }),
-        });
-
-        if (!todoResponse.ok) {
-          const body = (await todoResponse.json().catch(() => ({}))) as { detail?: string };
-          throw new Error(body.detail ?? "Goal was created, but a task failed.");
-        }
-      }
-
+      const body = (await response.json()) as { message?: string; href?: string };
       updateActionState(actionKey, {
         status: "success",
-        message: "Plan created in My Journey.",
-        href: "/tracker?view=goals_tasks",
+        message: body.message ?? "Confirmed.",
+        href: body.href ?? (
+          action.type === "save_application" ||
+          action.type === "update_application_status" ||
+          action.type === "save_application_note"
+            ? "/tracker?view=applications"
+            : "/tracker?view=goals_tasks"
+        ),
       });
     } catch (error) {
       updateActionState(actionKey, {
@@ -1015,9 +1173,16 @@ function CopilotActionCard({
   onExecute: () => void;
   onOpenHref: (href: string) => void;
 }) {
-  const isMutation = action.type === "create_goal_with_todos" || action.type === "create_todo";
+  const isApplicationAction =
+    action.type === "save_application" ||
+    action.type === "update_application_status" ||
+    action.type === "save_application_note";
+  const isMutation =
+    action.type === "create_goal_with_todos" ||
+    action.type === "create_todo" ||
+    isApplicationAction;
   const isLoading = state.status === "loading";
-  const successHref = state.href ?? "/tracker?view=goals_tasks";
+  const successHref = state.href ?? (isApplicationAction ? "/tracker?view=applications" : "/tracker?view=goals_tasks");
   const Icon =
     action.type === "open_route"
       ? Navigation
@@ -1025,7 +1190,9 @@ function CopilotActionCard({
         ? Search
         : action.type === "create_todo"
           ? Calendar
-          : Target;
+          : isApplicationAction
+            ? CheckCircle2
+            : Target;
 
   return (
     <div className="mt-2 rounded-xl border border-[#7C74DB]/20 bg-[#1E1B3A]/40 p-3 text-xs text-white/70">
@@ -1058,7 +1225,7 @@ function CopilotActionCard({
                 onClick={() => onOpenHref(successHref)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-[#534AB7] px-3 py-1.5 font-semibold text-white hover:bg-[#6B63CC]"
               >
-                Open Goals & Tasks
+                {isApplicationAction ? "Open Applications" : "Open Goals & Tasks"}
                 <ExternalLink className="h-3 w-3" />
               </button>
             ) : (
@@ -1103,6 +1270,30 @@ function ActionSummary({ action }: { action: CopilotAction }) {
     return (
       <p className="mt-1 text-white/45">
         {action.todo.title} · {formatDraftDate(action.todo.due_date)}
+      </p>
+    );
+  }
+
+  if (action.type === "save_application") {
+    return (
+      <p className="mt-1 text-white/45">
+        Save job to Applications{action.status ? ` as ${action.status}` : ""}
+      </p>
+    );
+  }
+
+  if (action.type === "update_application_status") {
+    return (
+      <p className="mt-1 text-white/45">
+        Move application to {action.status}
+      </p>
+    );
+  }
+
+  if (action.type === "save_application_note") {
+    return (
+      <p className="mt-1 text-white/45">
+        Save note: {action.note}
       </p>
     );
   }

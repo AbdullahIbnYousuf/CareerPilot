@@ -45,7 +45,7 @@ export const COPILOT_ROUTES = {
   },
   "/cv": {
     label: "Profile",
-    purpose: "CV upload, profile intelligence, and editable career profile.",
+    purpose: "CV upload, manual profile building, editable profile intelligence, and resume preview/export.",
   },
 } as const;
 
@@ -54,6 +54,9 @@ export const ALLOWED_COPILOT_ACTIONS = [
   "prefill_job_search",
   "create_goal_with_todos",
   "create_todo",
+  "save_application",
+  "update_application_status",
+  "save_application_note",
 ] as const;
 
 const ALLOWED_ROUTE_PATHS = Object.keys(COPILOT_ROUTES);
@@ -70,6 +73,16 @@ function isNonEmptyString(value: unknown): value is string {
 function isValidDateOnly(value: unknown): value is string {
   if (value === null || value === undefined || value === "") return true;
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function isApplicationStatus(value: unknown): value is "saved" | "applied" | "interviewing" | "offer" | "rejected" {
+  return (
+    value === "saved" ||
+    value === "applied" ||
+    value === "interviewing" ||
+    value === "offer" ||
+    value === "rejected"
+  );
 }
 
 export function pageLabelForPath(pathname: string): string {
@@ -104,7 +117,8 @@ export function isAllowedCopilotHref(href: string): boolean {
 
   if (path === "/cv") {
     if (paramKeys.length === 0) return true;
-    return paramKeys.every((key) => key === "upload") && params.get("upload") === "1";
+    const allowedCvParams = ["upload", "build", "preview"];
+    return paramKeys.every((key) => allowedCvParams.includes(key) && params.get(key) === "1");
   }
 
   if (path === "/jobs") {
@@ -198,6 +212,39 @@ export function validateCopilotAction(value: unknown): CopilotAction | null {
     };
   }
 
+  if (value.type === "save_application") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.job_id)) return null;
+    if (value.status !== undefined && !isApplicationStatus(value.status)) return null;
+    return {
+      type: "save_application",
+      label: value.label.trim(),
+      job_id: value.job_id.trim(),
+      status: value.status,
+    };
+  }
+
+  if (value.type === "update_application_status") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.application_id)) return null;
+    if (!isApplicationStatus(value.status)) return null;
+    return {
+      type: "update_application_status",
+      label: value.label.trim(),
+      application_id: value.application_id.trim(),
+      status: value.status,
+    };
+  }
+
+  if (value.type === "save_application_note") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.application_id)) return null;
+    if (!isNonEmptyString(value.note)) return null;
+    return {
+      type: "save_application_note",
+      label: value.label.trim(),
+      application_id: value.application_id.trim(),
+      note: value.note.trim(),
+    };
+  }
+
   return null;
 }
 
@@ -205,10 +252,12 @@ export function buildCopilotContext({
   currentPath,
   profileStatus,
   onboarding,
+  preferences,
 }: {
   currentPath: string;
   profileStatus: CopilotProfileStatus;
   onboarding: CopilotOnboardingState;
+  preferences?: CopilotClientContext["preferences"];
 }): CopilotClientContext {
   const routeDescriptions = Object.entries(COPILOT_ROUTES)
     .map(([href, route]) => `${route.label}: ${href} (${route.purpose})`)
@@ -230,10 +279,15 @@ export function buildCopilotContext({
       workMode: onboarding.workMode || undefined,
       careerStage: onboarding.careerStage || undefined,
     },
+    preferences,
     app_map: [
       `Routes: ${routeDescriptions}`,
+      "Profile route helpers: /cv?upload=1 opens CV upload, /cv?build=1 opens manual profile building, /cv?preview=1 opens resume preview/export when a profile exists.",
+      "If profile_status is no_profile, offer Upload CV or Build profile manually. Do not generate, create, or overwrite profile data automatically.",
+      "After a profile is saved, suggest Preview Resume or Search Jobs when helpful.",
       `My Journey views: ${viewDescriptions}`,
       `Allowed actions: ${actionDescriptions}`,
+      "Application and tracker mutations require backend validation and explicit user confirmation.",
       "Action directives must be hidden in <careerpilot_action>{json}</careerpilot_action>.",
     ].join("\n"),
   };

@@ -26,7 +26,7 @@ from services.searcher import hybrid_search
 from services.profile import (
     build_profile_from_sections,
     get_profile as fetch_profile,
-    update_profile as save_profile_edits,
+    save_profile_as_cv_source,
     upsert_profile,
 )
 
@@ -94,6 +94,13 @@ class UserProfile(ProfilePayload):
 
 class ProfileResponse(BaseModel):
     profile: Optional[UserProfile]
+
+
+class ProfileSaveResponse(BaseModel):
+    profile: UserProfile
+    cv_id: str
+    chunks_stored: int
+    message: str
 
 
 class CVUploadResponse(BaseModel):
@@ -381,16 +388,32 @@ async def get_profile(
         raise HTTPException(status_code=500, detail=f"Failed to fetch profile: {str(e)}")
 
 
-@router.patch("/profile", response_model=UserProfile)
+@router.post("/profile", response_model=ProfileSaveResponse)
+async def create_profile(
+    request: ProfilePayload,
+    user_id: str = Query(..., description="User UUID from Supabase Auth"),
+):
+    """Build a profile manually and create the active CV intelligence source."""
+    try:
+        return await save_profile_as_cv_source(user_id, request.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save profile: {str(e)}")
+
+
+@router.patch("/profile", response_model=ProfileSaveResponse)
 async def update_profile(
     request: ProfilePayload,
     user_id: str = Query(..., description="User UUID from Supabase Auth"),
 ):
-    """Save user edits to the editable profile."""
+    """Save user edits and refresh CV chunks used by chat, search, and scoring."""
     try:
-        return await save_profile_edits(user_id, request.model_dump())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Profile not found")
+        result = await save_profile_as_cv_source(user_id, request.model_dump())
+        result["message"] = "Profile saved and CV intelligence updated."
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
 

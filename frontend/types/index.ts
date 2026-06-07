@@ -199,6 +199,13 @@ export interface CVUploadResult {
   message: string;
 }
 
+export interface ProfileSaveResult {
+  profile: UserProfile;
+  cv_id: string;
+  chunks_stored: number;
+  message: string;
+}
+
 export type CopilotProfileStatus = "unknown" | "no_profile" | "has_profile";
 
 export interface CopilotOnboardingState {
@@ -226,7 +233,21 @@ export interface CopilotClientContext {
   current_page_label: string;
   profile_status: CopilotProfileStatus;
   onboarding: CopilotContextOnboarding;
+  preferences?: CareerPreferences;
   app_map: string;
+}
+
+export interface CareerPreferences {
+  user_id: string;
+  preferred_name?: string | null;
+  target_roles: string[];
+  preferred_locations: string[];
+  work_modes: string[];
+  seniority?: string | null;
+  weekly_capacity_hours?: number | null;
+  target_start_date?: string | null;
+  industries: string[];
+  updated_at?: string | null;
 }
 
 export interface CopilotOpenRouteAction {
@@ -266,8 +287,55 @@ export interface CopilotCreateTodoAction {
   todo: CopilotTodoDraft;
 }
 
+export interface CopilotSaveApplicationAction {
+  type: "save_application";
+  label: string;
+  job_id: string;
+  status?: ApplicationStatus;
+}
+
+export interface CopilotUpdateApplicationStatusAction {
+  type: "update_application_status";
+  label: string;
+  application_id: string;
+  status: ApplicationStatus;
+}
+
+export interface CopilotSaveApplicationNoteAction {
+  type: "save_application_note";
+  label: string;
+  application_id: string;
+  note: string;
+}
+
 export type CopilotAction =
   | CopilotOpenRouteAction
   | CopilotPrefillJobSearchAction
   | CopilotCreateGoalWithTodosAction
-  | CopilotCreateTodoAction;
+  | CopilotCreateTodoAction
+  | CopilotSaveApplicationAction
+  | CopilotUpdateApplicationStatusAction
+  | CopilotSaveApplicationNoteAction;
+
+export interface CopilotValidatedAction {
+  valid: boolean;
+  action: CopilotAction;
+  action_type: CopilotAction["type"];
+  label: string;
+  summary: string;
+  is_mutating: boolean;
+  confirmation_label: string;
+  href?: string;
+}
+
+export interface CopilotActionEvent {
+  id: string;
+  user_id: string;
+  action_type: string;
+  status: "validated" | "executed" | "rejected" | "failed";
+  source: string;
+  summary?: string | null;
+  created_records: Record<string, unknown>;
+  error?: string | null;
+  created_at: string;
+}
