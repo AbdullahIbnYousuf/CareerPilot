@@ -11,6 +11,7 @@ import {
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CopilotWidget } from "@/components/copilot-widget";
 
 const navItems = [
   { href: "/tracker", label: "My Journey", icon: Map, exact: false },
@@ -94,6 +95,8 @@ export default function DashboardLayout({
       <main className="flex-1 relative z-10 overflow-y-auto">
         <div className="h-full p-6 md:p-8 pb-24 md:pb-8 max-w-7xl mx-auto">{children}</div>
       </main>
+
+      <CopilotWidget />
 
       {/* ── Mobile bottom tab bar (stub — styled Day 11) ── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-white/[0.04] bg-[#0E0E12]/90 backdrop-blur-md px-2 py-3.5">

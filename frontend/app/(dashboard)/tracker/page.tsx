@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { KanbanBoard } from "@/components/kanban-board";
 import { ProgressDashboard } from "@/components/progress-dashboard";
 import { CalendarView } from "@/components/calendar-view";
@@ -20,6 +21,18 @@ import {
 } from "lucide-react";
 
 type View = "today" | "applications" | "progress" | "calendar" | "goals_tasks";
+
+const QUERY_VIEW_VALUES: View[] = [
+  "today",
+  "applications",
+  "goals_tasks",
+  "calendar",
+  "progress",
+];
+
+function isJourneyView(value: string | null): value is View {
+  return Boolean(value && QUERY_VIEW_VALUES.includes(value as View));
+}
 
 interface TodoRow {
   id: string;
@@ -62,7 +75,8 @@ function replaceTodosPreservingVisible(incomingTodos: Todo[]) {
   };
 }
 
-export default function JourneyPage() {
+function JourneyPageContent() {
+  const searchParams = useSearchParams();
   const [view, setView] = useState<View>("today");
   const [nudges, setNudges] = useState<Nudge[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -75,6 +89,14 @@ export default function JourneyPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const routeView = searchParams.get("view");
+
+  useEffect(() => {
+    if (isJourneyView(routeView)) {
+      const timeoutId = window.setTimeout(() => setView(routeView), 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [routeView]);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -179,6 +201,17 @@ export default function JourneyPage() {
         return currentTodos;
       }
       return [todo, ...currentTodos];
+    });
+  }, []);
+
+  const handleTodosCreated = useCallback((createdTodos: Todo[]) => {
+    if (createdTodos.length === 0) return;
+
+    setDataLoadError(null);
+    setTodos((currentTodos) => {
+      const existingIds = new Set(currentTodos.map((todo) => todo.id));
+      const nextTodos = createdTodos.filter((todo) => !existingIds.has(todo.id));
+      return nextTodos.length === 0 ? currentTodos : [...nextTodos, ...currentTodos];
     });
   }, []);
 
@@ -319,7 +352,12 @@ export default function JourneyPage() {
             onOpenTasks={() => setView("goals_tasks")}
           />
         )}
-        {view === "applications" && <KanbanBoard />}
+        {view === "applications" && (
+          <KanbanBoard
+            onTodosCreated={handleTodosCreated}
+            onTodosChange={handleDataRefresh}
+          />
+        )}
         {view === "progress"     && <ProgressDashboard />}
         {view === "calendar"     && <CalendarView />}
 
@@ -349,5 +387,13 @@ export default function JourneyPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function JourneyPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-white/40">Loading My Journey...</div>}>
+      <JourneyPageContent />
+    </Suspense>
   );
 }

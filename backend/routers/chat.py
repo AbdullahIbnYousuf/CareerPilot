@@ -9,6 +9,7 @@ Memory: last N messages fetched from chat_messages table.
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from typing import Any, Optional
 from pydantic import BaseModel
 from services.searcher import hybrid_search
 from services.chat import stream_chat
@@ -20,6 +21,7 @@ class ChatRequest(BaseModel):
     user_id: str
     session_id: str
     message: str
+    client_context: Optional[dict[str, Any]] = None
 
 
 @router.post("/")
@@ -46,7 +48,8 @@ async def chat_endpoint(req: ChatRequest):
             user_id=req.user_id,
             session_id=req.session_id,
             message=req.message,
-            cv_context=cv_context
+            cv_context=cv_context,
+            client_context=req.client_context,
         ):
             yield chunk
 
