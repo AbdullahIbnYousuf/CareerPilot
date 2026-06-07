@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import {
@@ -235,17 +235,17 @@ function ApplicationCard({
             </span>
           )}
 
-          {/* External link */}
+          {/* External link / Apply text button */}
           {app.url && (
             <a
               href={app.url}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="h-5 w-5 flex items-center justify-center rounded-md text-white/20 hover:text-primary hover:bg-primary/10 transition-all"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#AFA9EC] hover:text-[#C5BFFF] hover:bg-primary/10 transition-all border border-white/[0.08] hover:border-primary/40 bg-white/[0.02]"
               aria-label="Open job posting"
             >
-              <ExternalLink className="h-3 w-3" />
+              Apply <ExternalLink className="h-2.5 w-2.5 shrink-0" />
             </a>
           )}
         </div>

@@ -6,18 +6,20 @@ interface FitScoreBadgeProps {
 }
 
 export function FitScoreBadge({ score, explanation }: FitScoreBadgeProps) {
+  const numericScore = typeof score === "number" ? score : (Number(score) || 0);
+
   // Determine color coding: <40 Red, 40-70 Yellow/Amber, >70 Green/Emerald
   let strokeColor = "stroke-[#EF4444]";
   let textColor = "text-[#EF4444]";
   let bgColor = "bg-[#EF4444]/10";
   let hoverBorder = "group-hover:border-[#EF4444]/30";
 
-  if (score >= 70) {
+  if (numericScore >= 70) {
     strokeColor = "stroke-[#10B981]";
     textColor = "text-[#10B981]";
     bgColor = "bg-[#10B981]/10";
     hoverBorder = "group-hover:border-[#10B981]/30";
-  } else if (score >= 40) {
+  } else if (numericScore >= 40) {
     strokeColor = "stroke-[#F59E0B]";
     textColor = "text-[#F59E0B]";
     bgColor = "bg-[#F59E0B]/10";
@@ -28,7 +30,7 @@ export function FitScoreBadge({ score, explanation }: FitScoreBadgeProps) {
   const radius = 18;
   const strokeWidth = 3;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (Math.min(100, Math.max(0, score)) / 100) * circumference;
+  const strokeDashoffset = circumference - (Math.min(100, Math.max(0, numericScore)) / 100) * circumference;
 
   return (
     <div className="relative group inline-flex items-center justify-center cursor-help">
@@ -61,7 +63,7 @@ export function FitScoreBadge({ score, explanation }: FitScoreBadgeProps) {
           </svg>
           {/* Central percentage number */}
           <span className={`absolute inset-0 flex items-center justify-center text-xs font-bold ${textColor}`}>
-            {score}
+            {numericScore}
           </span>
         </div>
         <span className={`text-xs font-semibold ${textColor}`}>Fit</span>
