@@ -182,6 +182,17 @@ export default function JourneyPage() {
     });
   }, []);
 
+  const handleTodosCreated = useCallback((createdTodos: Todo[]) => {
+    if (createdTodos.length === 0) return;
+
+    setDataLoadError(null);
+    setTodos((currentTodos) => {
+      const existingIds = new Set(currentTodos.map((todo) => todo.id));
+      const nextTodos = createdTodos.filter((todo) => !existingIds.has(todo.id));
+      return nextTodos.length === 0 ? currentTodos : [...nextTodos, ...currentTodos];
+    });
+  }, []);
+
   // ── Nudges + Realtime ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
@@ -319,7 +330,12 @@ export default function JourneyPage() {
             onOpenTasks={() => setView("goals_tasks")}
           />
         )}
-        {view === "applications" && <KanbanBoard />}
+        {view === "applications" && (
+          <KanbanBoard
+            onTodosCreated={handleTodosCreated}
+            onTodosChange={handleDataRefresh}
+          />
+        )}
         {view === "progress"     && <ProgressDashboard />}
         {view === "calendar"     && <CalendarView />}
 

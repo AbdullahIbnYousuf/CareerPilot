@@ -20,7 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/lib/supabase";
 import { FitScoreBadge } from "./fit-score-badge";
-import type { Application, ApplicationStatus } from "@/types";
+import type { Application, ApplicationStatus, Todo } from "@/types";
 import {
   Loader2,
   GripVertical,
@@ -440,7 +440,15 @@ function capitalize(s?: string | null) {
   if (!s) return "";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
-export function KanbanBoard() {
+interface KanbanBoardProps {
+  onTodosCreated?: (todos: Todo[]) => void;
+  onTodosChange?: () => void;
+}
+
+export function KanbanBoard({
+  onTodosCreated,
+  onTodosChange,
+}: KanbanBoardProps = {}) {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [applications, setApplications] = useState<Application[]>([]);
@@ -755,7 +763,7 @@ export function KanbanBoard() {
   };
 
   // â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const createTodo = async (title: string, dueDate: string) => {
+  const createTodo = async (title: string, dueDate: string): Promise<Todo> => {
     if (!userId) throw new Error("Please sign in to create tasks.");
 
     const res = await fetch(`${baseUrl}/tracker/todos`, {
@@ -772,6 +780,13 @@ export function KanbanBoard() {
     if (!res.ok) {
       throw new Error("Task creation failed.");
     }
+
+    const data = (await res.json()) as { todo?: Todo };
+    if (!data.todo) {
+      throw new Error("Task creation failed.");
+    }
+
+    return data.todo;
   };
 
   const handleCreatePromptTasks = async () => {
@@ -780,11 +795,13 @@ export function KanbanBoard() {
     setCreatingTasks(true);
     setActionPromptError("");
     try {
+      let createdTodos: Todo[] = [];
       if (actionPrompt.type === "follow_up") {
-        await createTodo("Follow up with recruiter", actionPrompt.dueDate);
+        const todo = await createTodo("Follow up with recruiter", actionPrompt.dueDate);
+        createdTodos = [todo];
         setActionNotice("Follow-up task added.");
       } else {
-        await Promise.all(
+        createdTodos = await Promise.all(
           [
             "Research company",
             "Practice role-specific questions",
@@ -794,6 +811,8 @@ export function KanbanBoard() {
         setActionNotice("Interview prep tasks added.");
       }
 
+      onTodosCreated?.(createdTodos);
+      onTodosChange?.();
       setActionPrompt(null);
       setTimeout(() => setActionNotice(""), 3500);
     } catch (error) {
