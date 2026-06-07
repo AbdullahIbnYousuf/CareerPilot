@@ -236,18 +236,16 @@ function ApplicationCard({
           )}
 
           {/* External link / Apply text button */}
-          {app.url && (
-            <a
-              href={app.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#AFA9EC] hover:text-[#C5BFFF] hover:bg-primary/10 transition-all border border-white/[0.08] hover:border-primary/40 bg-white/[0.02]"
-              aria-label="Open job posting"
-            >
-              Apply <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-            </a>
-          )}
+          <a
+            href={app.url || `https://www.google.com/search?q=${encodeURIComponent(`${app.title || "Job"} ${app.company || ""}`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#AFA9EC] hover:text-[#C5BFFF] hover:bg-primary/10 transition-all border border-white/[0.08] hover:border-primary/40 bg-white/[0.02]"
+            aria-label="Open job posting"
+          >
+            Apply <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+          </a>
         </div>
       </div>
     </div>
@@ -1108,16 +1106,14 @@ export function KanbanBoard() {
               <span className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-sm font-medium px-4 py-2">
                 <BookmarkCheck className="h-4 w-4 shrink-0" /> Saved to Tracker
               </span>
-              {selectedApp.url && (
-                <a
-                  href={selectedApp.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
-                >
-                  Apply Now <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                </a>
-              )}
+              <a
+                href={selectedApp.url || `https://www.google.com/search?q=${encodeURIComponent(`${selectedApp.title || "Job"} ${selectedApp.company || ""}`)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex shrink-0 whitespace-nowrap items-center justify-center gap-1.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium px-4 py-2 transition-colors duration-150"
+              >
+                Apply Now <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              </a>
             </div>
           </div>
         </div>
