@@ -198,3 +198,76 @@ export interface CVUploadResult {
   parsed_at: string;
   message: string;
 }
+
+export type CopilotProfileStatus = "unknown" | "no_profile" | "has_profile";
+
+export interface CopilotOnboardingState {
+  completed: boolean;
+  name: string;
+  targetRoles: string[];
+  location: string;
+  workMode: string;
+  careerStage: string;
+  lastStep: "name" | "target_role" | "location_work_mode" | "career_stage" | "cv_status" | "complete";
+  updatedAt: string;
+}
+
+export interface CopilotContextOnboarding {
+  name?: string;
+  targetRoles?: string[];
+  location?: string;
+  workMode?: string;
+  careerStage?: string;
+  completed?: boolean;
+}
+
+export interface CopilotClientContext {
+  current_path: string;
+  current_page_label: string;
+  profile_status: CopilotProfileStatus;
+  onboarding: CopilotContextOnboarding;
+  app_map: string;
+}
+
+export interface CopilotOpenRouteAction {
+  type: "open_route";
+  label: string;
+  href: string;
+}
+
+export interface CopilotPrefillJobSearchAction {
+  type: "prefill_job_search";
+  label: string;
+  query: string;
+  location?: string;
+  auto?: boolean;
+}
+
+export interface CopilotGoalDraft {
+  title: string;
+  target_date?: string | null;
+}
+
+export interface CopilotTodoDraft {
+  title: string;
+  due_date?: string | null;
+}
+
+export interface CopilotCreateGoalWithTodosAction {
+  type: "create_goal_with_todos";
+  label: string;
+  goal: CopilotGoalDraft;
+  todos: CopilotTodoDraft[];
+}
+
+export interface CopilotCreateTodoAction {
+  type: "create_todo";
+  label: string;
+  todo: CopilotTodoDraft;
+}
+
+export type CopilotAction =
+  | CopilotOpenRouteAction
+  | CopilotPrefillJobSearchAction
+  | CopilotCreateGoalWithTodosAction
+  | CopilotCreateTodoAction;

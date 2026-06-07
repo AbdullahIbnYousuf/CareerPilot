@@ -9,8 +9,9 @@ Handles business logic for conversational assistant:
 
 import os
 import json
+import re
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 from groq import Groq
 from db.supabase import supabase
 
@@ -19,6 +20,10 @@ _MODEL = "llama-3.3-70b-versatile"
 _MEMORY_LIMIT = 10
 _DEFAULT_SESSION_TITLE = "New conversation"
 _SESSION_TITLE_LIMIT = 42
+_ACTION_PATTERN = re.compile(
+    r"<careerpilot_action>\s*[\s\S]*?\s*</careerpilot_action>",
+    re.MULTILINE,
+)
 
 
 def _now_iso() -> str:
@@ -34,6 +39,30 @@ def _title_from_message(message: str) -> str:
     if len(title) > _SESSION_TITLE_LIMIT:
         return f"{title[:_SESSION_TITLE_LIMIT]}..."
     return title
+
+
+def _strip_copilot_actions(content: str) -> str:
+    """Remove hidden UI action directives before persisting assistant memory."""
+    return _ACTION_PATTERN.sub("", content).strip()
+
+
+def _format_client_context(client_context: Optional[dict[str, Any]]) -> str:
+    if not client_context:
+        return ""
+
+    allowed_keys = {
+        "current_path",
+        "current_page_label",
+        "profile_status",
+        "onboarding",
+        "app_map",
+    }
+    compact_context = {
+        key: value
+        for key, value in client_context.items()
+        if key in allowed_keys
+    }
+    return json.dumps(compact_context, ensure_ascii=True, indent=2)[:6000]
 
 
 async def ensure_chat_session(user_id: str, session_id: str, message: str) -> None:
@@ -88,7 +117,8 @@ async def stream_chat(
     user_id: str,
     session_id: str,
     message: str,
-    cv_context: str
+    cv_context: str,
+    client_context: Optional[dict[str, Any]] = None,
 ) -> AsyncGenerator[str, None]:
     """
     Stream chat response from Groq Llama 3.3 70B.
@@ -98,11 +128,42 @@ async def stream_chat(
     history = await get_chat_history(user_id, session_id)
 
     # 2. Build system and conversation prompt
+    formatted_client_context = _format_client_context(client_context)
+    action_rules = ""
+    if formatted_client_context:
+        action_rules = f"""
+
+Product context from the CareerPilot app:
+{formatted_client_context}
+
+You are also the user's in-app product guide. You may recommend safe navigation,
+prepared job searches, and goal/task proposals using a hidden action directive at
+the very end of a response. Never claim an action has been completed unless the
+UI has confirmed it after the user clicks.
+
+Allowed hidden action directive format:
+<careerpilot_action>
+{{"type":"open_route","label":"Upload your CV","href":"/cv?upload=1"}}
+</careerpilot_action>
+
+Allowed action types:
+- open_route: href must be a CareerPilot route from the app map.
+- prefill_job_search: include label, query, optional location, optional auto.
+- create_goal_with_todos: include one goal and at most five todos. This only proposes; the user must confirm.
+- create_todo: include one todo. This only proposes; the user must confirm.
+
+Do not show or explain the hidden directive in visible text. Keep visible replies
+concise, practical, and page-aware.
+"""
+
     system_prompt = (
-        "You are CareerPilot AI, an expert career co-pilot. "
+        "You are CareerPilot, an expert career co-pilot. "
         "You help users find jobs, improve their CVs, write cover letters, and plan their careers. "
-        "Always ground your answers in the user's actual CV context when available.\n\n"
+        "Always ground your answers in the user's actual CV context when available. "
+        "Only reference experience, skills, education, or projects that appear in the CV context. "
+        "If CV context is missing, say what you can do after a CV is uploaded instead of inventing background.\n\n"
         f"User CV context:\n{cv_context or 'No CV data available.'}"
+        f"{action_rules}"
     )
 
     groq_messages = [{"role": "system", "content": system_prompt}]
@@ -131,7 +192,12 @@ async def stream_chat(
                 yield f"data: {json.dumps({'token': token})}\n\n"
 
         # 5. Save assistant's answer once fully streamed
-        await save_message(user_id, session_id, "assistant", "".join(full_reply))
+        await save_message(
+            user_id,
+            session_id,
+            "assistant",
+            _strip_copilot_actions("".join(full_reply)),
+        )
         yield "data: [DONE]\n\n"
 
     except Exception as e:

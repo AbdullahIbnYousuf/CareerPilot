@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { JobCard } from "@/components/job-card";
 import { supabase } from "@/lib/supabase";
 import type { Job } from "@/types";
@@ -20,7 +21,8 @@ interface CvUpdatedDetail {
   cvId: string;
 }
 
-export default function JobsPage() {
+function JobsPageContent() {
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -29,11 +31,17 @@ export default function JobsPage() {
   const [error, setError] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [activeCvId, setActiveCvId] = useState<string | null>(null);
+  const [profileMetadataLoaded, setProfileMetadataLoaded] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Hunting roles...");
+  const autoSearchKeyRef = useRef<string | null>(null);
   const storageKey = userId ? `careerPilot_lastJobSearch:v2:${userId}` : null;
+  const routeQuery = searchParams.get("query") ?? "";
+  const routeLocation = searchParams.get("location") ?? "";
+  const shouldAutoSearch = searchParams.get("auto") === "1";
 
   useEffect(() => {
     const loadUserAndHistory = async () => {
+      setProfileMetadataLoaded(false);
       const { data, error: authError } = await supabase.auth.getUser();
       if (!authError && data.user) {
         const id = data.user.id;
@@ -54,6 +62,8 @@ export default function JobsPage() {
           }
         } catch (e) {
           console.error("Failed to load active CV metadata", e);
+        } finally {
+          setProfileMetadataLoaded(true);
         }
 
         // Load saved scored jobs search history from localStorage
@@ -69,8 +79,8 @@ export default function JobsPage() {
               return;
             }
             setJobs(savedJobs);
-            if (parsed.query) setQuery(parsed.query);
-            if (parsed.location) setLocation(parsed.location);
+            if (!routeQuery && parsed.query) setQuery(parsed.query);
+            if (!routeLocation && parsed.location) setLocation(parsed.location);
             if (savedJobs.length > 0) {
               setSearched(true);
             }
@@ -78,10 +88,25 @@ export default function JobsPage() {
             console.error("Failed to load saved jobs search", e);
           }
         }
+      } else {
+        setProfileMetadataLoaded(true);
       }
     };
     loadUserAndHistory();
-  }, []);
+  }, [routeLocation, routeQuery]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      if (routeQuery) {
+        setQuery(routeQuery);
+      }
+      if (routeLocation) {
+        setLocation(routeLocation);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [routeLocation, routeQuery]);
 
   useEffect(() => {
     const handleCvUpdated = (event: Event) => {
@@ -103,9 +128,10 @@ export default function JobsPage() {
     };
   }, [storageKey, userId]);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const runSearch = useCallback(async (searchQuery: string, searchLocation: string) => {
+    const trimmedQuery = searchQuery.trim();
+    const trimmedLocation = searchLocation.trim();
+    if (!trimmedQuery) return;
     if (!userId) {
       setError("Please sign in to search for jobs.");
       return;
@@ -124,7 +150,11 @@ export default function JobsPage() {
       const response = await fetch(`${baseUrl}/jobs/hunt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, query: query.trim(), location: location.trim() }),
+        body: JSON.stringify({
+          user_id: userId,
+          query: trimmedQuery,
+          location: trimmedLocation,
+        }),
       });
 
       if (!response.ok) {
@@ -141,8 +171,8 @@ export default function JobsPage() {
       // Save to localStorage immediately after search
       const state: LastJobSearchState = {
         jobs: huntedJobs,
-        query: query.trim(),
-        location: location.trim(),
+        query: trimmedQuery,
+        location: trimmedLocation,
         timestamp: Date.now(),
         active_cv_id: scoredCvId ?? null,
       };
@@ -155,6 +185,23 @@ export default function JobsPage() {
       window.clearTimeout(scoringTimer);
       setLoading(false);
     }
+  }, [activeCvId, storageKey, userId]);
+
+  useEffect(() => {
+    if (!shouldAutoSearch || !userId || !profileMetadataLoaded || loading) return;
+    const trimmedQuery = routeQuery.trim();
+    if (!trimmedQuery) return;
+
+    const autoKey = `${trimmedQuery}|${routeLocation.trim()}`;
+    if (autoSearchKeyRef.current === autoKey) return;
+
+    autoSearchKeyRef.current = autoKey;
+    void runSearch(trimmedQuery, routeLocation);
+  }, [loading, profileMetadataLoaded, routeLocation, routeQuery, runSearch, shouldAutoSearch, userId]);
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await runSearch(query, location);
   };
 
   const handleScoreUpdated = (
@@ -304,5 +351,13 @@ export default function JobsPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function JobsPage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-white/40">Loading jobs...</div>}>
+      <JobsPageContent />
+    </Suspense>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Briefcase,
   CheckCircle2,
@@ -90,7 +91,8 @@ const profileToPayload = (profile: UserProfile): ProfilePayload => ({
   certifications: profile.certifications,
 });
 
-export default function ProfilePage() {
+function ProfilePageContent() {
+  const searchParams = useSearchParams();
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [draft, setDraft] = useState<UserProfile | null>(null);
@@ -102,6 +104,14 @@ export default function ProfilePage() {
   const [notice, setNotice] = useState("");
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const shouldOpenUploader = searchParams.get("upload") === "1";
+
+  useEffect(() => {
+    if (shouldOpenUploader) {
+      const timeoutId = window.setTimeout(() => setShowUploader(true), 0);
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [shouldOpenUploader]);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -708,6 +718,14 @@ export default function ProfilePage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<div className="text-sm text-white/40">Loading profile...</div>}>
+      <ProfilePageContent />
+    </Suspense>
   );
 }
 
