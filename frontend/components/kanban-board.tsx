@@ -235,17 +235,19 @@ function ApplicationCard({
             </span>
           )}
 
-          {/* External link / Apply text button */}
-          <a
-            href={app.url || `https://www.google.com/search?q=${encodeURIComponent(`${app.title || "Job"} ${app.company || ""}`)}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#AFA9EC] hover:text-[#C5BFFF] hover:bg-primary/10 transition-all border border-white/[0.08] hover:border-primary/40 bg-white/[0.02]"
-            aria-label="Open job posting"
-          >
-            Apply <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-          </a>
+          {/* External link / Apply text button - only for saved column */}
+          {app.status === "saved" && (
+            <a
+              href={app.url || `https://www.google.com/search?q=${encodeURIComponent(`${app.title || "Job"} ${app.company || ""}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#AFA9EC] hover:text-[#C5BFFF] hover:bg-primary/10 transition-all border border-white/[0.08] hover:border-primary/40 bg-white/[0.02]"
+              aria-label="Open job posting"
+            >
+              Apply <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+            </a>
+          )}
         </div>
       </div>
     </div>
@@ -999,18 +1001,14 @@ export function KanbanBoard() {
                 </div>
                 <div className="space-y-1 pl-4 border-l border-white/[0.05]">
                   <span className="text-white/30 block">Job Link</span>
-                  {selectedApp.url ? (
-                    <a
-                      href={selectedApp.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#AFA9EC] hover:text-[#C5BFFF] hover:underline font-semibold"
-                    >
-                      Open Posting <ExternalLink className="h-3 w-3" />
-                    </a>
-                  ) : (
-                    <span className="text-white/30 italic">No link</span>
-                  )}
+                  <a
+                    href={selectedApp.url || `https://www.google.com/search?q=${encodeURIComponent(`${selectedApp.title || "Job"} ${selectedApp.company || ""}`)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[#AFA9EC] hover:text-[#C5BFFF] hover:underline font-semibold"
+                  >
+                    Open Posting <ExternalLink className="h-3 w-3" />
+                  </a>
                 </div>
               </div>
 
