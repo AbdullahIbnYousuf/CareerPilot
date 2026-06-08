@@ -476,7 +476,7 @@ export function CopilotWidget() {
         }
       }
       setOnboarding(parsed);
-      setPanelState(parsed.completed ? "minimized" : "open");
+      setPanelState("minimized");
 
       try {
         const prefResponse = await fetch(
@@ -608,7 +608,7 @@ export function CopilotWidget() {
           ],
         },
       ]);
-      setPanelState("open");
+      setPanelState("minimized");
     };
 
     window.addEventListener("careerpilot:cv-updated", handleCvUpdated);
@@ -980,13 +980,8 @@ export function CopilotWidget() {
         onPointerMove={handleTriggerPointerMove}
         onPointerUp={handleTriggerPointerUp}
         onPointerCancel={handleTriggerPointerUp}
-        className="fixed z-50 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-2xl border border-[#7C74DB]/30 bg-[#534AB7] text-white shadow-xl shadow-[#534AB7]/25 transition-transform hover:scale-105 active:cursor-grabbing"
-        style={{
-          left: triggerPosition ? `${triggerPosition.x}px` : "auto",
-          top: triggerPosition ? `${triggerPosition.y}px` : "auto",
-          right: triggerPosition ? "auto" : "16px",
-          bottom: triggerPosition ? "auto" : "96px",
-        }}
+        className="fixed z-50 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-2xl border border-[var(--cp-border-strong)] bg-[var(--cp-surface-elevated)] text-[var(--cp-champagne)] shadow-xl shadow-[var(--cp-glow-copper)] transition-transform hover:scale-105 active:cursor-grabbing"
+        style={{ right: "24px", bottom: "24px" }}
       >
         <Bot className="h-5 w-5" />
       </button>
@@ -1001,16 +996,11 @@ export function CopilotWidget() {
         onPointerMove={handleTriggerPointerMove}
         onPointerUp={handleTriggerPointerUp}
         onPointerCancel={handleTriggerPointerUp}
-        className="fixed z-50 flex touch-none cursor-grab select-none items-center gap-2 rounded-2xl border border-[#7C74DB]/30 bg-[#0E0E12] px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-black/40 transition-all hover:border-[#AFA9EC]/50 active:cursor-grabbing"
-        style={{
-          left: triggerPosition ? `${triggerPosition.x}px` : "auto",
-          top: triggerPosition ? `${triggerPosition.y}px` : "auto",
-          right: triggerPosition ? "auto" : "16px",
-          bottom: triggerPosition ? "auto" : "96px",
-        }}
+        className="fixed z-50 flex touch-none cursor-grab select-none items-center gap-2 rounded-full border border-[var(--cp-border-strong)] bg-[var(--cp-surface-elevated)] px-4 py-3 text-sm font-semibold text-[var(--cp-text-main)] shadow-xl shadow-[var(--cp-glow-copper)] transition-all hover:border-[var(--cp-champagne)] active:cursor-grabbing"
+        style={{ right: "24px", bottom: "24px" }}
       >
-        <Bot className="h-4 w-4 text-[#AFA9EC]" />
-        CareerPilot
+        <Navigation className="h-4 w-4 text-[var(--cp-champagne)]" />
+        CareerPilot guide
       </button>
     );
   }
@@ -1018,27 +1008,21 @@ export function CopilotWidget() {
   return (
     <section
       ref={panelRef}
-      className="fixed z-50 flex max-h-[calc(100vh-32px)] w-[calc(100vw-24px)] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 md:max-h-[680px] md:w-[390px]"
-      style={{
-        left: panelPosition ? `${panelPosition.x}px` : "auto",
-        top: panelPosition ? `${panelPosition.y}px` : "auto",
-        right: panelPosition ? "auto" : "12px",
-        bottom: panelPosition ? "auto" : "80px",
-      }}
+      className="cp-panel-solid fixed bottom-6 right-6 z-50 flex max-h-[calc(100vh-48px)] w-[calc(100vw-48px)] flex-col overflow-hidden rounded-2xl md:max-h-[680px] md:w-[390px]"
     >
       <header
-        className="flex cursor-grab touch-none select-none items-center gap-3 border-b border-white/[0.06] px-4 py-3 active:cursor-grabbing"
+        className="flex cursor-grab touch-none select-none items-center gap-3 border-b border-[var(--cp-border-soft)] px-4 py-3 active:cursor-grabbing"
         onPointerDown={handleDragPointerDown}
         onPointerMove={handleDragPointerMove}
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerUp}
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#534AB7] to-[#7C74DB] text-white">
-          <Bot className="h-4 w-4" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
+          <Navigation className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-bold text-white">CareerPilot</h2>
-          <p className="truncate text-xs text-white/35">
+          <h2 className="text-sm font-bold text-[var(--cp-text-main)]">CareerPilot guide</h2>
+          <p className="truncate text-xs text-[var(--cp-text-muted)]">
             {profileStatus === "has_profile" ? "CV-aware guide" : "Career guide"}
           </p>
         </div>
@@ -1047,7 +1031,7 @@ export function CopilotWidget() {
           onClick={openFullAssistant}
           aria-label="Open full AI Assistant"
           title="Open full AI Assistant"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
           <Maximize2 className="h-4 w-4" />
         </button>
@@ -1055,7 +1039,7 @@ export function CopilotWidget() {
           type="button"
           onClick={() => setPanelState("minimized")}
           aria-label="Minimize CareerPilot"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
           <Minus className="h-4 w-4" />
         </button>
@@ -1063,7 +1047,7 @@ export function CopilotWidget() {
           type="button"
           onClick={() => setPanelState("closed")}
           aria-label="Close CareerPilot"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
           <X className="h-4 w-4" />
         </button>
@@ -1076,7 +1060,7 @@ export function CopilotWidget() {
             className={`flex gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}
           >
             {message.role === "assistant" && (
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#534AB7] text-white">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
                 <Bot className="h-3.5 w-3.5" />
               </div>
             )}
@@ -1084,8 +1068,8 @@ export function CopilotWidget() {
               <div
                 className={`rounded-2xl border px-3 py-2.5 text-sm leading-relaxed ${
                   message.role === "user"
-                    ? "rounded-tr-none border-white/[0.08] bg-[#534AB7] text-white"
-                    : "rounded-tl-none border-white/[0.06] bg-white/[0.03] text-white/90"
+                ? "rounded-tr-none border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.20)] text-[var(--cp-text-main)]"
+                    : "rounded-tl-none border-[var(--cp-border-soft)] bg-white/[0.03] text-[var(--cp-text-main)]"
                 }`}
               >
                 {message.role === "assistant" ? (
@@ -1096,7 +1080,7 @@ export function CopilotWidget() {
                       {["first", "second", "third"].map((dot) => (
                         <span
                           key={dot}
-                          className="h-1.5 w-1.5 rounded-full bg-[#AFA9EC]/70 animate-bounce"
+                          className="h-1.5 w-1.5 rounded-full bg-[var(--cp-copper-strong)]/70 animate-bounce"
                         />
                       ))}
                     </div>
@@ -1118,7 +1102,7 @@ export function CopilotWidget() {
               ))}
             </div>
             {message.role === "user" && (
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-[#1E1B3A] text-[#AFA9EC]">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--cp-border-soft)] bg-[rgba(201,130,74,0.10)] text-[var(--cp-champagne)]">
                 <User className="h-3.5 w-3.5" />
               </div>
             )}
@@ -1132,8 +1116,8 @@ export function CopilotWidget() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="border-t border-white/[0.06] p-3">
-        <div className="flex items-end gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-2 focus-within:border-[#7C74DB]/50">
+      <form onSubmit={handleSubmit} className="border-t border-[var(--cp-border-soft)] p-3">
+        <div className="flex items-end gap-2 rounded-2xl border border-[var(--cp-border-soft)] bg-white/[0.03] p-2 focus-within:border-[var(--cp-border-strong)]">
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -1146,13 +1130,13 @@ export function CopilotWidget() {
             rows={1}
             placeholder="Ask CareerPilot..."
             disabled={isStreaming}
-            className="max-h-24 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed text-white outline-none placeholder:text-white/20"
+            className="max-h-24 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed text-[var(--cp-text-main)] outline-none placeholder:text-[var(--cp-text-subtle)]"
           />
           <Button
             type="submit"
             size="icon"
             disabled={!input.trim() || isStreaming}
-            className="h-9 w-9 shrink-0 rounded-xl bg-[#534AB7] text-white hover:bg-[#6B63CC] disabled:opacity-40"
+            className="h-9 w-9 shrink-0 rounded-xl disabled:opacity-40"
           >
             {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
@@ -1179,6 +1163,7 @@ function CopilotActionCard({
     action.type === "save_application_note";
   const isMutation =
     action.type === "create_goal_with_todos" ||
+    action.type === "create_roadmap_with_tasks" ||
     action.type === "create_todo" ||
     isApplicationAction;
   const isLoading = state.status === "loading";
@@ -1195,14 +1180,14 @@ function CopilotActionCard({
             : Target;
 
   return (
-    <div className="mt-2 rounded-xl border border-[#7C74DB]/20 bg-[#1E1B3A]/40 p-3 text-xs text-white/70">
+    <div className="mt-2 rounded-xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.08)] p-3 text-xs text-[var(--cp-text-soft)]">
       <div className="flex items-start gap-2">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#534AB7]/30 text-[#AFA9EC]">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <div>
-            <p className="font-semibold text-white">{action.label}</p>
+            <p className="font-semibold text-[var(--cp-text-main)]">{action.label}</p>
             <ActionSummary action={action} />
           </div>
 
@@ -1223,7 +1208,7 @@ function CopilotActionCard({
               <button
                 type="button"
                 onClick={() => onOpenHref(successHref)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#534AB7] px-3 py-1.5 font-semibold text-white hover:bg-[#6B63CC]"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] px-3 py-1.5 font-semibold text-[var(--cp-bg-deep)] hover:brightness-110"
               >
                 {isApplicationAction ? "Open Applications" : "Open Goals & Tasks"}
                 <ExternalLink className="h-3 w-3" />
@@ -1233,7 +1218,7 @@ function CopilotActionCard({
                 type="button"
                 onClick={onExecute}
                 disabled={isLoading || state.status === "success"}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#534AB7] px-3 py-1.5 font-semibold text-white hover:bg-[#6B63CC] disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] px-3 py-1.5 font-semibold text-[var(--cp-bg-deep)] hover:brightness-110 disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
                 {isMutation ? "Confirm" : "Open"}
@@ -1274,6 +1259,25 @@ function ActionSummary({ action }: { action: CopilotAction }) {
     );
   }
 
+  if (action.type === "create_roadmap_with_tasks") {
+    const todoCount = action.goals.reduce((count, goal) => count + goal.todos.length, 0);
+    return (
+      <div className="mt-1 space-y-1 text-white/45">
+        <p>
+          {action.goals.length} goals · {todoCount} tasks
+        </p>
+        <ul className="space-y-1">
+          {action.goals.map((goal) => (
+            <li key={`${goal.title}-${goal.target_date}`} className="flex gap-1.5">
+              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-[var(--cp-champagne)]" />
+              <span>{goal.title} · {formatDraftDate(goal.target_date)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   if (action.type === "save_application") {
     return (
       <p className="mt-1 text-white/45">
@@ -1305,7 +1309,7 @@ function ActionSummary({ action }: { action: CopilotAction }) {
         <ul className="space-y-1">
           {action.todos.map((todo) => (
             <li key={`${todo.title}-${todo.due_date}`} className="flex gap-1.5">
-              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-[#AFA9EC]" />
+              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-[var(--cp-champagne)]" />
               <span>{todo.title} · {formatDraftDate(todo.due_date)}</span>
             </li>
           ))}

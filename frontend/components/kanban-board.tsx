@@ -31,7 +31,6 @@ import {
   Trophy,
   XCircle,
   ExternalLink,
-  Plus,
   Sparkles,
   CalendarPlus,
   CheckCircle2,
@@ -57,41 +56,41 @@ const COLUMNS: {
     key: "saved",
     label: "Saved",
     icon: Briefcase,
-    color: "bg-slate-400",
-    glow: "border-slate-400/20",
-    bg: "bg-slate-400/5",
+    color: "bg-[var(--cp-status-saved)]",
+    glow: "border-[var(--cp-border-medium)]",
+    bg: "bg-white/[0.03]",
   },
   {
     key: "applied",
     label: "Applied",
     icon: Send,
-    color: "bg-blue-400",
-    glow: "border-blue-400/20",
-    bg: "bg-blue-400/5",
+    color: "bg-[var(--cp-status-applied)]",
+    glow: "border-[var(--cp-border-medium)]",
+    bg: "bg-[rgba(224,164,106,0.08)]",
   },
   {
     key: "interviewing",
     label: "Interviewing",
     icon: Users,
-    color: "bg-amber-400",
-    glow: "border-amber-400/20",
-    bg: "bg-amber-400/5",
+    color: "bg-[var(--cp-status-interviewing)]",
+    glow: "border-[rgba(244,201,93,0.25)]",
+    bg: "bg-[rgba(244,201,93,0.08)]",
   },
   {
     key: "offer",
     label: "Offer",
     icon: Trophy,
-    color: "bg-emerald-400",
-    glow: "border-emerald-400/20",
-    bg: "bg-emerald-400/5",
+    color: "bg-[var(--cp-status-offer)]",
+    glow: "border-[rgba(61,220,151,0.25)]",
+    bg: "bg-[rgba(61,220,151,0.08)]",
   },
   {
     key: "rejected",
     label: "Rejected",
     icon: XCircle,
-    color: "bg-red-400",
-    glow: "border-red-400/20",
-    bg: "bg-red-400/5",
+    color: "bg-[var(--cp-status-rejected)]",
+    glow: "border-[rgba(255,107,107,0.25)]",
+    bg: "bg-[rgba(255,107,107,0.08)]",
   },
 ];
 
@@ -158,22 +157,26 @@ function ApplicationCard({
   const score = app.fit_score;
   const scoreColor =
     score === undefined || score === null
-      ? "text-white/30"
-      : score >= 70
-        ? "text-emerald-400"
-        : score >= 40
-          ? "text-amber-400"
-          : "text-red-400";
+      ? "text-[var(--cp-text-subtle)]"
+      : score >= 85
+        ? "text-[var(--cp-fit-high)]"
+        : score >= 70
+          ? "text-[var(--cp-champagne)]"
+          : score >= 55
+            ? "text-[var(--cp-fit-good)]"
+            : score >= 40
+              ? "text-[var(--cp-fit-mid)]"
+              : "text-[var(--cp-fit-low)]";
 
   return (
     <div
       ref={setNodeRef}
       style={style}
       onClick={onClick}
-      className={`group relative rounded-xl border border-white/[0.06] bg-[#141418] p-3.5 shadow-md shadow-black/20 transition-all duration-200 cursor-pointer ${
+      className={`group relative rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3.5 shadow-md shadow-black/20 transition-all duration-200 cursor-pointer ${
         isDragging
-          ? "shadow-2xl shadow-primary/20 border-primary/40 rotate-1 scale-105"
-          : "hover:border-white/[0.12] hover:shadow-lg hover:shadow-black/30"
+          ? "shadow-2xl shadow-[var(--cp-glow-copper)] border-[var(--cp-border-strong)] rotate-1 scale-105"
+          : "hover:border-[var(--cp-border-medium)] hover:shadow-lg hover:shadow-black/30"
       }`}
     >
       {/* Drag handle + title row */}
@@ -182,21 +185,21 @@ function ApplicationCard({
           {...attributes}
           {...listeners}
           onClick={(e) => e.stopPropagation()}
-          className="mt-0.5 cursor-grab active:cursor-grabbing text-white/20 hover:text-white/50 transition-colors shrink-0 touch-none"
+          className="mt-0.5 cursor-grab active:cursor-grabbing text-[var(--cp-text-subtle)] hover:text-[var(--cp-text-soft)] transition-colors shrink-0 touch-none"
           aria-label="Drag to reorder"
         >
           <GripVertical className="h-4 w-4" />
         </button>
 
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm text-white/95 leading-snug line-clamp-2">
+          <p className="font-semibold text-sm text-[var(--cp-text-main)] leading-snug line-clamp-2">
             {app.title || "Unknown Role"}
           </p>
-          <p className="text-xs text-white/40 mt-0.5 truncate">
+          <p className="text-xs text-[var(--cp-text-muted)] mt-0.5 truncate">
             {app.company || "Unknown Company"}
           </p>
           {app.location && (
-            <p className="text-[10px] text-white/25 truncate mt-0.5">
+            <p className="text-[10px] text-[var(--cp-text-subtle)] truncate mt-0.5">
               {app.location}
             </p>
           )}
@@ -216,9 +219,9 @@ function ApplicationCard({
       </div>
 
       {/* Footer row */}
-      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-white/[0.04]">
+      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[var(--cp-border-soft)]">
         {/* Applied date */}
-        <span className="text-[10px] text-white/20">
+        <span className="text-[10px] text-[var(--cp-text-subtle)]">
           {app.applied_at
             ? new Date(app.applied_at).toLocaleDateString("en-US", {
                 month: "short",
@@ -242,7 +245,7 @@ function ApplicationCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[#AFA9EC] hover:text-[#C5BFFF] hover:bg-primary/10 transition-all border border-white/[0.08] hover:border-primary/40 bg-white/[0.02]"
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold text-[var(--cp-champagne)] hover:bg-[rgba(201,130,74,0.12)] transition-all border border-[var(--cp-border-soft)] hover:border-[var(--cp-border-medium)] bg-white/[0.02]"
               aria-label="Open job posting"
             >
               Apply <ExternalLink className="h-2.5 w-2.5 shrink-0" />
@@ -273,18 +276,18 @@ function KanbanColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col min-h-[500px] rounded-2xl border transition-all duration-200 ${
+      className={`cp-panel-solid flex flex-col min-h-[500px] rounded-2xl transition-all duration-200 ${
         isOver
           ? `${column.glow} ${column.bg} shadow-lg`
-          : "border-white/[0.04] bg-[#0E0E12]/60"
+          : ""
       }`}
     >
       {/* Column header */}
-      <div className="flex items-center gap-2 px-3.5 py-3 border-b border-white/[0.04]">
+      <div className="flex items-center gap-2 px-3.5 py-3 border-b border-[var(--cp-border-soft)]">
         <div className={`h-2 w-2 rounded-full ${column.color}`} />
-        <Icon className="h-3.5 w-3.5 text-white/40" />
-        <h3 className="text-sm font-bold text-white flex-1">{column.label}</h3>
-        <div className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-white/50 min-w-[1.5rem] text-center">
+        <Icon className="h-3.5 w-3.5 text-[var(--cp-text-muted)]" />
+        <h3 className="text-sm font-bold text-[var(--cp-text-main)] flex-1">{column.label}</h3>
+        <div className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/[0.04] border border-[var(--cp-border-soft)] text-[var(--cp-text-soft)] min-w-[1.5rem] text-center">
           {apps.length}
         </div>
       </div>
@@ -296,11 +299,11 @@ function KanbanColumn({
           strategy={verticalListSortingStrategy}
         >
           {apps.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-32 gap-2">
-              <div className="h-8 w-8 rounded-xl bg-white/[0.03] flex items-center justify-center">
-                <Plus className="h-4 w-4 text-white/10" />
+            <div className="flex flex-col items-center justify-center h-32 gap-2 rounded-xl border border-dashed border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.035)]">
+              <div className="h-8 w-8 rounded-xl bg-[rgba(201,130,74,0.12)] flex items-center justify-center">
+                <BookmarkCheck className="h-4 w-4 text-[var(--cp-champagne)]" />
               </div>
-              <p className="text-[11px] text-white/15 text-center">
+              <p className="text-[11px] text-[var(--cp-text-muted)] text-center">
                 Drop cards here
               </p>
             </div>
@@ -335,16 +338,16 @@ function ApplicationActionPrompt({
   const isFollowUp = prompt.type === "follow_up";
 
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-[#7C74DB]/20 bg-[#111018] p-3.5 shadow-lg shadow-black/20 md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 rounded-2xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.08)] p-3.5 shadow-lg shadow-black/20 md:flex-row md:items-center md:justify-between">
       <div className="flex min-w-0 items-start gap-3">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#534AB7]/20 text-[#AFA9EC]">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
           <CalendarPlus className="h-4 w-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-white">
-            {isFollowUp ? "Add follow-up task" : "Add interview prep tasks"}
+          <p className="text-sm font-semibold text-[var(--cp-text-main)]">
+            CareerPilot guide - {isFollowUp ? "Follow up on strong matches this week." : "Prepare for this interview stage."}
           </p>
-          <p className="mt-0.5 truncate text-xs text-white/40">
+          <p className="mt-0.5 truncate text-xs text-[var(--cp-text-muted)]">
             {prompt.app.title || "Application"} at{" "}
             {prompt.app.company || "Unknown Company"}
           </p>
@@ -357,7 +360,7 @@ function ApplicationActionPrompt({
           type="date"
           value={prompt.dueDate}
           onChange={(e) => onDueDateChange(e.target.value)}
-          className="h-9 rounded-xl border border-white/[0.06] bg-white/[0.04] px-3 text-xs text-white/70 transition-all [color-scheme:dark] focus:border-primary/50 focus:outline-none"
+          className="h-9 rounded-xl border border-[var(--cp-border-soft)] bg-white/[0.04] px-3 text-xs text-[var(--cp-text-soft)] transition-all [color-scheme:dark] focus:border-primary/50 focus:outline-none"
           aria-label={
             isFollowUp ? "Follow-up task due date" : "Interview prep due date"
           }
@@ -366,7 +369,7 @@ function ApplicationActionPrompt({
           type="button"
           onClick={onCreate}
           disabled={isCreating}
-          className="flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#534AB7] px-3 text-xs font-semibold text-white transition-all hover:bg-[#6B63CC] disabled:opacity-50"
+          className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] px-3 text-xs font-semibold text-[var(--cp-bg-deep)] transition-all hover:brightness-110 disabled:opacity-50"
         >
           {isCreating ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -378,7 +381,7 @@ function ApplicationActionPrompt({
         <button
           type="button"
           onClick={onDismiss}
-          className="h-9 rounded-xl bg-white/[0.04] px-3 text-xs font-semibold text-white/40 transition-all hover:text-white"
+          className="h-9 rounded-xl bg-white/[0.04] px-3 text-xs font-semibold text-[var(--cp-text-muted)] transition-all hover:text-[var(--cp-text-main)]"
         >
           Dismiss
         </button>
@@ -842,8 +845,8 @@ export function KanbanBoard({
       {/* Header bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <p className="text-sm text-white/40">
-            <span className="text-white font-semibold">{totalApps}</span>{" "}
+          <p className="text-sm text-[var(--cp-text-muted)]">
+            <span className="text-[var(--cp-text-main)] font-semibold">{totalApps}</span>{" "}
             application{totalApps !== 1 ? "s" : ""} tracked
           </p>
           {/* Realtime indicator */}
@@ -853,14 +856,14 @@ export function KanbanBoard({
                 realtimeConnected ? "bg-emerald-400" : "bg-white/20"
               }`}
             />
-            <span className="text-[10px] text-white/20">
+            <span className="text-[10px] text-[var(--cp-text-subtle)]">
               {realtimeConnected ? "Live" : "Offline"}
             </span>
           </div>
         </div>
 
         {totalApps === 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-white/25">
+          <div className="flex items-center gap-1.5 text-xs text-[var(--cp-text-muted)]">
             <Sparkles className="h-3.5 w-3.5" />
             Search jobs and click &ldquo;Save&rdquo; to start tracking
           </div>
@@ -1024,7 +1027,7 @@ export function KanbanBoard({
                     href={selectedApp.url || `https://www.google.com/search?q=${encodeURIComponent(`${selectedApp.title || "Job"} ${selectedApp.company || ""}`)}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[#AFA9EC] hover:text-[#C5BFFF] hover:underline font-semibold"
+                    className="inline-flex items-center gap-1 text-[var(--cp-champagne)] hover:text-[var(--cp-copper-strong)] hover:underline font-semibold"
                   >
                     Open Posting <ExternalLink className="h-3 w-3" />
                   </a>
@@ -1038,7 +1041,7 @@ export function KanbanBoard({
                   <button
                     onClick={handleSaveNotes}
                     disabled={savingNotes}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#534AB7] hover:bg-[#6B63CC] text-xs font-semibold text-white transition-all disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] text-xs font-semibold text-[var(--cp-bg-deep)] transition-all hover:brightness-110 disabled:opacity-50"
                   >
                     {savingNotes && <Loader2 className="h-3 w-3 animate-spin" />}
                     Save
@@ -1049,7 +1052,7 @@ export function KanbanBoard({
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Interview dates, recruiter contacts, prep notes, links..."
-                  className="w-full min-h-[80px] rounded-xl border border-white/[0.08] bg-[#0A0A0E] px-3 py-2.5 text-sm text-white/90 placeholder-white/20 transition-all focus:border-primary/50 focus:outline-none resize-y"
+                  className="w-full min-h-[80px] rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-bg-deep)] px-3 py-2.5 text-sm text-[var(--cp-text-main)] placeholder:text-[var(--cp-text-subtle)] transition-all focus:border-primary/50 focus:outline-none resize-y"
                 />
                 {notesSaved && (
                   <p className="text-[11px] text-emerald-400 flex items-center gap-1">
@@ -1076,7 +1079,7 @@ export function KanbanBoard({
                   <div className="relative border-l border-white/[0.06] ml-2 pl-4 py-1 space-y-3.5">
                     {events.map((ev) => (
                       <div key={ev.id} className="relative">
-                        <div className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border border-white/10 bg-[#7C74DB]" />
+                        <div className="absolute -left-[21px] top-1 h-2 w-2 rounded-full border border-white/10 bg-[var(--cp-copper-strong)]" />
                         <p className="text-xs font-semibold text-white/80">
                           {ev.event_type === "created" && `Created in ${capitalize(ev.to_status) || "Saved"}`}
                           {ev.event_type === "status_changed" && `Moved from ${capitalize(ev.from_status)} to ${capitalize(ev.to_status)}`}

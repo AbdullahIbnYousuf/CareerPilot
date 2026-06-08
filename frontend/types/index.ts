@@ -228,12 +228,15 @@ export interface CopilotContextOnboarding {
   completed?: boolean;
 }
 
+export type CopilotAppState = Record<string, unknown>;
+
 export interface CopilotClientContext {
   current_path: string;
   current_page_label: string;
   profile_status: CopilotProfileStatus;
   onboarding: CopilotContextOnboarding;
   preferences?: CareerPreferences;
+  app_state?: CopilotAppState;
   app_map: string;
 }
 
@@ -274,11 +277,21 @@ export interface CopilotTodoDraft {
   due_date?: string | null;
 }
 
+export interface CopilotRoadmapGoalDraft extends CopilotGoalDraft {
+  todos: CopilotTodoDraft[];
+}
+
 export interface CopilotCreateGoalWithTodosAction {
   type: "create_goal_with_todos";
   label: string;
   goal: CopilotGoalDraft;
   todos: CopilotTodoDraft[];
+}
+
+export interface CopilotCreateRoadmapAction {
+  type: "create_roadmap_with_tasks";
+  label: string;
+  goals: CopilotRoadmapGoalDraft[];
 }
 
 export interface CopilotCreateTodoAction {
@@ -312,6 +325,7 @@ export type CopilotAction =
   | CopilotOpenRouteAction
   | CopilotPrefillJobSearchAction
   | CopilotCreateGoalWithTodosAction
+  | CopilotCreateRoadmapAction
   | CopilotCreateTodoAction
   | CopilotSaveApplicationAction
   | CopilotUpdateApplicationStatusAction

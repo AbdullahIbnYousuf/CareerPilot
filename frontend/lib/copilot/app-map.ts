@@ -45,7 +45,11 @@ export const COPILOT_ROUTES = {
   },
   "/cv": {
     label: "Profile",
-    purpose: "CV upload, manual profile building, editable profile intelligence, and resume preview/export.",
+    purpose: "CV upload, manual profile building, and editable profile intelligence.",
+  },
+  "/cv/preview": {
+    label: "Resume Preview",
+    purpose: "Dedicated resume preview and print/export page generated from the saved profile.",
   },
 } as const;
 
@@ -53,6 +57,7 @@ export const ALLOWED_COPILOT_ACTIONS = [
   "open_route",
   "prefill_job_search",
   "create_goal_with_todos",
+  "create_roadmap_with_tasks",
   "create_todo",
   "save_application",
   "update_application_status",
@@ -86,9 +91,11 @@ function isApplicationStatus(value: unknown): value is "saved" | "applied" | "in
 }
 
 export function pageLabelForPath(pathname: string): string {
-  const route = ALLOWED_ROUTE_PATHS.find((allowedPath) =>
-    pathname === allowedPath || pathname.startsWith(`${allowedPath}/`),
-  );
+  const route = [...ALLOWED_ROUTE_PATHS]
+    .sort((a, b) => b.length - a.length)
+    .find((allowedPath) =>
+      pathname === allowedPath || pathname.startsWith(`${allowedPath}/`),
+    );
   return route ? COPILOT_ROUTES[route as keyof typeof COPILOT_ROUTES].label : "CareerPilot";
 }
 
@@ -117,8 +124,12 @@ export function isAllowedCopilotHref(href: string): boolean {
 
   if (path === "/cv") {
     if (paramKeys.length === 0) return true;
-    const allowedCvParams = ["upload", "build", "preview"];
+    const allowedCvParams = ["upload", "build"];
     return paramKeys.every((key) => allowedCvParams.includes(key) && params.get(key) === "1");
+  }
+
+  if (path === "/cv/preview") {
+    return paramKeys.length === 0;
   }
 
   if (path === "/jobs") {
@@ -195,6 +206,50 @@ export function validateCopilotAction(value: unknown): CopilotAction | null {
     };
   }
 
+  if (value.type === "create_roadmap_with_tasks") {
+    if (!isNonEmptyString(value.label) || !Array.isArray(value.goals)) return null;
+    if (value.goals.length === 0 || value.goals.length > 4) return null;
+
+    let totalTodos = 0;
+    const goals = value.goals
+      .filter(isPlainObject)
+      .map((goal) => {
+        const todosInput = Array.isArray(goal.todos) ? goal.todos : [];
+        if (!isNonEmptyString(goal.title)) return null;
+        if (!isValidDateOnly(goal.target_date)) return null;
+        if (todosInput.length > 5) return null;
+
+        const todos = todosInput
+          .filter(isPlainObject)
+          .map((todo) => ({
+            title: typeof todo.title === "string" ? todo.title.trim() : "",
+            due_date: isValidDateOnly(todo.due_date) && todo.due_date ? todo.due_date : null,
+          }))
+          .filter((todo) => todo.title.length > 0);
+
+        if (todos.length !== todosInput.length) return null;
+        totalTodos += todos.length;
+
+        return {
+          title: goal.title.trim(),
+          target_date:
+            isValidDateOnly(goal.target_date) && goal.target_date
+              ? goal.target_date
+              : null,
+          todos,
+        };
+      });
+
+    if (goals.some((goal) => goal === null) || goals.length !== value.goals.length) return null;
+    if (totalTodos > 12) return null;
+
+    return {
+      type: "create_roadmap_with_tasks",
+      label: value.label.trim(),
+      goals: goals as NonNullable<(typeof goals)[number]>[],
+    };
+  }
+
   if (value.type === "create_todo") {
     if (!isNonEmptyString(value.label) || !isPlainObject(value.todo)) return null;
     if (!isNonEmptyString(value.todo.title)) return null;
@@ -253,11 +308,13 @@ export function buildCopilotContext({
   profileStatus,
   onboarding,
   preferences,
+  appState,
 }: {
   currentPath: string;
   profileStatus: CopilotProfileStatus;
   onboarding: CopilotOnboardingState;
   preferences?: CopilotClientContext["preferences"];
+  appState?: CopilotClientContext["app_state"];
 }): CopilotClientContext {
   const routeDescriptions = Object.entries(COPILOT_ROUTES)
     .map(([href, route]) => `${route.label}: ${href} (${route.purpose})`)
@@ -280,9 +337,10 @@ export function buildCopilotContext({
       careerStage: onboarding.careerStage || undefined,
     },
     preferences,
+    app_state: appState,
     app_map: [
       `Routes: ${routeDescriptions}`,
-      "Profile route helpers: /cv?upload=1 opens CV upload, /cv?build=1 opens manual profile building, /cv?preview=1 opens resume preview/export when a profile exists.",
+      "Profile route helpers: /cv?upload=1 opens CV upload, /cv?build=1 opens manual profile building, /cv/preview opens resume preview/export when a profile exists.",
       "If profile_status is no_profile, offer Upload CV or Build profile manually. Do not generate, create, or overwrite profile data automatically.",
       "After a profile is saved, suggest Preview Resume or Search Jobs when helpful.",
       `My Journey views: ${viewDescriptions}`,

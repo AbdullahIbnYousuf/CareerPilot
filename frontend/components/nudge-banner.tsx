@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Sparkles, ExternalLink } from "lucide-react";
+import { Compass, X, ExternalLink } from "lucide-react";
 
 interface NudgeBannerProps {
   message: string;
@@ -27,22 +27,22 @@ export function NudgeBanner({ message, jobs, onDismiss }: NudgeBannerProps) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#534AB7] via-[#6B63CC] to-[#7C74DB] p-[1px] shadow-lg shadow-[#534AB7]/10 animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className="relative flex flex-col gap-3 rounded-[15px] bg-[#0E0E12]/95 px-5 py-4 backdrop-blur-md">
+    <div className="relative overflow-hidden rounded-2xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.08)] shadow-lg shadow-[var(--cp-glow-copper)] animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="relative flex flex-col gap-3 rounded-[15px] bg-[var(--cp-surface-elevated)] px-5 py-4 backdrop-blur-md">
         {/* Main message row */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1E1B3A] border border-white/[0.04] text-[#AFA9EC] shrink-0">
-              <Sparkles className="h-4 w-4" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[rgba(201,130,74,0.14)] border border-[var(--cp-border-soft)] text-[var(--cp-champagne)] shrink-0">
+              <Compass className="h-4 w-4" />
             </div>
-            <p className="text-sm font-medium text-white/90">
+            <p className="text-sm font-medium text-[var(--cp-text-main)]">
               {message}
             </p>
           </div>
           <button
             id="nudge-dismiss-btn"
             onClick={handleDismiss}
-            className="text-white/40 hover:text-white transition-colors shrink-0 mt-0.5"
+            className="text-[var(--cp-text-muted)] hover:text-[var(--cp-text-main)] transition-colors shrink-0 mt-0.5"
           >
             <X className="h-4 w-4" />
             <span className="sr-only">Dismiss</span>
@@ -52,21 +52,21 @@ export function NudgeBanner({ message, jobs, onDismiss }: NudgeBannerProps) {
         {/* Linked Jobs list */}
         {jobs && jobs.length > 0 && (
           <div className="mt-1 border-t border-white/[0.06] pt-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35 mb-2">Suggested Roles</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--cp-text-muted)] mb-2">Suggested roles</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
               {jobs.slice(0, 3).map((job) => (
                 <div 
                   key={job.id} 
-                  className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/[0.04] p-3 hover:bg-white/[0.04] transition-all"
+                  className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-[var(--cp-border-soft)] p-3 hover:border-[var(--cp-border-medium)] hover:bg-white/[0.04] transition-all"
                 >
                   <div className="min-w-0 flex-1 pr-2">
-                    <p className="text-xs font-semibold text-white/90 truncate">{job.title}</p>
-                    <p className="text-[10px] text-white/40 truncate mt-0.5">{job.company}</p>
+                    <p className="text-xs font-semibold text-[var(--cp-text-main)] truncate">{job.title}</p>
+                    <p className="text-[10px] text-[var(--cp-text-muted)] truncate mt-0.5">{job.company}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {job.fit_score !== undefined && job.fit_score !== null && (
                       <span className={`text-[10px] font-bold ${
-                        job.fit_score >= 70 ? "text-emerald-400" : job.fit_score >= 40 ? "text-amber-400" : "text-red-400"
+                        job.fit_score >= 85 ? "text-[var(--cp-fit-high)]" : job.fit_score >= 55 ? "text-[var(--cp-fit-good)]" : "text-[var(--cp-fit-low)]"
                       }`}>
                         {job.fit_score}%
                       </span>
@@ -76,7 +76,7 @@ export function NudgeBanner({ message, jobs, onDismiss }: NudgeBannerProps) {
                         href={job.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#534AB7]/20 text-[#AFA9EC] hover:bg-[#534AB7]/30 transition-all border border-[#534AB7]/20"
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)] hover:bg-[rgba(201,130,74,0.24)] transition-all border border-[var(--cp-border-medium)]"
                       >
                         <ExternalLink className="h-3 w-3" />
                       </a>

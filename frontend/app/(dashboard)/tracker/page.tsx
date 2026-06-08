@@ -299,27 +299,27 @@ function JourneyPageContent() {
         />
       ))}
 
-      <div className="flex min-w-0 flex-col md:flex-row md:items-end md:justify-between gap-6 border-b border-white/[0.04] pb-5">
+      <div className="flex min-w-0 flex-col md:flex-row md:items-end md:justify-between gap-6 border-b border-[var(--cp-border-soft)] pb-5">
         {/* Page header */}
         <div className="min-w-0 space-y-1">
           <div className="flex items-center gap-2 mb-1">
-            <div className="h-6 w-6 rounded-md bg-primary/20 flex items-center justify-center">
+            <div className="h-6 w-6 rounded-md border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] flex items-center justify-center">
               <Compass className="h-3.5 w-3.5 text-primary" />
             </div>
-            <span className="text-xs font-semibold text-primary uppercase tracking-widest">
+            <span className="text-xs font-semibold text-[var(--cp-copper-strong)] uppercase tracking-widest">
               Productivity
             </span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">
+          <h1 className="font-display text-4xl font-semibold tracking-normal text-[var(--cp-text-main)]">
             My Journey
           </h1>
-          <p className="text-white/40 text-sm mt-1">
+          <p className="text-[var(--cp-text-muted)] text-sm mt-1">
             Manage your job applications, goals, and track your daily progress.
           </p>
         </div>
 
         {/* View Switcher Tabs */}
-        <div className="flex max-w-full overflow-x-auto p-1 gap-1 rounded-xl bg-[#0E0E12] border border-white/[0.06] shadow-md self-start md:self-auto">
+        <div className="flex max-w-full overflow-x-auto p-1 gap-1 rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-bg-deep)]/70 shadow-md self-start md:self-auto">
           {tabs.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -327,8 +327,8 @@ function JourneyPageContent() {
               onClick={() => setView(key)}
               className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 py-2 text-xs font-semibold rounded-lg transition-all duration-200 ${
                 view === key
-                  ? "bg-[#1E1B3A] text-[#AFA9EC] shadow-sm"
-                  : "text-white/60 hover:text-white hover:bg-white/[0.02]"
+                  ? "cp-active-glow bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)] shadow-sm"
+                  : "text-[var(--cp-text-muted)] hover:text-[var(--cp-text-soft)] hover:bg-white/[0.02]"
               }`}
             >
               <Icon className="h-3.5 w-3.5" />

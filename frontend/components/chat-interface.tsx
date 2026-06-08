@@ -1,70 +1,79 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Bot, FileText, Loader2, Map, Send, Sparkles, Target, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Send,
-  Loader2,
-  Bot,
-  User,
-  Sparkles,
-  FileText,
-  Map,
-  Target,
-} from "lucide-react";
-import { supabase } from "@/lib/supabase";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
-import type { ChatMessage } from "@/types";
-
-// ── Suggested prompts shown in empty state ───────────────────────────────────
+import { CopilotActionCard, type CopilotActionState } from "@/components/copilot-action-card";
+import { extractCopilotActions, stripCopilotDirectives } from "@/lib/copilot/directives";
+import { buildJobSearchHref, isAllowedCopilotHref } from "@/lib/copilot/app-map";
+import { supabase } from "@/lib/supabase";
+import type {
+  CopilotAction,
+  CopilotClientContext,
+  CopilotValidatedAction,
+} from "@/types";
 
 const SUGGESTED_PROMPTS = [
   {
     icon: Target,
-    label: "Career readiness check",
-    prompt:
-      "Am I ready for a data engineer role? Here's the job description:\n\n[paste JD here]",
+    label: "What should I do today?",
+    prompt: "What should I do today based on my current applications, goals, and CV?",
   },
   {
     icon: Sparkles,
-    label: "Skill gap analysis",
-    prompt: "What skills am I missing to land a Google internship?",
+    label: "Find jobs",
+    prompt: "Find jobs that match my CV and current career goals.",
   },
   {
     icon: Map,
-    label: "3-month roadmap",
-    prompt:
-      "Build me a 3-month roadmap to become job-ready as a software engineer.",
+    label: "Create prep tasks",
+    prompt: "Create interview prep tasks I can review and confirm.",
   },
   {
     icon: FileText,
-    label: "Draft cover letter",
-    prompt:
-      "Draft a professional cover letter for this job posting:\n\n[paste JD here]",
+    label: "Improve CV",
+    prompt: "How can I improve my CV for my target roles?",
   },
 ];
 
-// ── Prop types ───────────────────────────────────────────────────────────────
-
 interface ChatInterfaceProps {
   sessionId: string;
-  /** Called after the first message in a fresh session is sent. */
+  clientContext?: CopilotClientContext;
   onFirstMessage?: (firstMessageText: string) => void;
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+type LocalChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  actions?: CopilotAction[];
+};
 
-export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+type ChatMessageRow = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+
+function generateId(): string {
+  return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function ChatInterface({ sessionId, clientContext, onFirstMessage }: ChatInterfaceProps) {
+  const router = useRouter();
+  const [messages, setMessages] = useState<LocalChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
-  const isFirstMessageRef = useRef(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [actionStates, setActionStates] = useState<Record<string, CopilotActionState>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isFirstMessageRef = useRef(true);
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-  // ── Auto-scroll to bottom on new messages ──────────────────────────────────
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
@@ -72,7 +81,6 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
     });
   }, [messages]);
 
-  // ── Auto-resize textarea ───────────────────────────────────────────────────
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -80,19 +88,16 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
     ta.style.height = `${Math.min(ta.scrollHeight, 160)}px`;
   }, [input]);
 
-  // ── Fetch authenticated user ───────────────────────────────────────────────
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (!error) setUserId(data.user?.id ?? null);
     });
   }, []);
 
-  // ── Reset first-message tracker when session changes ───────────────────────
   useEffect(() => {
     isFirstMessageRef.current = true;
   }, [sessionId]);
 
-  // ── Load chat history when sessionId changes ───────────────────────────────
   useEffect(() => {
     if (!userId || !sessionId) return;
 
@@ -102,14 +107,20 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
       try {
         const { data, error } = await supabase
           .from("chat_messages")
-          .select("role, content")
+          .select("id, role, content")
           .eq("user_id", userId)
           .eq("session_id", sessionId)
           .order("created_at", { ascending: true })
           .limit(50);
 
         if (!error && data) {
-          setMessages(data as ChatMessage[]);
+          setMessages(
+            (data as ChatMessageRow[]).map((row) => ({
+              id: row.id,
+              role: row.role,
+              content: row.content,
+            })),
+          );
           isFirstMessageRef.current = data.length === 0;
         }
       } finally {
@@ -117,10 +128,109 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
       }
     };
 
-    loadHistory();
-  }, [userId, sessionId]);
+    void loadHistory();
+  }, [sessionId, userId]);
 
-  // ── Send a message ─────────────────────────────────────────────────────────
+  const updateActionState = useCallback((actionKey: string, state: CopilotActionState) => {
+    setActionStates((current) => ({ ...current, [actionKey]: state }));
+  }, []);
+
+  const validateActions = useCallback(
+    async (actions: CopilotAction[]): Promise<CopilotAction[]> => {
+      if (!userId || actions.length === 0) return [];
+
+      const validated: CopilotAction[] = [];
+      for (const action of actions) {
+        try {
+          const response = await fetch(`${apiBaseUrl}/copilot/actions/validate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              source: "chat",
+              action,
+            }),
+          });
+          if (!response.ok) continue;
+          const body = (await response.json()) as CopilotValidatedAction;
+          if (body.valid) validated.push(body.action);
+        } catch {
+          continue;
+        }
+      }
+      return validated;
+    },
+    [apiBaseUrl, userId],
+  );
+
+  const executeAction = useCallback(
+    async (messageId: string, index: number, action: CopilotAction) => {
+      const actionKey = `${messageId}-${index}`;
+
+      if (action.type === "open_route") {
+        if (!isAllowedCopilotHref(action.href)) {
+          updateActionState(actionKey, { status: "error", message: "I could not open that page." });
+          return;
+        }
+        router.push(action.href);
+        updateActionState(actionKey, { status: "success", message: "Opened.", href: action.href });
+        return;
+      }
+
+      if (action.type === "prefill_job_search") {
+        const href = buildJobSearchHref(action.query, action.location, action.auto ?? true);
+        if (!isAllowedCopilotHref(href)) {
+          updateActionState(actionKey, { status: "error", message: "I could not prepare that search." });
+          return;
+        }
+        router.push(href);
+        updateActionState(actionKey, { status: "success", message: "Search prepared.", href });
+        return;
+      }
+
+      updateActionState(actionKey, { status: "loading" });
+      try {
+        if (!userId) throw new Error("Please sign in first.");
+        const response = await fetch(`${apiBaseUrl}/copilot/actions/execute`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: userId,
+            source: "chat",
+            action,
+          }),
+        });
+
+        if (!response.ok) {
+          const body = (await response.json().catch(() => ({}))) as { detail?: string };
+          throw new Error(body.detail ?? "I could not confirm that action.");
+        }
+
+        const body = (await response.json()) as { message?: string; href?: string };
+        updateActionState(actionKey, {
+          status: "success",
+          message: body.message ?? "Confirmed.",
+          href:
+            body.href ??
+            (action.type === "save_application" ||
+            action.type === "update_application_status" ||
+            action.type === "save_application_note"
+              ? "/tracker?view=applications"
+              : "/tracker?view=goals_tasks"),
+        });
+      } catch (error) {
+        updateActionState(actionKey, {
+          status: "error",
+          message:
+            error instanceof Error
+              ? `${error.message} Your plan is still here.`
+              : "I could not create that. Your plan is still here.",
+        });
+      }
+    },
+    [apiBaseUrl, router, updateActionState, userId],
+  );
+
   const handleSend = useCallback(
     async (overrideText?: string) => {
       const text = (overrideText ?? input).trim();
@@ -129,40 +239,45 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
       if (!userId) {
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: "Please sign in to start chatting." },
+          { id: generateId(), role: "assistant", content: "Please sign in to start chatting." },
         ]);
         return;
       }
 
-      setMessages((prev) => [...prev, { role: "user", content: text }]);
+      const userMessageId = generateId();
+      const assistantId = generateId();
+      setMessages((prev) => [
+        ...prev,
+        { id: userMessageId, role: "user", content: text },
+        { id: assistantId, role: "assistant", content: "" },
+      ]);
       setInput("");
 
-      // Notify parent the first time so it can refresh the session list title
       if (isFirstMessageRef.current) {
         isFirstMessageRef.current = false;
         onFirstMessage?.(text);
       }
-      setIsStreaming(true);
 
-      // Placeholder assistant bubble that we stream into
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      setIsStreaming(true);
+      let fullReply = "";
 
       try {
-        const res = await fetch("/api/chat", {
+        const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             user_id: userId,
             session_id: sessionId,
             message: text,
+            client_context: clientContext,
           }),
         });
 
-        if (!res.ok) throw new Error("Chat request failed");
+        if (!response.ok) throw new Error("Chat request failed");
 
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
+        const reader = response.body?.getReader();
         if (!reader) throw new Error("No response stream");
+        const decoder = new TextDecoder();
 
         while (true) {
           const { done, value } = await reader.read();
@@ -170,91 +285,97 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
 
           const chunk = decoder.decode(value, { stream: true });
           if (!chunk) continue;
+          fullReply += chunk;
 
-          setMessages((prev) => {
-            const updated = [...prev];
-            const last = updated[updated.length - 1];
-            if (last?.role === "assistant") {
-              last.content += chunk;
-            }
-            return updated;
-          });
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, content: stripCopilotDirectives(fullReply) }
+                : message,
+            ),
+          );
         }
+
+        const actions = await validateActions(extractCopilotActions(fullReply));
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: stripCopilotDirectives(fullReply),
+                  actions: actions.length > 0 ? actions : undefined,
+                }
+              : message,
+          ),
+        );
       } catch {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const last = updated[updated.length - 1];
-          if (last?.role === "assistant") {
-            last.content =
-              "Sorry, something went wrong connecting to the server.";
-          }
-          return updated;
-        });
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === assistantId
+              ? {
+                  ...message,
+                  content: "Sorry, something went wrong connecting to the server.",
+                }
+              : message,
+          ),
+        );
       } finally {
         setIsStreaming(false);
       }
     },
-    [input, isStreaming, onFirstMessage, userId, sessionId]
+    [clientContext, input, isFirstMessageRef, isStreaming, onFirstMessage, sessionId, userId, validateActions],
   );
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
 
   const handleSuggestion = (prompt: string) => {
     setInput(prompt);
     textareaRef.current?.focus();
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void handleSend();
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Messages area */}
+    <div className="flex h-full flex-col">
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto space-y-6 pr-1 pb-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
+        className="flex-1 space-y-6 overflow-y-auto pb-4 pr-1"
       >
-        {/* Loading history */}
         {isLoadingHistory && (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-5 w-5 animate-spin text-white/20" />
           </div>
         )}
 
-        {/* Empty state with suggested prompts */}
         {!isLoadingHistory && messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto py-10 gap-8">
-            {/* Hero icon */}
+          <div className="cp-map-lines flex flex-col items-center justify-center gap-8 rounded-2xl border border-[var(--cp-border-soft)] bg-[rgba(255,255,255,0.015)] px-6 py-10 text-center">
             <div className="flex flex-col items-center gap-4">
-              <div className="h-16 w-16 rounded-2xl bg-gradient-to-tr from-[#534AB7]/20 to-[#7C74DB]/10 flex items-center justify-center shadow-lg shadow-primary/10 border border-white/[0.04]">
-                <Bot className="h-8 w-8 text-[#7C74DB]" />
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] shadow-lg shadow-[var(--cp-glow-copper)]">
+                <Bot className="h-8 w-8 text-[var(--cp-champagne)]" />
               </div>
               <div>
-                <p className="text-xl font-bold text-white tracking-tight">
-                  CareerPilot AI
-                </p>
-                <p className="text-sm text-white/40 mt-1.5 leading-relaxed">
-                  Ask me anything about your career — job advice, CV tips,
-                  cover letters, or interview prep. I know your CV inside out.
+                <p className="font-display text-2xl font-semibold tracking-normal text-[var(--cp-text-main)]">CareerPilot guide</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-[var(--cp-text-muted)]">
+                  Ask me anything about your career - job advice, CV tips, cover letters,
+                  or interview prep. I know your CV inside out.
                 </p>
               </div>
             </div>
 
-            {/* Suggested prompt cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
+            <div className="grid w-full grid-cols-1 gap-2.5 sm:grid-cols-2">
               {SUGGESTED_PROMPTS.map(({ icon: Icon, label, prompt }) => (
                 <button
                   key={label}
                   onClick={() => handleSuggestion(prompt)}
-                  className="group flex items-start gap-3 p-3.5 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-primary/30 text-left transition-all duration-200"
+                  className="group flex items-start gap-3 rounded-xl border border-[var(--cp-border-soft)] bg-white/[0.02] p-3.5 text-left transition-all duration-200 hover:border-[var(--cp-border-medium)] hover:bg-white/[0.04]"
                 >
-                  <div className="h-7 w-7 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-primary/20 transition-colors">
-                    <Icon className="h-3.5 w-3.5 text-primary/70" />
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[rgba(201,130,74,0.12)] transition-colors group-hover:bg-[rgba(201,130,74,0.2)]">
+                    <Icon className="h-3.5 w-3.5 text-[var(--cp-champagne)]" />
                   </div>
-                  <span className="text-xs text-white/50 group-hover:text-white/70 leading-relaxed transition-colors">
+                  <span className="text-xs leading-relaxed text-[var(--cp-text-muted)] transition-colors group-hover:text-[var(--cp-text-soft)]">
                     {label}
                   </span>
                 </button>
@@ -263,96 +384,93 @@ export function ChatInterface({ sessionId, onFirstMessage }: ChatInterfaceProps)
           </div>
         )}
 
-        {/* Message list */}
         {!isLoadingHistory &&
-          messages.map((msg, i) => {
-            const isLast = i === messages.length - 1;
-            const isAssistantStreaming =
-              isLast && msg.role === "assistant" && isStreaming;
+          messages.map((message, index) => {
+            const isLast = index === messages.length - 1;
+            const isAssistantStreaming = isLast && message.role === "assistant" && isStreaming;
 
             return (
-              <div
-                key={i}
-                className={`flex gap-3 ${
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                {/* Assistant avatar */}
-                {msg.role === "assistant" && (
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#534AB7] to-[#7C74DB] flex items-center justify-center shrink-0 mt-0.5 shadow-md shadow-[#534AB7]/10">
-                    <Bot className="h-4 w-4 text-white" />
-                  </div>
-                )}
-
-                {/* Bubble */}
+              <div key={message.id} className="space-y-2">
                 <div
-                  className={`max-w-[78%] px-4 py-3 rounded-2xl shadow-md border text-sm ${
-                    msg.role === "user"
-                      ? "bg-gradient-to-br from-[#534AB7] to-[#7C74DB] text-white border-white/[0.08] rounded-tr-none"
-                      : "bg-[#0E0E12] border-white/[0.06] text-white/90 rounded-tl-none"
-                  }`}
+                  className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  {msg.role === "assistant" ? (
-                    msg.content ? (
-                      <MarkdownRenderer
-                        content={msg.content}
-                        isStreaming={isAssistantStreaming}
-                      />
+                  {message.role === "assistant" && (
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] shadow-md shadow-[var(--cp-glow-copper)]">
+                      <Bot className="h-4 w-4 text-[var(--cp-champagne)]" />
+                    </div>
+                  )}
+
+                  <div
+                    className={`max-w-[78%] rounded-2xl border px-4 py-3 text-sm shadow-md ${
+                      message.role === "user"
+                        ? "rounded-tr-none border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.20)] text-[var(--cp-text-main)]"
+                        : "rounded-tl-none border-[var(--cp-border-soft)] bg-[var(--cp-surface)] text-[var(--cp-text-main)]"
+                    }`}
+                  >
+                    {message.role === "assistant" ? (
+                      message.content ? (
+                        <MarkdownRenderer content={message.content} isStreaming={isAssistantStreaming} />
+                      ) : (
+                        <div className="flex items-center gap-1.5 py-1">
+                          {[0, 150, 300].map((delay) => (
+                            <span
+                              key={delay}
+                              className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--cp-copper-strong)]/60"
+                            />
+                          ))}
+                        </div>
+                      )
                     ) : (
-                      /* Streaming indicator — pulsing dots */
-                      <div className="flex items-center gap-1.5 py-1">
-                        {[0, 150, 300].map((delay) => (
-                          <span
-                            key={delay}
-                            className="h-1.5 w-1.5 rounded-full bg-[#AFA9EC]/60 animate-bounce"
-                            style={{ animationDelay: `${delay}ms` }}
-                          />
-                        ))}
-                      </div>
-                    )
-                  ) : (
-                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                      <span className="whitespace-pre-wrap">{message.content}</span>
+                    )}
+                  </div>
+
+                  {message.role === "user" && (
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[var(--cp-border-soft)] bg-[rgba(201,130,74,0.10)] text-[var(--cp-champagne)] shadow-sm">
+                      <User className="h-4 w-4" />
+                    </div>
                   )}
                 </div>
 
-                {/* User avatar */}
-                {msg.role === "user" && (
-                  <div className="h-8 w-8 rounded-full bg-[#1E1B3A] border border-white/[0.08] flex items-center justify-center shrink-0 mt-0.5 shadow-sm text-[#AFA9EC]">
-                    <User className="h-4 w-4" />
-                  </div>
-                )}
+                {message.role === "assistant" &&
+                  message.actions?.map((action, actionIndex) => (
+                    <CopilotActionCard
+                      key={`${message.id}-${actionIndex}`}
+                      action={action}
+                      state={actionStates[`${message.id}-${actionIndex}`]}
+                      onExecute={() => {
+                        void executeAction(message.id, actionIndex, action);
+                      }}
+                      onOpenHref={(href) => router.push(href)}
+                    />
+                  ))}
               </div>
             );
           })}
       </div>
 
-      {/* Input area */}
-      <div className="border-t border-white/[0.06] pt-4 mt-2 shrink-0">
-        <div className="flex gap-3 items-end p-2 rounded-2xl border border-white/[0.06] bg-[#0E0E12] focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 transition-all">
+      <div className="mt-2 shrink-0 border-t border-[var(--cp-border-soft)] pt-4">
+        <div className="flex items-end gap-3 rounded-2xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] p-2 transition-all focus-within:border-[var(--cp-border-strong)] focus-within:ring-2 focus-within:ring-[var(--cp-glow-copper)]">
           <textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask CareerPilot anything…  (Shift+Enter for newline)"
+            placeholder="Ask CareerPilot anything... (Shift+Enter for newline)"
             rows={1}
-            className="flex-1 bg-transparent border-none px-3 py-2 text-white placeholder:text-white/20 focus:outline-none focus:ring-0 resize-none min-h-[44px] max-h-[160px] text-sm leading-relaxed"
             disabled={isStreaming}
+            className="min-h-[44px] max-h-[160px] flex-1 resize-none bg-transparent px-3 py-2 text-sm leading-relaxed text-[var(--cp-text-main)] placeholder:text-[var(--cp-text-subtle)] focus:outline-none focus:ring-0"
           />
           <Button
-            onClick={() => handleSend()}
+            onClick={() => void handleSend()}
             disabled={!input.trim() || isStreaming}
             size="icon"
-            className="shrink-0 h-[40px] w-[40px] rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] hover:from-[#5E55CC] hover:to-[#7A73DD] text-white disabled:opacity-40 transition-all duration-200 shadow-md shadow-[#534AB7]/20"
+            className="h-[40px] w-[40px] shrink-0 rounded-xl disabled:opacity-40"
           >
-            {isStreaming ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
+            {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </div>
-        <p className="text-center text-[10px] text-white/15 mt-2">
+        <p className="mt-2 text-center text-[10px] text-[var(--cp-text-subtle)]">
           CareerPilot AI can make mistakes. Check important information.
         </p>
       </div>

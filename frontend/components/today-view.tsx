@@ -212,7 +212,7 @@ export function TodayView({
     if (unseenNudge) {
       return {
         kind: "nudge",
-        title: "CareerPilot nudge",
+        title: "CareerPilot guide",
         description: unseenNudge.message,
         buttonLabel: "View details",
         nudge: unseenNudge,
@@ -314,16 +314,16 @@ export function TodayView({
   if (isStarterState) {
     return (
       <div className="grid grid-cols-1 xl:grid-cols-[1.4fr_0.8fr] gap-5">
-        <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
+        <Card className="cp-map-lines cp-surface-elevated rounded-2xl">
           <CardContent className="flex flex-col items-start gap-5 p-6 sm:p-8">
-            <div className="h-10 w-10 rounded-xl bg-[#534AB7]/15 border border-[#534AB7]/20 flex items-center justify-center">
-              <Target className="h-5 w-5 text-[#AFA9EC]" />
+            <div className="h-10 w-10 rounded-xl bg-[rgba(201,130,74,0.14)] border border-[var(--cp-border-medium)] flex items-center justify-center">
+              <Target className="h-5 w-5 text-[var(--cp-champagne)]" />
             </div>
             <div className="space-y-2 max-w-2xl">
-              <h2 className="text-2xl font-bold tracking-tight text-white">
+              <h2 className="font-display text-3xl font-semibold tracking-normal text-[var(--cp-text-main)]">
                 Start with one career goal.
               </h2>
-              <p className="text-sm leading-6 text-white/45">
+              <p className="text-sm leading-6 text-[var(--cp-text-muted)]">
                 Add a weekly target, then break it into tasks so Today can show
                 the next useful action each time you return.
               </p>
@@ -331,7 +331,6 @@ export function TodayView({
             <div className="flex flex-wrap gap-2">
               <Button
                 onClick={onOpenTasks}
-                className="bg-[#534AB7] hover:bg-[#6B63CC] text-white"
               >
                 <Plus className="h-4 w-4" />
                 Create goal
@@ -339,7 +338,6 @@ export function TodayView({
               <Button
                 variant="outline"
                 onClick={() => router.push("/jobs")}
-                className="border-white/[0.08] bg-white/[0.03] text-white/75 hover:bg-white/[0.06] hover:text-white"
               >
                 <Search className="h-4 w-4" />
                 Find jobs
@@ -423,17 +421,17 @@ function NextBestActionCard({
 
   return (
     <Card
-      className={`bg-[#0E0E12] border rounded-2xl shadow-xl shadow-black/30 ${
+      className={`cp-map-lines cp-surface-elevated rounded-2xl ${
         isTodo && action.urgent
           ? "border-red-400/20"
-          : "border-white/[0.06]"
+          : "border-[var(--cp-border-medium)]"
       }`}
     >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base font-bold flex items-center gap-2 text-white">
-            <Sparkles className="h-4 w-4 text-[#AFA9EC]" />
-            Next best action
+          <CardTitle className="text-xs font-bold flex items-center gap-2 text-[var(--cp-copper-strong)] uppercase tracking-widest">
+            <Sparkles className="h-4 w-4 text-[var(--cp-champagne)]" />
+            Next discovery
           </CardTitle>
           {isTodo && action.urgent && (
             <Badge className="bg-red-500/10 border-red-500/20 text-red-300">
@@ -444,17 +442,16 @@ function NextBestActionCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <h2 className="text-xl font-bold tracking-tight text-white">
+          <h2 className="font-display text-3xl font-semibold tracking-normal text-[var(--cp-text-main)]">
             {action.title}
           </h2>
-          <p className="text-sm leading-6 text-white/45">
+          <p className="text-sm leading-6 text-[var(--cp-text-muted)]">
             {action.description}
           </p>
         </div>
         <Button
           onClick={onPrimaryAction}
           disabled={isBusy}
-          className="bg-[#534AB7] hover:bg-[#6B63CC] text-white"
         >
           {isTodo ? (
             <CheckCircle2 className="h-4 w-4" />
@@ -482,18 +479,17 @@ function DueTasksCard({
   onOpenTasks?: () => void;
 }) {
   return (
-    <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
+    <Card className="rounded-2xl">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base font-bold flex items-center gap-2 text-white">
-            <ListTodo className="h-4 w-4 text-[#AFA9EC]" />
+          <CardTitle className="text-base font-bold flex items-center gap-2 text-[var(--cp-text-main)]">
+            <ListTodo className="h-4 w-4 text-[var(--cp-copper-strong)]" />
             Due today and overdue
           </CardTitle>
           <Button
             size="sm"
             variant="ghost"
             onClick={onOpenTasks}
-            className="text-white/45 hover:bg-white/[0.04] hover:text-white"
           >
             Open tasks
           </Button>
@@ -502,8 +498,11 @@ function DueTasksCard({
       <CardContent>
         {todos.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <CheckCircle2 className="h-8 w-8 text-emerald-400/25" />
-            <p className="text-sm text-white/35">
+            <CheckCircle2 className="h-8 w-8 text-[var(--cp-fit-high)]/35" />
+            <p className="text-sm font-semibold text-[var(--cp-text-soft)]">
+              All clear for today.
+            </p>
+            <p className="text-xs text-[var(--cp-text-muted)]">
               Nothing urgent due today.
             </p>
           </div>
@@ -548,7 +547,7 @@ function DueTasksCard({
                         {formatRelativeDate(dueDate)}
                       </span>
                       {todo.goal_id && goalMap[todo.goal_id] && (
-                        <span className="rounded-md border border-[#534AB7]/20 bg-[#534AB7]/10 px-1.5 py-0.5 text-[10px] text-[#AFA9EC]">
+                        <span className="rounded-md border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.10)] px-1.5 py-0.5 text-[10px] text-[var(--cp-champagne)]">
                           {goalMap[todo.goal_id]}
                         </span>
                       )}
@@ -579,16 +578,16 @@ function WeeklyProgressStrip({
       value: applicationsThisWeek,
       helper: "this week",
       icon: Briefcase,
-      color: "text-sky-300",
-      bg: "bg-sky-400/10",
+      color: "text-[var(--cp-copper-strong)]",
+      bg: "bg-[rgba(201,130,74,0.12)]",
     },
     {
       label: "Active goals",
       value: activeGoals,
       helper: "in progress",
       icon: Target,
-      color: "text-[#AFA9EC]",
-      bg: "bg-[#534AB7]/15",
+      color: "text-[var(--cp-champagne)]",
+      bg: "bg-[rgba(242,214,162,0.10)]",
     },
     {
       label: "Streak",
@@ -601,10 +600,10 @@ function WeeklyProgressStrip({
   ] as const;
 
   return (
-    <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
+    <Card className="rounded-2xl">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-bold flex items-center gap-2 text-white">
-          <AlertCircle className="h-4 w-4 text-emerald-300" />
+        <CardTitle className="text-base font-bold flex items-center gap-2 text-[var(--cp-text-main)]">
+          <AlertCircle className="h-4 w-4 text-[var(--cp-fit-high)]" />
           Weekly progress
         </CardTitle>
       </CardHeader>
@@ -613,20 +612,20 @@ function WeeklyProgressStrip({
           {metrics.map(({ label, value, helper, icon: Icon, color, bg }) => (
             <div
               key={label}
-              className="rounded-xl border border-white/[0.04] bg-white/[0.02] p-3"
+              className="rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3 shadow-inner shadow-black/20"
             >
               <div
                 className={`mb-2 flex h-7 w-7 items-center justify-center rounded-lg ${bg}`}
               >
                 <Icon className={`h-3.5 w-3.5 ${color}`} />
               </div>
-              <div className="text-2xl font-bold tracking-tight text-white">
+              <div className="text-2xl font-bold tracking-tight text-[var(--cp-text-main)]">
                 {value}
               </div>
-              <div className="mt-0.5 text-[10px] font-medium text-white/35">
+              <div className="mt-0.5 text-[10px] font-medium text-[var(--cp-text-muted)]">
                 {label}
               </div>
-              <div className="text-[10px] text-white/20">{helper}</div>
+              <div className="text-[10px] text-[var(--cp-text-subtle)]">{helper}</div>
             </div>
           ))}
         </div>
@@ -653,18 +652,17 @@ function ActiveGoalsCard({
   };
 
   return (
-    <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
+    <Card className="rounded-2xl">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base font-bold flex items-center gap-2 text-white">
-            <Target className="h-4 w-4 text-[#AFA9EC]" />
+          <CardTitle className="text-base font-bold flex items-center gap-2 text-[var(--cp-text-main)]">
+            <Target className="h-4 w-4 text-[var(--cp-copper-strong)]" />
             Active goals
           </CardTitle>
           <Button
             size="sm"
             variant="ghost"
             onClick={onCreateGoal}
-            className="text-white/45 hover:bg-white/[0.04] hover:text-white"
           >
             Create goal
           </Button>
@@ -673,12 +671,11 @@ function ActiveGoalsCard({
       <CardContent>
         {goals.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-8 text-center">
-            <Target className="h-8 w-8 text-white/10" />
-            <p className="text-sm text-white/35">No active goals yet.</p>
+            <Target className="h-8 w-8 text-[var(--cp-text-subtle)]" />
+            <p className="text-sm text-[var(--cp-text-muted)]">No active goals yet.</p>
             <Button
               size="sm"
               onClick={onCreateGoal}
-              className="bg-[#534AB7] hover:bg-[#6B63CC] text-white"
             >
               <Plus className="h-3.5 w-3.5" />
               Create goal
@@ -691,14 +688,14 @@ function ActiveGoalsCard({
               return (
                 <div
                   key={goal.id}
-                  className="rounded-xl border border-white/[0.06] bg-white/[0.015] p-3.5"
+                  className="rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3.5 shadow-inner shadow-black/20"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold leading-snug text-white/90">
+                      <p className="text-sm font-semibold leading-snug text-[var(--cp-text-main)]">
                         {goal.title}
                       </p>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-white/30">
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] text-[var(--cp-text-muted)]">
                         {goal.target_date && (
                           <span>{formatShortDate(goal.target_date)}</span>
                         )}
@@ -707,7 +704,7 @@ function ActiveGoalsCard({
                         </span>
                       </div>
                     </div>
-                    <span className="shrink-0 text-xs font-bold text-white/60">
+                    <span className="shrink-0 text-xs font-bold text-[var(--cp-champagne)]">
                       {pct}%
                     </span>
                   </div>
@@ -736,18 +733,17 @@ function UpcomingDeadlinesCard({
   onOpenCalendar?: () => void;
 }) {
   return (
-    <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
+    <Card className="rounded-2xl">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base font-bold flex items-center gap-2 text-white">
-            <CalendarDays className="h-4 w-4 text-[#AFA9EC]" />
+          <CardTitle className="text-base font-bold flex items-center gap-2 text-[var(--cp-text-main)]">
+            <CalendarDays className="h-4 w-4 text-[var(--cp-copper-strong)]" />
             Upcoming deadlines
           </CardTitle>
           <Button
             size="sm"
             variant="ghost"
             onClick={onOpenCalendar}
-            className="text-white/45 hover:bg-white/[0.04] hover:text-white"
           >
             Open calendar
           </Button>
@@ -756,8 +752,8 @@ function UpcomingDeadlinesCard({
       <CardContent>
         {deadlines.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
-            <CalendarDays className="h-8 w-8 text-white/10" />
-            <p className="text-sm text-white/35">
+            <CalendarDays className="h-8 w-8 text-[var(--cp-text-subtle)]" />
+            <p className="text-sm text-[var(--cp-text-muted)]">
               No upcoming task or goal dates.
             </p>
           </div>
@@ -766,18 +762,18 @@ function UpcomingDeadlinesCard({
             {deadlines.map((deadline) => (
               <div
                 key={deadline.id}
-                className="flex items-start gap-3 rounded-xl border border-white/[0.05] bg-white/[0.015] p-3"
+                className="flex items-start gap-3 rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3 shadow-inner shadow-black/20"
               >
-                <div className="flex h-10 w-12 shrink-0 flex-col items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03]">
-                  <span className="text-[10px] font-semibold uppercase text-white/30">
+                <div className="flex h-10 w-12 shrink-0 flex-col items-center justify-center rounded-lg border border-[var(--cp-border-soft)] bg-white/[0.03]">
+                  <span className="text-[10px] font-semibold uppercase text-[var(--cp-text-muted)]">
                     {formatShortDate(deadline.date).split(" ")[0]}
                   </span>
-                  <span className="text-sm font-bold leading-none text-white">
+                  <span className="text-sm font-bold leading-none text-[var(--cp-text-main)]">
                     {formatShortDate(deadline.date).split(" ")[1]}
                   </span>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold leading-snug text-white/85">
+                  <p className="text-sm font-semibold leading-snug text-[var(--cp-text-main)]">
                     {deadline.title}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -825,10 +821,10 @@ function QuickActions({
   ] as const;
 
   return (
-    <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
+    <Card className="rounded-2xl">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base font-bold flex items-center gap-2 text-white">
-          <Plus className="h-4 w-4 text-[#AFA9EC]" />
+        <CardTitle className="text-base font-bold flex items-center gap-2 text-[var(--cp-text-main)]">
+          <Plus className="h-4 w-4 text-[var(--cp-copper-strong)]" />
           Quick actions
         </CardTitle>
       </CardHeader>
@@ -839,7 +835,7 @@ function QuickActions({
               key={label}
               variant="outline"
               onClick={onClick}
-              className="justify-start border-white/[0.07] bg-white/[0.025] text-white/70 hover:bg-white/[0.05] hover:text-white"
+              className="justify-start"
             >
               <Icon className="h-4 w-4" />
               {label}

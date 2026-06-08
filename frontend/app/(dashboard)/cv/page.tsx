@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Briefcase,
   CheckCircle2,
@@ -16,7 +16,6 @@ import {
   Pencil,
   Phone,
   Plus,
-  Printer,
   Save,
   Sparkles,
   Trash2,
@@ -24,7 +23,6 @@ import {
   X,
 } from "lucide-react";
 import { CvUpload } from "@/components/cv-upload";
-import { ResumePreview } from "@/components/resume-preview";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -114,6 +112,7 @@ const profileToPayload = (profile: UserProfile): ProfilePayload => ({
 });
 
 function ProfilePageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -122,7 +121,6 @@ function ProfilePageContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showUploader, setShowUploader] = useState(false);
-  const [showResumePreview, setShowResumePreview] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -176,7 +174,7 @@ function ProfilePageContent() {
         }
 
         if (shouldOpenPreview && loadedProfile) {
-          setShowResumePreview(true);
+          router.replace("/cv/preview");
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load profile");
@@ -186,7 +184,7 @@ function ProfilePageContent() {
     };
 
     loadProfile();
-  }, [apiBaseUrl, shouldOpenBuilder, shouldOpenPreview]);
+  }, [apiBaseUrl, router, shouldOpenBuilder, shouldOpenPreview]);
 
   const hasProfile = Boolean(profile);
   const hasDraft = Boolean(draft);
@@ -204,7 +202,6 @@ function ProfilePageContent() {
     setDraft(data.profile);
     setIsEditing(false);
     setShowUploader(false);
-    setShowResumePreview(false);
     setNotice(`${data.file_name} parsed into your profile.`);
     setError("");
   };
@@ -214,7 +211,6 @@ function ProfilePageContent() {
     setDraft(profile ?? emptyUserProfile(userId));
     setIsEditing(true);
     setShowUploader(false);
-    setShowResumePreview(false);
     setError("");
     setNotice("");
   };
@@ -361,26 +357,28 @@ function ProfilePageContent() {
   const cancelEditing = () => {
     setDraft(profile);
     setIsEditing(false);
-    if (!profile) {
-      setShowResumePreview(false);
-    }
     setError("");
+  };
+
+  const openResumePreview = () => {
+    if (!profile) return;
+    router.push("/cv/preview");
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="no-print flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2 mb-1">
-            <div className="h-6 w-6 rounded-md bg-primary/20 flex items-center justify-center">
+            <div className="h-6 w-6 rounded-md border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] flex items-center justify-center">
               <User2 className="h-3.5 w-3.5 text-primary" />
             </div>
-            <span className="text-xs font-semibold text-primary uppercase tracking-widest">
+            <span className="text-xs font-semibold text-[var(--cp-copper-strong)] uppercase tracking-widest">
               Workspace
             </span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Profile</h1>
-          <p className="text-white/40 text-sm mt-1">
+          <h1 className="font-display text-4xl font-semibold tracking-normal text-[var(--cp-text-main)]">Profile</h1>
+          <p className="text-[var(--cp-text-muted)] text-sm mt-1">
             Your CV-powered career profile for matching, chat, and applications.
           </p>
         </div>
@@ -393,7 +391,7 @@ function ProfilePageContent() {
                   type="button"
                   onClick={saveProfile}
                   disabled={isSaving}
-                  className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
+                  className="h-10 rounded-xl"
                 >
                   {isSaving ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -405,7 +403,7 @@ function ProfilePageContent() {
                 <Button
                   type="button"
                   onClick={cancelEditing}
-                  className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+                  className="h-10 rounded-xl"
                 >
                   <X className="mr-2 h-4 w-4" />
                   Cancel
@@ -417,28 +415,18 @@ function ProfilePageContent() {
                   <>
                     <Button
                       type="button"
-                      onClick={() => setShowResumePreview((current) => !current)}
-                      className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+                      onClick={openResumePreview}
+                      className="h-10 rounded-xl"
                     >
                       <Eye className="mr-2 h-4 w-4" />
                       Preview Resume
                     </Button>
-                    {showResumePreview && (
-                      <Button
-                        type="button"
-                        onClick={() => window.print()}
-                        className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
-                      >
-                        <Printer className="mr-2 h-4 w-4" />
-                        Print / Download PDF
-                      </Button>
-                    )}
                   </>
                 )}
                 <Button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="h-10 rounded-xl bg-[#1E1B3A]/50 border border-white/[0.08] text-white hover:bg-[#1E1B3A]"
+                  className="h-10 rounded-xl"
                 >
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit
@@ -446,7 +434,7 @@ function ProfilePageContent() {
                 <Button
                   type="button"
                   onClick={() => setShowUploader((current) => !current)}
-                  className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+                  className="h-10 rounded-xl"
                 >
                   <FileUp className="mr-2 h-4 w-4" />
                   New CV
@@ -458,31 +446,31 @@ function ProfilePageContent() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <div className="no-print rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </div>
       )}
 
       {notice && (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
+        <div className="no-print rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4" />
           {notice}
         </div>
       )}
 
       {isLoading ? (
-        <div className="flex h-[320px] items-center justify-center rounded-2xl border border-dashed border-white/[0.06] bg-[#0E0E12]/70">
+        <div className="no-print flex h-[320px] items-center justify-center rounded-2xl border border-dashed border-white/[0.06] bg-[#0E0E12]/70">
           <div className="flex flex-col items-center gap-3 text-white/50">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <p className="text-sm">Loading profile</p>
           </div>
         </div>
       ) : !userId ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 text-sm text-white/50">
+        <div className="no-print rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 text-sm text-white/50">
           Please sign in to manage your profile.
         </div>
       ) : showUploader ? (
-        <div className="space-y-4">
+        <div className="no-print space-y-4">
           {hasProfile && (
             <Button
               type="button"
@@ -496,7 +484,7 @@ function ProfilePageContent() {
           <CvUpload onUploadSuccess={handleUploadSuccess} />
         </div>
       ) : !hasDraft ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 shadow-xl shadow-black/30">
+        <div className="no-print rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 shadow-xl shadow-black/30">
           <div className="max-w-2xl space-y-3">
             <h2 className="text-xl font-bold text-white">Start your career profile</h2>
             <p className="text-sm leading-6 text-white/50">
@@ -507,7 +495,7 @@ function ProfilePageContent() {
             <Button
               type="button"
               onClick={() => setShowUploader(true)}
-              className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
+              className="h-10 rounded-xl"
             >
               <FileUp className="mr-2 h-4 w-4" />
               Upload CV
@@ -523,14 +511,14 @@ function ProfilePageContent() {
           </div>
         </div>
       ) : draft ? (
-        <div className="space-y-5">
-          <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
-            <CardHeader className="border-b border-white/[0.04]">
-              <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
-                <Sparkles className="h-4 w-4 text-[#7C74DB]" />
+        <div className="no-print space-y-5">
+          <Card className="cp-surface-elevated rounded-2xl">
+            <CardHeader className="border-b border-[var(--cp-border-soft)]">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-[var(--cp-text-main)]">
+                <Sparkles className="h-4 w-4 text-[var(--cp-copper-strong)]" />
                 Overview
                 {generatedLabel && (
-                  <span className="ml-auto text-xs font-medium text-white/25">
+                    <span className="ml-auto text-xs font-medium text-[var(--cp-text-subtle)]">
                     Updated {generatedLabel}
                   </span>
                 )}
@@ -591,7 +579,7 @@ function ProfilePageContent() {
           <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
             <CardHeader className="border-b border-white/[0.04]">
               <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
-                <LinkIcon className="h-4 w-4 text-[#7C74DB]" />
+                <LinkIcon className="h-4 w-4 text-[var(--cp-copper-strong)]" />
                 Links
                 {isEditing && (
                   <IconButton onClick={() => updateDraft("links", [...draft.links, emptyLink()])}>
@@ -663,7 +651,7 @@ function ProfilePageContent() {
 
           <ProfileSection
             title="Experience"
-            icon={<Briefcase className="h-4 w-4 text-[#7C74DB]" />}
+            icon={<Briefcase className="h-4 w-4 text-[var(--cp-copper-strong)]" />}
             canEdit={isEditing}
             onAdd={() => updateDraft("experience", [...draft.experience, emptyExperience()])}
             emptyText="No experience extracted."
@@ -727,7 +715,7 @@ function ProfilePageContent() {
 
           <ProfileSection
             title="Education"
-            icon={<GraduationCap className="h-4 w-4 text-[#7C74DB]" />}
+            icon={<GraduationCap className="h-4 w-4 text-[var(--cp-copper-strong)]" />}
             canEdit={isEditing}
             onAdd={() => updateDraft("education", [...draft.education, emptyEducation()])}
             emptyText="No education extracted."
@@ -791,7 +779,7 @@ function ProfilePageContent() {
 
           <ProfileSection
             title="Projects"
-            icon={<Sparkles className="h-4 w-4 text-[#7C74DB]" />}
+            icon={<Sparkles className="h-4 w-4 text-[var(--cp-copper-strong)]" />}
             canEdit={isEditing}
             onAdd={() => updateDraft("projects", [...draft.projects, emptyProject()])}
             emptyText="No projects extracted."
@@ -837,27 +825,6 @@ function ProfilePageContent() {
             ))}
           </ProfileSection>
 
-          {showResumePreview && profile && (
-            <section className="resume-print-root space-y-4">
-              <div className="no-print flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Resume Preview</h2>
-                  <p className="text-sm text-white/45">
-                    Your resume preview uses your latest saved profile.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
-                >
-                  <Printer className="mr-2 h-4 w-4" />
-                  Print / Download PDF
-                </Button>
-              </div>
-              <ResumePreview profile={profile} />
-            </section>
-          )}
         </div>
       ) : null}
     </div>
