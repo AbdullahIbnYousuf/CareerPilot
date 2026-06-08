@@ -71,6 +71,77 @@ def _latest_assistant_message(history: list[dict]) -> str:
     return ""
 
 
+def _strip_markdown_label(value: str) -> str:
+    return value.strip().strip("*_`").strip()
+
+
+def _parse_goal_todos_from_text(content: str) -> dict[str, Any] | None:
+    """Extract a simple Goal/Todos proposal from visible assistant text."""
+    goal_match = re.search(
+        r"(?im)^\s*(?:[-*]\s*)?(?:\*\*)?goal(?:\*\*)?\s*:\s*(.+?)\s*$",
+        content,
+    )
+    if not goal_match:
+        return None
+
+    goal_title = _strip_markdown_label(goal_match.group(1))
+    if not goal_title:
+        return None
+
+    todos_heading = re.search(
+        r"(?im)^\s*(?:[-*]\s*)?(?:\*\*)?(?:todos?|tasks?)(?:\*\*)?\s*:?\s*$",
+        content[goal_match.end():],
+    )
+    if not todos_heading:
+        return None
+
+    todos_text = content[goal_match.end() + todos_heading.end():]
+    todo_lines = [_strip_markdown_label(line) for line in todos_text.splitlines()]
+    todo_lines = [line for line in todo_lines if line]
+    todos: list[dict[str, Any]] = []
+    index = 0
+
+    while index < len(todo_lines) and len(todos) < 5:
+        line = todo_lines[index]
+        if line.startswith("<careerpilot_"):
+            break
+        if re.match(r"(?i)^(goal|todos?|tasks?)\s*:", line):
+            break
+
+        numbered = re.match(r"^\d+[\.)]\s*(.*)$", line)
+        bullet = re.match(r"^[-*]\s+(.*)$", line)
+        title = ""
+
+        if numbered:
+            title = numbered.group(1).strip()
+            if not title and index + 1 < len(todo_lines):
+                index += 1
+                title = todo_lines[index]
+        elif bullet:
+            title = bullet.group(1).strip()
+        elif todos:
+            title = line
+
+        title = _strip_markdown_label(title)
+        if title and not re.match(r"^\d+[\.)]?$", title):
+            todos.append({"title": title, "due_date": None})
+
+        index += 1
+
+    if not todos:
+        return None
+
+    return {
+        "type": "prefill_goal_with_todos",
+        "label": "Review in Goals & Tasks",
+        "goal": {
+            "title": goal_title,
+            "target_date": None,
+        },
+        "todos": todos,
+    }
+
+
 def _date_days_from_now(days: int) -> str:
     return (datetime.now(timezone.utc).date() + timedelta(days=days)).isoformat()
 
@@ -87,6 +158,10 @@ def _fallback_action_for_turn(
     normalized = " ".join(message.lower().split())
     previous = _latest_assistant_message(history).lower()
     profile_status = str((client_context or {}).get("profile_status") or "")
+    visible_goal_action = _parse_goal_todos_from_text(visible_reply)
+    if visible_goal_action:
+        return visible_goal_action
+
 
     is_confirmation = normalized in {
         "ok",
@@ -169,6 +244,10 @@ def _fallback_action_for_turn(
             "todos": [
                 {
                     "title": "Review Resume Preview for accuracy",
+        previous_goal_action = _parse_goal_todos_from_text(previous_message)
+        if previous_goal_action:
+            return previous_goal_action
+
                     "due_date": _date_days_from_now(1),
                 },
                 {
