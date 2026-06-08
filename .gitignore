@@ -30,6 +30,8 @@ Thumbs.db
 
 # Logs
 *.log
+cdp-current.png
+.codex-headless-profile/
 
 # Database
 *.db
