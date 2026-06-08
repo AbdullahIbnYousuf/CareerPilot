@@ -105,13 +105,18 @@ function JourneyPageContent() {
     }
   }, [routeView]);
 
+  // When ?draft=1 is present, switch to goals_tasks AND consume the draft.
+  // We intentionally depend only on shouldLoadDraft so this fires even when
+  // the user is already on the goals_tasks view (routeView wouldn't change).
   useEffect(() => {
-    if (!shouldLoadDraft || routeView !== "goals_tasks") return;
+    if (!shouldLoadDraft) return;
     const timeoutId = window.setTimeout(() => {
-      setCopilotDraft(takeGoalsTasksDraft());
-    }, 0);
+      setView("goals_tasks");
+      const draft = takeGoalsTasksDraft();
+      if (draft) setCopilotDraft(draft);
+    }, 50);
     return () => window.clearTimeout(timeoutId);
-  }, [routeView, shouldLoadDraft]);
+  }, [shouldLoadDraft]);
 
   useEffect(() => {
     if (!userId) return;
@@ -213,12 +218,19 @@ function JourneyPageContent() {
 
   const handleGoalCreated = useCallback((goal: Goal) => {
     setDataLoadError(null);
+    // Clear the copilot draft once the goal has been saved
+    setCopilotDraft(null);
     setGoals((currentGoals) => {
       if (currentGoals.some((currentGoal) => currentGoal.id === goal.id)) {
         return currentGoals;
       }
       return [goal, ...currentGoals];
     });
+  }, []);
+
+  /** Called by GoalsSection / TodoList once the draft has been applied to the form. */
+  const handleDraftConsumed = useCallback(() => {
+    setCopilotDraft(null);
   }, []);
 
   const handleTodoCreated = useCallback((todo: Todo) => {
@@ -405,6 +417,7 @@ function JourneyPageContent() {
               onGoalCreated={handleGoalCreated}
               onTodosChange={handleDataRefresh}
               onTodoCreated={handleTodoCreated}
+              onDraftConsumed={handleDraftConsumed}
             />
             <TodoList
               userId={userId}

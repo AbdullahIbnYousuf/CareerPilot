@@ -36,6 +36,8 @@ interface GoalsSectionProps {
   draft?: CopilotGoalsTasksDraft | null;
   onGoalCreated?: (goal: Goal) => void;
   onTodoCreated?: (todo: Todo) => void;
+  /** Called once the draft has been applied to the form so the parent can clear draft state. */
+  onDraftConsumed?: () => void;
 }
 
 type GoalCategory =
@@ -220,6 +222,7 @@ export function GoalsSection({
   draft,
   onGoalCreated,
   onTodoCreated,
+  onDraftConsumed,
 }: GoalsSectionProps) {
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -252,10 +255,12 @@ export function GoalsSection({
       setNewTargetDate(draft.goal.target_date ?? "");
       setDraftTodos(draft.todos);
       flash("success", "CareerPilot filled a goal draft. Review it, then click Create.");
+      // Signal to the parent that the draft has been consumed so it won't re-fire
+      onDraftConsumed?.();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [draft, flash]);
+  }, [draft, flash, onDraftConsumed]);
 
   const createGoal = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

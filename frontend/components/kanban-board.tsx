@@ -43,7 +43,7 @@ import {
   X,
 } from "lucide-react";
 
-// â”€â”€â”€ Column config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Column config
 
 const COLUMNS: {
   key: ApplicationStatus;
@@ -95,7 +95,7 @@ const COLUMNS: {
   },
 ];
 
-// â”€â”€â”€ Sortable Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Sortable Card
 
 type ActionPromptState = {
   type: "follow_up" | "interview_prep";
@@ -228,7 +228,7 @@ function ApplicationCard({
                 month: "short",
                 day: "numeric",
               })
-            : "â€”"}
+            : "-"}
         </span>
 
         <div className="flex items-center gap-2">
@@ -258,7 +258,7 @@ function ApplicationCard({
   );
 }
 
-// â”€â”€â”€ Column â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Column
 
 function KanbanColumn({
   column,
@@ -319,7 +319,7 @@ function KanbanColumn({
   );
 }
 
-// â”€â”€â”€ Main Kanban Board â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Main Kanban Board
 
 function ApplicationActionPrompt({
   prompt,
@@ -518,7 +518,7 @@ export function KanbanBoard({
           setJobDetails(data);
         }
       } catch {
-        // silently fail â€” modal still works without these extras
+        // silently fail - modal still works without these extras
       } finally {
         setLoadingJobDetails(false);
       }
@@ -552,19 +552,19 @@ export function KanbanBoard({
         setNotesSaveError(errData.detail || `Save failed (${res.status})`);
       }
     } catch (err) {
-      setNotesSaveError(err instanceof Error ? err.message : "Network error â€” check connection.");
+      setNotesSaveError(err instanceof Error ? err.message : "Network error - check connection.");
     } finally {
       setSavingNotes(false);
     }
   };
-  // â”€â”€ Sensors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  // â”€â”€ Load user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Load user
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (!error) {
@@ -574,7 +574,7 @@ export function KanbanBoard({
     });
   }, []);
 
-  // â”€â”€ Fetch applications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Fetch applications
   const fetchApplications = useCallback(
     async (uid: string) => {
       try {
@@ -586,7 +586,7 @@ export function KanbanBoard({
           setApplications(data.applications || []);
         }
       } catch {
-        // silently fail â€” Realtime will keep us in sync
+        // silently fail - Realtime will keep us in sync
       } finally {
         setLoading(false);
       }
@@ -626,7 +626,7 @@ export function KanbanBoard({
     return () => window.clearTimeout(timeoutId);
   }, [applications]);
 
-  // â”€â”€ Supabase Realtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Supabase Realtime
   useEffect(() => {
     if (!userId) return;
 
@@ -674,7 +674,7 @@ export function KanbanBoard({
     };
   }, [userId, fetchApplications]);
 
-  // â”€â”€ Delete â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Delete
   const deleteApplication = async (appId: string) => {
     // Optimistic
     setApplications((prev) => prev.filter((a) => a.id !== appId));
@@ -688,7 +688,7 @@ export function KanbanBoard({
     }
   };
 
-  // â”€â”€ DnD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // DnD handlers
   const handleDragStart = (event: DragStartEvent) => {
     const id = event.active.id as string;
     setActiveApp(applications.find((a) => a.id === id) ?? null);
@@ -704,7 +704,7 @@ export function KanbanBoard({
     const draggedId = active.id as string;
     const overedId = over.id as string;
 
-    // Determine target column â€” overedId is either a column key or a card id
+    // Determine target column - overedId is either a column key or a card id
     const targetColumn = COLUMNS.find((c) => c.key === overedId)
       ? (overedId as ApplicationStatus)
       : applications.find((a) => a.id === overedId)?.status ?? null;
@@ -790,7 +790,7 @@ export function KanbanBoard({
     }
   };
 
-  // â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // Loading
   const createTodo = async (title: string, dueDate: string): Promise<Todo> => {
     if (!userId) throw new Error("Please sign in to create tasks.");
 
@@ -857,7 +857,7 @@ export function KanbanBoard({
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          <p className="text-sm text-white/30">Loading your applicationsâ€¦</p>
+          <p className="text-sm text-white/30">Loading your applications...</p>
         </div>
       </div>
     );
@@ -948,7 +948,7 @@ export function KanbanBoard({
           })}
         </div>
 
-        {/* Drag overlay â€” card ghost that follows cursor */}
+        {/* Drag overlay - card ghost that follows cursor */}
         <DragOverlay dropAnimation={{ duration: 200, easing: "ease" }}>
           {activeApp ? (
             <ApplicationCard
@@ -967,7 +967,7 @@ export function KanbanBoard({
         >
           <div className="w-full max-w-2xl max-h-[88vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 overflow-hidden">
 
-            {/* â”€â”€ Header (exact Job Hunter modal header) â”€â”€ */}
+            {/* Header (exact Job Hunter modal header) */}
             <div className="flex justify-between items-start p-6 border-b border-white/[0.06] bg-white/[0.02]">
               <div className="flex-1 min-w-0 pr-4">
                 {/* Status + source badge row */}
@@ -996,10 +996,10 @@ export function KanbanBoard({
               </button>
             </div>
 
-            {/* â”€â”€ Scrollable body â”€â”€ */}
+            {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
-              {/* Fit score panel â€” exact Job Hunter style using FitScoreBadge */}
+              {/* Fit score panel - exact Job Hunter style using FitScoreBadge */}
               {selectedApp.fit_score !== undefined && selectedApp.fit_score !== null ? (
                 <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
                   <div className="shrink-0">
@@ -1022,13 +1022,13 @@ export function KanbanBoard({
                 </div>
               ) : null}
 
-              {/* Quick info â€” salary / deadline / applied (exact Job Hunter grid) */}
+              {/* Quick info - salary / deadline / applied (exact Job Hunter grid) */}
               <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.03] border border-white/[0.05] p-4 text-xs">
                 <div className="space-y-1">
                   <span className="text-white/30 block">Salary Range</span>
                   <span className="text-white font-semibold flex items-center gap-1.5">
                     <DollarSign className="h-3.5 w-3.5 text-primary" />
-                    {loadingJobDetails ? "â€¦" : (jobDetails?.salary_range || "Not Disclosed")}
+                    {loadingJobDetails ? "..." : (jobDetails?.salary_range || "Not Disclosed")}
                   </span>
                 </div>
                 <div className="space-y-1 pl-4 border-l border-white/[0.05]">
@@ -1059,7 +1059,7 @@ export function KanbanBoard({
                 </div>
               </div>
 
-              {/* â”€â”€ Notes (app-specific) â”€â”€ */}
+              {/* Notes (app-specific) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider">My Notes</h3>
@@ -1089,7 +1089,7 @@ export function KanbanBoard({
                 )}
               </div>
 
-              {/* â”€â”€ Activity History (app-specific) â”€â”€ */}
+              {/* Activity History (app-specific) */}
               <div className="space-y-2">
                 <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
                   Activity History
@@ -1121,7 +1121,7 @@ export function KanbanBoard({
                 )}
               </div>
 
-              {/* â”€â”€ Job Description (at the bottom, exact Job Hunter style) â”€â”€ */}
+              {/* Job Description (at the bottom, exact Job Hunter style) */}
               <div className="space-y-2">
                 <h3 className="text-[11px] font-bold text-white/30 uppercase tracking-wider flex items-center gap-1.5">
                   <Briefcase className="h-3.5 w-3.5" /> Job Description
@@ -1140,7 +1140,7 @@ export function KanbanBoard({
               </div>
             </div>
 
-            {/* â”€â”€ Footer (exact Job Hunter modal footer) â”€â”€ */}
+            {/* Footer (exact Job Hunter modal footer) */}
             <div className="p-4 border-t border-white/[0.06] flex flex-col-reverse gap-2 bg-white/[0.02] sm:flex-row sm:justify-end">
               <button
                 onClick={closeDetails}
