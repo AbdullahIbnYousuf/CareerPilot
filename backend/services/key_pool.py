@@ -25,6 +25,10 @@ import os
 import threading
 import logging
 from typing import AsyncGenerator
+from dotenv import load_dotenv
+
+# Ensure env vars are loaded before key pools are initialized
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
