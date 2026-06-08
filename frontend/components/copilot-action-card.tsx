@@ -62,6 +62,14 @@ function ActionSummary({ action }: { action: CopilotAction }) {
     );
   }
 
+  if (action.type === "prefill_todo") {
+    return (
+      <p className="mt-1 text-white/45">
+        {action.todo.title} - {formatDraftDate(action.todo.due_date)}
+      </p>
+    );
+  }
+
   if (action.type === "create_roadmap_with_tasks") {
     const todoCount = action.goals.reduce((count, goal) => count + goal.todos.length, 0);
     return (
@@ -107,6 +115,18 @@ function ActionSummary({ action }: { action: CopilotAction }) {
     );
   }
 
+  if (action.type === "prefill_application_note") {
+    return (
+      <p className="mt-1 text-white/45">
+        Draft note: {action.note}
+      </p>
+    );
+  }
+
+  if (action.type === "show_feature_explainer") {
+    return <p className="mt-1 text-white/45">{action.body || action.feature}</p>;
+  }
+
   return (
     <div className="mt-1 space-y-1 text-white/45">
       <p>
@@ -126,6 +146,35 @@ function ActionSummary({ action }: { action: CopilotAction }) {
       )}
     </div>
   );
+}
+
+function actionButtonLabel(action: CopilotAction): string {
+  if (action.type === "prefill_goal_with_todos") {
+    return "Open Draft";
+  }
+  if (action.type === "create_goal_with_todos" || action.type === "create_roadmap_with_tasks") {
+    return "Add to Goals & Tasks";
+  }
+  if (action.type === "prefill_todo") {
+    return "Open Draft";
+  }
+  if (action.type === "create_todo") {
+    return "Add Task";
+  }
+  if (action.type === "prefill_application_note") {
+    return "Open Note";
+  }
+  if (action.type === "show_feature_explainer") {
+    return action.href ? "Open" : "Got it";
+  }
+  if (
+    action.type === "save_application" ||
+    action.type === "update_application_status" ||
+    action.type === "save_application_note"
+  ) {
+    return "Confirm";
+  }
+  return "Open";
 }
 
 export function CopilotActionCard({
@@ -151,7 +200,7 @@ export function CopilotActionCard({
       ? Navigation
       : action.type === "prefill_job_search"
         ? Search
-        : action.type === "create_todo"
+        : action.type === "create_todo" || action.type === "prefill_todo"
           ? Calendar
           : isApplicationAction
             ? CheckCircle2
@@ -199,7 +248,7 @@ export function CopilotActionCard({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] px-3 py-1.5 font-semibold text-[var(--cp-bg-deep)] hover:brightness-110 disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                {isMutation ? "Confirm" : "Open"}
+                {actionButtonLabel(action)}
               </button>
             )}
           </div>

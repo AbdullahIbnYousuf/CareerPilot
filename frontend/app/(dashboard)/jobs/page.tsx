@@ -179,6 +179,14 @@ function JobsPageContent() {
       if (storageKey) {
         localStorage.setItem(storageKey, JSON.stringify(state));
       }
+      void fetch(`${baseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mark_step_complete: "job_review",
+          feature_exposure: { feature: "jobs_results" },
+        }),
+      }).catch(() => undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {

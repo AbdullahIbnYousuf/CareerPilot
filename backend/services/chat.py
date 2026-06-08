@@ -153,15 +153,14 @@ def _fallback_action_for_turn(
     visible_reply: str,
 ) -> dict[str, Any] | None:
     """Create deterministic action cards when the model speaks about an action but omits the directive."""
-    del visible_reply
-
     normalized = " ".join(message.lower().split())
-    previous = _latest_assistant_message(history).lower()
+    previous_message = _latest_assistant_message(history)
+    previous = previous_message.lower()
     profile_status = str((client_context or {}).get("profile_status") or "")
+
     visible_goal_action = _parse_goal_todos_from_text(visible_reply)
     if visible_goal_action:
         return visible_goal_action
-
 
     is_confirmation = normalized in {
         "ok",
@@ -178,6 +177,9 @@ def _fallback_action_for_turn(
         "yes do that",
         "add it",
         "add them",
+        "add them to my task and goal list",
+        "add them to my goals and tasks",
+        "add to goals and tasks",
         "confirm",
     }
     wants_open = any(
@@ -203,6 +205,9 @@ def _fallback_action_for_turn(
             "create tasks",
             "do that",
             "ok do that",
+            "add them to my task and goal list",
+            "add them to my goals and tasks",
+            "add to goals and tasks",
         )
     )
 
@@ -231,12 +236,21 @@ def _fallback_action_for_turn(
             "resume preview",
             "ai journey",
             "roadmap",
+            "goal:",
+            "todos:",
+            "todo:",
+            "tasks:",
+            "task:",
         )
     )
     if wants_tasks and (task_context or is_confirmation):
+        previous_goal_action = _parse_goal_todos_from_text(previous_message)
+        if previous_goal_action:
+            return previous_goal_action
+
         return {
-            "type": "create_goal_with_todos",
-            "label": "Add journey tasks",
+            "type": "prefill_goal_with_todos",
+            "label": "Review journey tasks",
             "goal": {
                 "title": "Complete CareerPilot journey setup",
                 "target_date": _date_days_from_now(7),
@@ -244,10 +258,6 @@ def _fallback_action_for_turn(
             "todos": [
                 {
                     "title": "Review Resume Preview for accuracy",
-        previous_goal_action = _parse_goal_todos_from_text(previous_message)
-        if previous_goal_action:
-            return previous_goal_action
-
                     "due_date": _date_days_from_now(1),
                 },
                 {
@@ -293,6 +303,7 @@ def _format_client_context(client_context: Optional[dict[str, Any]]) -> str:
         "profile_status",
         "onboarding",
         "preferences",
+        "copilot_state",
         "app_state",
         "app_map",
     }
@@ -389,19 +400,37 @@ CareerPilot response shape:
 - Prefer concrete actions over long feature explanations.
 
 Guidance playbooks:
+- Work in four modes: onboarding guide, feature guide, career coach, and app
+  operator. Choose the mode from the user's request and copilot_state.next_step.
+- In onboarding guide mode, collect preferred name, target role, location or
+  work mode, career stage or urgency, then ask whether they want to upload a CV
+  or build a profile manually. Ask one missing detail at a time.
+- In feature guide mode, explain the current feature in one or two sentences,
+  then give the next click. Jobs explains fit score, Details, and Save to
+  Applications. Applications explains statuses and drag/drop. Goals & Tasks
+  explains draft plans and Create. Calendar explains due dates and deadlines.
+  Progress explains metrics. Today explains the daily action queue.
+- In career coach mode, answer the career question directly, grounded in CV
+  context when available. After a side question, gently resume the guide, for
+  example: "We can continue from job search when you're ready."
+- In app operator mode, guide, prefill, route, and propose. Do not silently
+  mutate product state.
 - If profile_status is "no_profile", explain that CV/profile data powers fit
   scores and personalized advice. Offer Upload CV or Build profile manually.
 - If profile_status is "has_profile", use CV context and preferences to suggest
   job searches, application steps, goals, tasks, cover-letter drafts, or prep.
 - For job searches, propose a focused query and location. Use
-  prefill_job_search when a clear search exists.
-- For urgent job-search planning, propose one goal and up to five todos, or use
-  create_roadmap_with_tasks for a multi-week plan. The UI will require
-  confirmation before anything is created.
-- For cover letters and readiness checks, ground claims in CV context and never
-  invent experience.
-- For application status changes or saved notes, only propose the change. Never
+  prefill_job_search when a clear search exists. Visible text must say what
+  happens next, usually "Now click Search."
+- For goals and tasks, prefer prefill_goal_with_todos or prefill_todo so the
+  user reviews the form and clicks Create. Use direct create_* actions only when
+  the user explicitly asks to create and the UI will preview the mutation.
+- For application notes, prefer prefill_application_note so the note opens in
+  Applications and the user clicks Save.
+- For application status changes or saved jobs, only propose the change. Never
   claim the record changed before UI confirmation.
+- Guidance should get shorter as copilot_state.guidance_level moves from
+  first_run to guided, light, and minimal.
 
 Hidden action rule:
 Use at most one hidden action directive per assistant turn unless the user asks
@@ -426,12 +455,20 @@ Allowed hidden onboarding directive format:
 Allowed action types:
 - open_route: href must be a CareerPilot route from the app map.
 - prefill_job_search: include label, query, optional location, optional auto.
+- prefill_goal_with_todos: include one goal and at most five todos. This opens
+  Goals & Tasks with a draft; tell the user to review and click Create.
+- prefill_todo: include one todo. This opens Goals & Tasks with a draft; tell
+  the user to click Create.
 - create_goal_with_todos: include one goal and at most five todos. This only proposes; the user must confirm.
 - create_roadmap_with_tasks: include at most four goals and at most twelve todos total. This only proposes; the user must confirm.
 - create_todo: include one todo. This only proposes; the user must confirm.
 - save_application: include label, job_id, optional status. This only proposes; the user must confirm.
 - update_application_status: include label, application_id, status. This only proposes; the user must confirm.
 - save_application_note: include label, application_id, note. This only proposes; the user must confirm.
+- prefill_application_note: include label, application_id, and note. This opens
+  Applications with the note draft; tell the user to click Save.
+- show_feature_explainer: include label, feature, optional body, optional href.
+  Use this when the user needs a feature explanation before moving on.
 
 Do not show or explain the hidden directive in visible text. Keep visible replies
 concise, practical, and page-aware.

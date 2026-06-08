@@ -13,13 +13,16 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Bot,
   Calendar,
+  ChevronDown,
   CheckCircle2,
   ExternalLink,
   Loader2,
   MapPin,
   Maximize2,
+  MessageSquare,
   Minus,
   Navigation,
+  Plus,
   Search,
   Send,
   Target,
@@ -35,10 +38,14 @@ import {
   isAllowedCopilotHref,
   validateCopilotAction,
 } from "@/lib/copilot/app-map";
+import { getCopilotActionSuccessMessage } from "@/lib/copilot/action-guidance";
+import { saveApplicationNoteDraft, saveGoalsTasksDraft } from "@/lib/copilot/drafts";
 import type {
   CareerPreferences,
   CopilotAction,
   CopilotClientContext,
+  CopilotGuideState,
+  CopilotGuideStep,
   CopilotOnboardingState,
   CopilotProfileStatus,
   CopilotValidatedAction,
@@ -58,6 +65,14 @@ type ChatMessageRow = {
 };
 type ChatSessionRow = {
   id: string;
+  title: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+type ChatSessionSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
 };
 type ActionExecutionState = {
   status: "idle" | "loading" | "success" | "error";
@@ -71,9 +86,10 @@ type PanelPosition = {
 
 const ACTION_PATTERN = /<careerpilot_action>\s*([\s\S]*?)\s*<\/careerpilot_action>/g;
 const ONBOARDING_PATTERN = /<careerpilot_onboarding>\s*([\s\S]*?)\s*<\/careerpilot_onboarding>/g;
-const DEFAULT_SESSION_TITLE = "CareerPilot";
+const DEFAULT_SESSION_TITLE = "New conversation";
 const COPILOT_SESSION_KEY_PREFIX = "careerpilot:copilot-chat:";
 const ACTIVE_SESSION_KEY_PREFIX = "careerpilot:active-chat:";
+const ACTIVE_CHAT_CHANGED_EVENT = "careerpilot:active-chat-changed";
 
 const DEFAULT_ONBOARDING: CopilotOnboardingState = {
   completed: false,
@@ -125,6 +141,14 @@ function copilotSessionKey(userId: string): string {
 
 function activeSessionStorageKey(userId: string): string {
   return `${ACTIVE_SESSION_KEY_PREFIX}${userId}`;
+}
+
+function dispatchActiveChatChanged(userId: string, sessionId: string): void {
+  window.dispatchEvent(
+    new CustomEvent(ACTIVE_CHAT_CHANGED_EVENT, {
+      detail: { userId, sessionId },
+    }),
+  );
 }
 
 function normalizeOnboarding(value: unknown): CopilotOnboardingState {
@@ -296,6 +320,29 @@ function mergePreferencesIntoOnboarding(
   return next;
 }
 
+function mergeCopilotStateIntoOnboarding(
+  current: CopilotOnboardingState,
+  state?: CopilotGuideState | null,
+): CopilotOnboardingState {
+  if (!state?.onboarding) return current;
+  const onboarding = state.onboarding;
+  const next: CopilotOnboardingState = {
+    ...current,
+    name: current.name || onboarding.name || "",
+    targetRoles:
+      current.targetRoles.length > 0
+        ? current.targetRoles
+        : onboarding.targetRoles ?? [],
+    location: current.location || onboarding.location || "",
+    workMode: current.workMode || onboarding.workMode || "",
+    careerStage: current.careerStage || onboarding.careerStage || "",
+    completed: Boolean(onboarding.completed) || current.completed,
+    updatedAt: new Date().toISOString(),
+  };
+  next.lastStep = deriveLastStep(next);
+  return next;
+}
+
 function extractOnboardingPatch(content: string): Record<string, unknown> | null {
   let patch: Record<string, unknown> | null = null;
   const matches = content.matchAll(ONBOARDING_PATTERN);
@@ -323,6 +370,32 @@ function formatDraftDate(date?: string | null): string {
   });
 }
 
+function mapChatSession(row: ChatSessionRow): ChatSessionSummary {
+  return {
+    id: row.id,
+    title: row.title || DEFAULT_SESSION_TITLE,
+    updatedAt: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function sortChatSessions(sessions: ChatSessionSummary[]): ChatSessionSummary[] {
+  return [...sessions].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
+function truncateSessionTitle(title: string, limit = 30): string {
+  const cleaned = title.trim() || DEFAULT_SESSION_TITLE;
+  return cleaned.length > limit ? `${cleaned.slice(0, limit)}...` : cleaned;
+}
+
+function guideStepForPath(pathname: string): CopilotGuideStep | null {
+  if (pathname.startsWith("/cv")) return "profile_setup";
+  if (pathname.startsWith("/jobs")) return "job_search";
+  if (pathname.startsWith("/tracker")) return "today";
+  return null;
+}
+
 export function CopilotWidget() {
   const pathname = usePathname();
   const router = useRouter();
@@ -331,9 +404,13 @@ export function CopilotWidget() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState("");
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
   const [profileStatus, setProfileStatus] = useState<CopilotProfileStatus>("unknown");
   const [onboarding, setOnboarding] = useState<CopilotOnboardingState>(DEFAULT_ONBOARDING);
   const [preferences, setPreferences] = useState<CareerPreferences | null>(null);
+  const [copilotState, setCopilotState] = useState<CopilotGuideState | null>(null);
   const [actionStates, setActionStates] = useState<Record<string, ActionExecutionState>>({});
   const [connectionError, setConnectionError] = useState("");
   const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
@@ -427,6 +504,7 @@ export function CopilotWidget() {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (panelRef.current?.contains(target)) return;
+      setIsSessionMenuOpen(false);
       setPanelState("minimized");
     };
 
@@ -454,6 +532,84 @@ export function CopilotWidget() {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, [clampPanelPosition]);
+
+  const loadSessionMessages = useCallback(
+    async (id: string, sessionId: string, greetingOnboarding: CopilotOnboardingState) => {
+      const { data: messageRows } = await supabase
+        .from("chat_messages")
+        .select("id, role, content")
+        .eq("user_id", id)
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+      const persistedMessages = ((messageRows as ChatMessageRow[] | null) ?? [])
+        .filter((row) => row.role === "user" || row.role === "assistant")
+        .map((row) => ({
+          id: row.id,
+          role: row.role,
+          content: row.content,
+        }));
+
+      setActionStates({});
+
+      if (persistedMessages.length > 0) {
+        setMessages(persistedMessages);
+        return;
+      }
+
+      const greeting = initialAssistantMessage(greetingOnboarding);
+      setMessages([greeting]);
+
+      await supabase.from("chat_messages").insert({
+        user_id: id,
+        session_id: sessionId,
+        role: "assistant",
+        content: greeting.content,
+      });
+    },
+    [],
+  );
+
+  const loadChatSessions = useCallback(async (id: string) => {
+    const { data } = await supabase
+      .from("chat_sessions")
+      .select("id, title, created_at, updated_at")
+      .eq("user_id", id)
+      .order("updated_at", { ascending: false });
+
+    const loadedSessions = sortChatSessions(((data as ChatSessionRow[] | null) ?? []).map(mapChatSession));
+    setSessions(loadedSessions);
+    return loadedSessions;
+  }, []);
+
+  const activateSession = useCallback(
+    async (id: string, sessionId: string, greetingOnboarding: CopilotOnboardingState) => {
+      const { data: sessionRows } = await supabase
+        .from("chat_sessions")
+        .select("id, title, created_at, updated_at")
+        .eq("user_id", id)
+        .eq("id", sessionId)
+        .limit(1);
+
+      const sessionExists = ((sessionRows as ChatSessionRow[] | null) ?? []).length > 0;
+      if (!sessionExists) return false;
+
+      sessionIdRef.current = sessionId;
+      setActiveSessionId(sessionId);
+      window.localStorage.setItem(activeSessionStorageKey(id), sessionId);
+      window.localStorage.setItem(copilotSessionKey(id), sessionId);
+      setSessions((current) =>
+        sortChatSessions([
+          ...((sessionRows as ChatSessionRow[] | null) ?? []).map(mapChatSession),
+          ...current.filter((session) => session.id !== sessionId),
+        ]),
+      );
+      await loadSessionMessages(id, sessionId, greetingOnboarding);
+      return true;
+    },
+    [loadSessionMessages],
+  );
 
   useEffect(() => {
     const loadUser = async () => {
@@ -494,20 +650,42 @@ export function CopilotWidget() {
         setPreferences({ ...DEFAULT_PREFERENCES, user_id: id });
       }
 
-      const storedSessionId = window.localStorage.getItem(copilotSessionKey(id));
-      let nextSessionId = storedSessionId || generateUUID();
-      let sessionReady = false;
-
-      if (storedSessionId) {
-        const { data: sessionRows } = await supabase
-          .from("chat_sessions")
-          .select("id")
-          .eq("user_id", id)
-          .eq("id", storedSessionId)
-          .limit(1);
-
-        sessionReady = ((sessionRows as ChatSessionRow[] | null) ?? []).length > 0;
+      try {
+        const contextResponse = await fetch(
+          `${apiBaseUrl}/copilot/context?user_id=${encodeURIComponent(id)}`,
+        );
+        if (contextResponse.ok) {
+          const body = (await contextResponse.json()) as {
+            context?: {
+              profile_status?: CopilotProfileStatus;
+              copilot?: CopilotGuideState;
+            };
+          };
+          if (body.context?.copilot) {
+            setCopilotState(body.context.copilot);
+            parsed = mergeCopilotStateIntoOnboarding(parsed, body.context.copilot);
+            setOnboarding(parsed);
+          }
+          if (
+            body.context?.profile_status === "has_profile" ||
+            body.context?.profile_status === "no_profile"
+          ) {
+            setProfileStatus(body.context.profile_status);
+          }
+        }
+      } catch {
+        /* Context refresh should not block chat startup. */
       }
+
+      const loadedSessions = await loadChatSessions(id);
+      const storedActiveSessionId = window.localStorage.getItem(activeSessionStorageKey(id));
+      const storedWidgetSessionId = window.localStorage.getItem(copilotSessionKey(id));
+      const nextSession =
+        loadedSessions.find((session) => session.id === storedActiveSessionId) ??
+        loadedSessions.find((session) => session.id === storedWidgetSessionId) ??
+        loadedSessions[0];
+      let nextSessionId = nextSession?.id ?? generateUUID();
+      let sessionReady = Boolean(nextSession);
 
       if (!sessionReady) {
         nextSessionId = generateUUID();
@@ -520,41 +698,21 @@ export function CopilotWidget() {
           updated_at: now,
         });
         sessionReady = !insertSessionError;
+        if (sessionReady) {
+          setSessions([{ id: nextSessionId, title: DEFAULT_SESSION_TITLE, updatedAt: now }]);
+        }
       }
 
       sessionIdRef.current = nextSessionId;
+      setActiveSessionId(nextSessionId);
+      window.localStorage.setItem(activeSessionStorageKey(id), nextSessionId);
       window.localStorage.setItem(copilotSessionKey(id), nextSessionId);
 
-      const { data: messageRows } = await supabase
-        .from("chat_messages")
-        .select("id, role, content")
-        .eq("user_id", id)
-        .eq("session_id", nextSessionId)
-        .order("created_at", { ascending: true })
-        .limit(50);
-
-      const persistedMessages = ((messageRows as ChatMessageRow[] | null) ?? [])
-        .filter((row) => row.role === "user" || row.role === "assistant")
-        .map((row) => ({
-          id: row.id,
-          role: row.role,
-          content: row.content,
-        }));
-
-      if (persistedMessages.length > 0) {
-        setMessages(persistedMessages);
+      if (sessionReady) {
+        await loadSessionMessages(id, nextSessionId, parsed);
       } else {
-        const greeting = initialAssistantMessage(parsed);
-        setMessages([greeting]);
-
-        if (sessionReady) {
-          await supabase.from("chat_messages").insert({
-            user_id: id,
-            session_id: nextSessionId,
-            role: "assistant",
-            content: greeting.content,
-          });
-        }
+        setActionStates({});
+        setMessages([initialAssistantMessage(parsed)]);
       }
 
       try {
@@ -573,7 +731,36 @@ export function CopilotWidget() {
     };
 
     void loadUser();
-  }, [apiBaseUrl]);
+  }, [activateSession, apiBaseUrl, loadChatSessions, loadSessionMessages]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const syncActiveSession = async (sessionId: string | null) => {
+      if (!sessionId || sessionId === sessionIdRef.current) return;
+      await activateSession(userId, sessionId, onboarding);
+    };
+
+    const handleActiveChatChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string; sessionId?: string }>).detail;
+      if (detail?.userId !== userId) return;
+      void syncActiveSession(detail.sessionId ?? null);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== activeSessionStorageKey(userId)) return;
+      void syncActiveSession(event.newValue);
+    };
+
+    window.addEventListener(ACTIVE_CHAT_CHANGED_EVENT, handleActiveChatChanged);
+    window.addEventListener("storage", handleStorage);
+    void syncActiveSession(window.localStorage.getItem(activeSessionStorageKey(userId)));
+
+    return () => {
+      window.removeEventListener(ACTIVE_CHAT_CHANGED_EVENT, handleActiveChatChanged);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [activateSession, onboarding, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -582,6 +769,38 @@ export function CopilotWidget() {
       JSON.stringify({ ...onboarding, updatedAt: new Date().toISOString() }),
     );
   }, [onboarding, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const step = guideStepForPath(pathname);
+    if (!step) return;
+
+    const markStep = async () => {
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mark_step_complete: step,
+              feature_exposure: { feature: pathname },
+            }),
+          },
+        );
+        if (response.ok) {
+          const body = (await response.json()) as { state?: CopilotGuideState };
+          if (body.state) {
+            setCopilotState(body.state);
+          }
+        }
+      } catch {
+        /* Step tracking is best effort. */
+      }
+    };
+
+    void markStep();
+  }, [apiBaseUrl, pathname, userId]);
 
   useEffect(() => {
     const handleCvUpdated = (event: Event) => {
@@ -624,8 +843,9 @@ export function CopilotWidget() {
         profileStatus,
         onboarding,
         preferences: preferences ?? undefined,
+        copilotState: copilotState ?? undefined,
       }),
-    [onboarding, pathname, preferences, profileStatus],
+    [copilotState, onboarding, pathname, preferences, profileStatus],
   );
 
   const appendAssistantMessage = useCallback((content: string, actions?: CopilotAction[]) => {
@@ -667,6 +887,37 @@ export function CopilotWidget() {
         }
       } catch {
         /* Preference persistence should not block chat. */
+      }
+
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              onboarding: nextOnboarding,
+              mark_step_complete: nextOnboarding.completed ? "preferences" : "welcome",
+            }),
+          },
+        );
+        if (response.ok) {
+          const body = (await response.json()) as { state?: CopilotGuideState };
+          if (body.state) {
+            setCopilotState((current) => ({
+              ...(current ?? {
+                remaining_steps: [],
+                completed_steps: [],
+                feature_exposures: {},
+                guidance_level: "first_run",
+                onboarding: {},
+              }),
+              ...body.state,
+            }));
+          }
+        }
+      } catch {
+        /* Copilot state persistence should not block chat. */
       }
     },
     [apiBaseUrl, userId],
@@ -760,6 +1011,7 @@ export function CopilotWidget() {
           }
         }
         const validatedActions = await validateActions(actions);
+        void loadChatSessions(userId);
 
         setMessages((current) =>
           current.map((message) =>
@@ -788,7 +1040,7 @@ export function CopilotWidget() {
         setIsStreaming(false);
       }
     },
-    [appendAssistantMessage, clientContext, persistPreferencesFromOnboarding, userId, validateActions],
+    [appendAssistantMessage, clientContext, loadChatSessions, persistPreferencesFromOnboarding, userId, validateActions],
   );
 
   const submitCurrentInput = useCallback(async () => {
@@ -801,6 +1053,70 @@ export function CopilotWidget() {
     await sendChatMessage(text);
   }, [input, isStreaming, sendChatMessage]);
 
+  const createNewChat = useCallback(async () => {
+    if (!userId || isStreaming) return;
+
+    const now = new Date().toISOString();
+    const nextSessionId = generateUUID();
+    const { error } = await supabase.from("chat_sessions").insert({
+      id: nextSessionId,
+      user_id: userId,
+      title: DEFAULT_SESSION_TITLE,
+      created_at: now,
+      updated_at: now,
+    });
+
+    if (error) {
+      setConnectionError("I could not start a new chat. Try again in a moment.");
+      return;
+    }
+
+    sessionIdRef.current = nextSessionId;
+    setActiveSessionId(nextSessionId);
+    window.localStorage.setItem(activeSessionStorageKey(userId), nextSessionId);
+    window.localStorage.setItem(copilotSessionKey(userId), nextSessionId);
+    dispatchActiveChatChanged(userId, nextSessionId);
+
+    setSessions((current) =>
+      sortChatSessions([
+        { id: nextSessionId, title: DEFAULT_SESSION_TITLE, updatedAt: now },
+        ...current.filter((session) => session.id !== nextSessionId),
+      ]),
+    );
+    setActionStates({});
+    setConnectionError("");
+    setIsSessionMenuOpen(false);
+
+    const greeting = initialAssistantMessage(onboarding);
+    setMessages([greeting]);
+
+    await supabase.from("chat_messages").insert({
+      user_id: userId,
+      session_id: nextSessionId,
+      role: "assistant",
+      content: greeting.content,
+    });
+  }, [isStreaming, onboarding, userId]);
+
+  const selectChatSession = useCallback(
+    async (sessionId: string) => {
+      if (!userId || isStreaming || sessionId === sessionIdRef.current) {
+        setIsSessionMenuOpen(false);
+        return;
+      }
+
+      const activated = await activateSession(userId, sessionId, onboarding);
+      if (activated) {
+        dispatchActiveChatChanged(userId, sessionId);
+        setConnectionError("");
+      } else {
+        setConnectionError("I could not open that chat. Try another one.");
+      }
+      setIsSessionMenuOpen(false);
+    },
+    [activateSession, isStreaming, onboarding, userId],
+  );
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     await submitCurrentInput();
@@ -809,6 +1125,8 @@ export function CopilotWidget() {
   const openFullAssistant = () => {
     if (userId && sessionIdRef.current) {
       window.localStorage.setItem(activeSessionStorageKey(userId), sessionIdRef.current);
+      window.localStorage.setItem(copilotSessionKey(userId), sessionIdRef.current);
+      dispatchActiveChatChanged(userId, sessionIdRef.current);
     }
     setPanelState("minimized");
     router.push("/chat");
@@ -911,7 +1229,11 @@ export function CopilotWidget() {
         return;
       }
       router.push(action.href);
-      updateActionState(actionKey, { status: "success", message: "Opened.", href: action.href });
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, action.href),
+        href: action.href,
+      });
       return;
     }
 
@@ -922,7 +1244,68 @@ export function CopilotWidget() {
         return;
       }
       router.push(href);
-      updateActionState(actionKey, { status: "success", message: "Search prepared.", href });
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "prefill_goal_with_todos") {
+      const href = "/tracker?view=goals_tasks&draft=1";
+      saveGoalsTasksDraft({
+        type: "goal_with_todos",
+        goal: action.goal,
+        todos: action.todos,
+      });
+      router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "prefill_todo") {
+      const href = "/tracker?view=goals_tasks&draft=1";
+      saveGoalsTasksDraft({
+        type: "todo",
+        todo: action.todo,
+      });
+      router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "prefill_application_note") {
+      const href = "/tracker?view=applications&draft=1";
+      saveApplicationNoteDraft({
+        application_id: action.application_id,
+        note: action.note,
+      });
+      router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "show_feature_explainer") {
+      const href = action.href ?? undefined;
+      if (href) router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
       return;
     }
 
@@ -947,7 +1330,7 @@ export function CopilotWidget() {
       const body = (await response.json()) as { message?: string; href?: string };
       updateActionState(actionKey, {
         status: "success",
-        message: body.message ?? "Confirmed.",
+        message: body.message ?? getCopilotActionSuccessMessage(action, body.href),
         href: body.href ?? (
           action.type === "save_application" ||
           action.type === "update_application_status" ||
@@ -966,6 +1349,9 @@ export function CopilotWidget() {
       });
     }
   };
+
+  const activeSession = sessions.find((session) => session.id === activeSessionId);
+  const activeSessionTitle = activeSession ? truncateSessionTitle(activeSession.title) : DEFAULT_SESSION_TITLE;
 
   if (isFullAssistantPage) {
     return null;
@@ -1020,12 +1406,69 @@ export function CopilotWidget() {
         <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
           <Navigation className="h-4 w-4" />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
           <h2 className="text-sm font-bold text-[var(--cp-text-main)]">CareerPilot guide</h2>
-          <p className="truncate text-xs text-[var(--cp-text-muted)]">
-            {profileStatus === "has_profile" ? "CV-aware guide" : "Career guide"}
-          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSessionMenuOpen((open) => !open);
+              if (userId) void loadChatSessions(userId);
+            }}
+            className="mt-0.5 flex max-w-full items-center gap-1.5 rounded-md text-left text-xs text-[var(--cp-text-muted)] hover:text-[var(--cp-text-soft)]"
+            aria-expanded={isSessionMenuOpen}
+            aria-label="Choose chat session"
+            title="Choose chat"
+          >
+            <span className="truncate">{activeSessionTitle}</span>
+            <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${isSessionMenuOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {isSessionMenuOpen && (
+            <div className="absolute left-0 top-full z-50 mt-2 w-[240px] overflow-hidden rounded-xl border border-[var(--cp-border-medium)] bg-[var(--cp-surface-elevated)] shadow-xl shadow-black/30">
+              <div className="max-h-60 overflow-y-auto py-1">
+                {sessions.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-[var(--cp-text-subtle)]">No conversations yet</p>
+                ) : (
+                  sessions.map((session) => {
+                    const isActiveSession = session.id === activeSessionId;
+                    return (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => {
+                          void selectChatSession(session.id);
+                        }}
+                        disabled={isStreaming}
+                        className={`flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors disabled:opacity-50 ${
+                          isActiveSession
+                            ? "bg-[rgba(201,130,74,0.12)] text-[var(--cp-champagne)]"
+                            : "text-[var(--cp-text-muted)] hover:bg-white/[0.04] hover:text-[var(--cp-text-soft)]"
+                        }`}
+                      >
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+                        <span className="line-clamp-2 min-w-0 leading-snug">
+                          {session.title || DEFAULT_SESSION_TITLE}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            void createNewChat();
+          }}
+          disabled={isStreaming}
+          aria-label="New CareerPilot chat"
+          title="New chat"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)] disabled:opacity-40"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={openFullAssistant}
@@ -1037,7 +1480,10 @@ export function CopilotWidget() {
         </button>
         <button
           type="button"
-          onClick={() => setPanelState("minimized")}
+          onClick={() => {
+            setIsSessionMenuOpen(false);
+            setPanelState("minimized");
+          }}
           aria-label="Minimize CareerPilot"
           className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
@@ -1045,7 +1491,10 @@ export function CopilotWidget() {
         </button>
         <button
           type="button"
-          onClick={() => setPanelState("closed")}
+          onClick={() => {
+            setIsSessionMenuOpen(false);
+            setPanelState("closed");
+          }}
           aria-label="Close CareerPilot"
           className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
@@ -1173,11 +1622,25 @@ function CopilotActionCard({
       ? Navigation
       : action.type === "prefill_job_search"
         ? Search
-        : action.type === "create_todo"
+        : action.type === "create_todo" || action.type === "prefill_todo"
           ? Calendar
           : isApplicationAction
             ? CheckCircle2
             : Target;
+  const buttonLabel =
+    action.type === "prefill_goal_with_todos" || action.type === "prefill_todo"
+      ? "Open Draft"
+      : action.type === "prefill_application_note"
+        ? "Open Note"
+        : action.type === "show_feature_explainer"
+          ? action.href ? "Open" : "Got it"
+          : action.type === "create_goal_with_todos" || action.type === "create_roadmap_with_tasks"
+      ? "Add to Goals & Tasks"
+      : action.type === "create_todo"
+        ? "Add Task"
+        : isMutation
+          ? "Confirm"
+          : "Open";
 
   return (
     <div className="mt-2 rounded-xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.08)] p-3 text-xs text-[var(--cp-text-soft)]">
@@ -1221,7 +1684,7 @@ function CopilotActionCard({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] px-3 py-1.5 font-semibold text-[var(--cp-bg-deep)] hover:brightness-110 disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                {isMutation ? "Confirm" : "Open"}
+                {buttonLabel}
               </button>
             )}
           </div>
@@ -1255,6 +1718,14 @@ function ActionSummary({ action }: { action: CopilotAction }) {
     return (
       <p className="mt-1 text-white/45">
         {action.todo.title} · {formatDraftDate(action.todo.due_date)}
+      </p>
+    );
+  }
+
+  if (action.type === "prefill_todo") {
+    return (
+      <p className="mt-1 text-white/45">
+        {action.todo.title} - {formatDraftDate(action.todo.due_date)}
       </p>
     );
   }
@@ -1300,6 +1771,18 @@ function ActionSummary({ action }: { action: CopilotAction }) {
         Save note: {action.note}
       </p>
     );
+  }
+
+  if (action.type === "prefill_application_note") {
+    return (
+      <p className="mt-1 text-white/45">
+        Draft note: {action.note}
+      </p>
+    );
+  }
+
+  if (action.type === "show_feature_explainer") {
+    return <p className="mt-1 text-white/45">{action.body || action.feature}</p>;
   }
 
   return (

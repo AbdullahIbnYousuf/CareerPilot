@@ -22,6 +22,29 @@ ROUTES: set[str] = {"/tracker", "/jobs", "/chat", "/cv", "/cv/preview"}
 CV_PARAMS: set[str] = {"upload", "build", "preview"}
 JOB_PARAMS: set[str] = {"query", "location", "auto"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+GUIDE_STEPS: list[str] = [
+    "welcome",
+    "preferences",
+    "profile_setup",
+    "job_search",
+    "job_review",
+    "applications",
+    "goals_tasks",
+    "calendar",
+    "progress",
+    "today",
+]
+GUIDANCE_LEVELS: set[str] = {"first_run", "guided", "light", "minimal"}
+
+DEFAULT_ONBOARDING: dict[str, Any] = {
+    "completed": False,
+    "name": "",
+    "targetRoles": [],
+    "location": "",
+    "workMode": "",
+    "careerStage": "",
+    "lastStep": "name",
+}
 
 
 def _now_iso() -> str:
@@ -43,6 +66,207 @@ def _clean_list(value: Any, limit: int = 8) -> list[str]:
         if text:
             cleaned.append(text)
     return cleaned[:limit]
+
+
+def _clean_step_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    steps: list[str] = []
+    for item in value:
+        text = _clean_text(item)
+        if text in GUIDE_STEPS and text not in steps:
+            steps.append(text)
+    return steps
+
+
+def _normalize_onboarding(value: Any) -> dict[str, Any]:
+    source = value if isinstance(value, dict) else {}
+    target_roles = source.get("targetRoles") or source.get("target_roles")
+    next_onboarding = {
+        **DEFAULT_ONBOARDING,
+        "completed": bool(source.get("completed")),
+        "name": _clean_text(source.get("name")),
+        "targetRoles": _clean_list(target_roles, limit=4),
+        "location": _clean_text(source.get("location")),
+        "workMode": _clean_text(source.get("workMode") or source.get("work_mode")),
+        "careerStage": _clean_text(source.get("careerStage") or source.get("career_stage")),
+    }
+
+    if not next_onboarding["name"]:
+        next_onboarding["lastStep"] = "name"
+    elif not next_onboarding["targetRoles"]:
+        next_onboarding["lastStep"] = "target_role"
+    elif not next_onboarding["location"] and not next_onboarding["workMode"]:
+        next_onboarding["lastStep"] = "location_work_mode"
+    elif not next_onboarding["careerStage"]:
+        next_onboarding["lastStep"] = "career_stage"
+    else:
+        next_onboarding["completed"] = True
+        next_onboarding["lastStep"] = "complete"
+
+    return next_onboarding
+
+
+def _guidance_level(completed_steps: list[str], current_level: str | None = None) -> str:
+    if current_level == "minimal":
+        return "minimal"
+    count = len(set(completed_steps))
+    if count <= 1:
+        return "first_run"
+    if count < 6:
+        return "guided"
+    if count < len(GUIDE_STEPS):
+        return "light"
+    return "minimal"
+
+
+def _derive_completed_steps(
+    onboarding: dict[str, Any],
+    profile_status: str,
+    application_counts: dict[str, int],
+    active_goals: list[dict[str, Any]],
+    todos: list[dict[str, Any]],
+    existing_steps: list[str],
+) -> list[str]:
+    steps = set(existing_steps)
+    steps.add("welcome")
+    if onboarding.get("completed"):
+        steps.add("preferences")
+    if profile_status == "has_profile":
+        steps.add("profile_setup")
+    if sum(application_counts.values()) > 0:
+        steps.add("job_search")
+        steps.add("job_review")
+        steps.add("applications")
+    if active_goals or todos:
+        steps.add("goals_tasks")
+    if any(_clean_text(todo.get("due_date")) for todo in todos):
+        steps.add("calendar")
+    if steps.intersection({"applications", "goals_tasks", "calendar"}):
+        steps.add("progress")
+    if todos or active_goals or application_counts.get("saved", 0) or application_counts.get("interviewing", 0):
+        steps.add("today")
+    return [step for step in GUIDE_STEPS if step in steps]
+
+
+def _next_guide_step(completed_steps: list[str]) -> str | None:
+    completed = set(completed_steps)
+    for step in GUIDE_STEPS:
+        if step not in completed:
+            return step
+    return None
+
+
+def _step_prompt(step: str | None) -> str:
+    prompts = {
+        "welcome": "Start by learning the user's name and explaining you will guide the app.",
+        "preferences": "Ask target role, location or work mode, and career stage.",
+        "profile_setup": "Guide the user to upload a CV or build a profile manually.",
+        "job_search": "Suggest a focused job search and prefill Jobs.",
+        "job_review": "Explain fit scores, details review, and saving strong jobs.",
+        "applications": "Guide the user to Applications and explain statuses and drag/drop.",
+        "goals_tasks": "Suggest a preparation goal with tasks and offer to add it.",
+        "calendar": "Show Calendar so the user sees due dates and deadlines.",
+        "progress": "Show Progress and explain what the metrics mean.",
+        "today": "Show Today as the daily action queue and next best action.",
+    }
+    return prompts.get(step or "", "Keep guidance short and action-focused.")
+
+
+async def get_copilot_state(user_id: str) -> dict[str, Any]:
+    result = await supabase.table("copilot_user_state").select(
+        "user_id, onboarding, completed_steps, feature_exposures, guidance_level, "
+        "last_suggested_step, updated_at"
+    ).eq("user_id", user_id).limit(1).execute()
+
+    if result.data:
+        row = result.data[0]
+        return {
+            "user_id": user_id,
+            "onboarding": _normalize_onboarding(row.get("onboarding")),
+            "completed_steps": _clean_step_list(row.get("completed_steps")),
+            "feature_exposures": row.get("feature_exposures") if isinstance(row.get("feature_exposures"), dict) else {},
+            "guidance_level": row.get("guidance_level") if row.get("guidance_level") in GUIDANCE_LEVELS else "first_run",
+            "last_suggested_step": row.get("last_suggested_step"),
+            "updated_at": row.get("updated_at"),
+        }
+
+    state = {
+        "user_id": user_id,
+        "onboarding": DEFAULT_ONBOARDING,
+        "completed_steps": [],
+        "feature_exposures": {},
+        "guidance_level": "first_run",
+        "last_suggested_step": None,
+        "updated_at": None,
+    }
+    await supabase.table("copilot_user_state").upsert({
+        "user_id": user_id,
+        "onboarding": state["onboarding"],
+        "completed_steps": state["completed_steps"],
+        "feature_exposures": state["feature_exposures"],
+        "guidance_level": state["guidance_level"],
+        "last_suggested_step": state["last_suggested_step"],
+        "updated_at": _now_iso(),
+    }, on_conflict="user_id").execute()
+    return state
+
+
+async def patch_copilot_state(user_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    current = await get_copilot_state(user_id)
+    onboarding = current["onboarding"]
+    completed_steps = current["completed_steps"]
+    feature_exposures = current["feature_exposures"]
+    guidance_level = current["guidance_level"]
+    last_suggested_step = current["last_suggested_step"]
+
+    if "onboarding" in payload:
+        onboarding = _normalize_onboarding({**onboarding, **(payload.get("onboarding") or {})})
+
+    if "completed_steps" in payload:
+        completed_steps = _clean_step_list(payload.get("completed_steps"))
+
+    if "mark_step_complete" in payload:
+        step = _clean_text(payload.get("mark_step_complete"))
+        if step in GUIDE_STEPS and step not in completed_steps:
+            completed_steps = [*completed_steps, step]
+
+    if "feature_exposure" in payload and isinstance(payload.get("feature_exposure"), dict):
+        feature = _clean_text(payload["feature_exposure"].get("feature"))
+        if feature:
+            feature_exposures = {
+                **feature_exposures,
+                feature: {
+                    "count": int((feature_exposures.get(feature) or {}).get("count", 0)) + 1
+                    if isinstance(feature_exposures.get(feature), dict)
+                    else 1,
+                    "last_seen_at": _now_iso(),
+                },
+            }
+
+    if "guidance_level" in payload and payload.get("guidance_level") in GUIDANCE_LEVELS:
+        guidance_level = payload["guidance_level"]
+    else:
+        guidance_level = _guidance_level(completed_steps, guidance_level)
+
+    if "last_suggested_step" in payload:
+        candidate = _clean_text(payload.get("last_suggested_step"))
+        last_suggested_step = candidate if candidate in GUIDE_STEPS else None
+
+    row = {
+        "user_id": user_id,
+        "onboarding": onboarding,
+        "completed_steps": completed_steps,
+        "feature_exposures": feature_exposures,
+        "guidance_level": guidance_level,
+        "last_suggested_step": last_suggested_step,
+        "updated_at": _now_iso(),
+    }
+    result = await supabase.table("copilot_user_state").upsert(
+        row,
+        on_conflict="user_id",
+    ).execute()
+    return result.data[0] if result.data else await get_copilot_state(user_id)
 
 
 def _valid_date(value: Any) -> str | None:
@@ -70,7 +294,9 @@ def _is_allowed_href(href: str) -> bool:
     if parsed.path == "/tracker":
         if not param_keys:
             return True
-        return param_keys == {"view"} and params.get("view", [""])[0] in TRACKER_VIEWS
+        if "view" not in param_keys or params.get("view", [""])[0] not in TRACKER_VIEWS:
+            return False
+        return param_keys.issubset({"view", "draft"})
 
     if parsed.path == "/cv":
         if not param_keys:
@@ -121,6 +347,17 @@ async def get_preferences(user_id: str) -> dict[str, Any]:
 async def get_context_snapshot(user_id: str) -> dict[str, Any]:
     today = datetime.now(timezone.utc).date().isoformat()
     preferences = await get_preferences(user_id)
+    copilot_state = await get_copilot_state(user_id)
+    onboarding = _normalize_onboarding({
+        **copilot_state.get("onboarding", {}),
+        "name": copilot_state.get("onboarding", {}).get("name") or preferences.get("preferred_name") or "",
+        "targetRoles": copilot_state.get("onboarding", {}).get("targetRoles") or preferences.get("target_roles") or [],
+        "location": copilot_state.get("onboarding", {}).get("location")
+        or (preferences.get("preferred_locations") or [""])[0],
+        "workMode": copilot_state.get("onboarding", {}).get("workMode")
+        or (preferences.get("work_modes") or [""])[0],
+        "careerStage": copilot_state.get("onboarding", {}).get("careerStage") or preferences.get("seniority") or "",
+    })
 
     profile: dict[str, Any] | None = None
     try:
@@ -219,8 +456,35 @@ async def get_context_snapshot(user_id: str) -> dict[str, Any]:
     skills = profile.get("skills") if profile else []
     top_skills = skills[:8] if isinstance(skills, list) else []
 
+    profile_status = "has_profile" if profile and profile.get("active_cv_id") else "no_profile"
+    completed_steps = _derive_completed_steps(
+        onboarding=onboarding,
+        profile_status=profile_status,
+        application_counts=application_counts,
+        active_goals=active_goals,
+        todos=todos,
+        existing_steps=_clean_step_list(copilot_state.get("completed_steps")),
+    )
+    next_step = _next_guide_step(completed_steps)
+    guidance_level = _guidance_level(completed_steps, copilot_state.get("guidance_level"))
+
+    try:
+        await supabase.table("copilot_user_state").upsert({
+            "user_id": user_id,
+            "onboarding": onboarding,
+            "completed_steps": completed_steps,
+            "feature_exposures": copilot_state.get("feature_exposures", {}),
+            "guidance_level": guidance_level,
+            "last_suggested_step": next_step,
+            "updated_at": _now_iso(),
+        }, on_conflict="user_id").execute()
+    except Exception:
+        pass
+
+    remaining_steps = [step for step in GUIDE_STEPS if step not in completed_steps]
+
     return {
-        "profile_status": "has_profile" if profile and profile.get("active_cv_id") else "no_profile",
+        "profile_status": profile_status,
         "profile": {
             "headline": profile.get("headline") if profile else None,
             "location": profile.get("location") if profile else None,
@@ -241,6 +505,16 @@ async def get_context_snapshot(user_id: str) -> dict[str, Any]:
             "due_today_count": len(due_today),
             "overdue_count": len(overdue),
             "next": todos[:5],
+        },
+        "copilot": {
+            "onboarding": onboarding,
+            "completed_steps": completed_steps,
+            "remaining_steps": remaining_steps,
+            "feature_exposures": copilot_state.get("feature_exposures", {}),
+            "guidance_level": guidance_level,
+            "next_step": next_step,
+            "next_step_prompt": _step_prompt(next_step),
+            "guide_steps": GUIDE_STEPS,
         },
     }
 
@@ -377,6 +651,20 @@ async def validate_action(user_id: str, action: dict[str, Any], source: str = "w
         }
         return _base_response(normalized, f"Add task: {title}", True)
 
+    if action_type == "prefill_todo":
+        todo = action.get("todo") if isinstance(action.get("todo"), dict) else {}
+        title = _clean_text(todo.get("title"))
+        if not label or not title:
+            raise ValueError("A task draft needs a title.")
+        normalized = {
+            "type": action_type,
+            "label": label,
+            "todo": {"title": title, "due_date": _valid_date(todo.get("due_date"))},
+        }
+        response = _base_response(normalized, f"Prepare task: {title}", False)
+        response["href"] = "/tracker?view=goals_tasks&draft=1"
+        return response
+
     if action_type == "create_goal_with_todos":
         goal = action.get("goal") if isinstance(action.get("goal"), dict) else {}
         title = _clean_text(goal.get("title"))
@@ -400,6 +688,32 @@ async def validate_action(user_id: str, action: dict[str, Any], source: str = "w
             "todos": todos,
         }
         return _base_response(normalized, f"Create goal: {title}", True)
+
+    if action_type == "prefill_goal_with_todos":
+        goal = action.get("goal") if isinstance(action.get("goal"), dict) else {}
+        title = _clean_text(goal.get("title"))
+        todos_in = action.get("todos") if isinstance(action.get("todos"), list) else []
+        if not label or not title:
+            raise ValueError("A goal draft needs a title.")
+        if len(todos_in) > 5:
+            raise ValueError("A draft can include at most five tasks.")
+        todos = []
+        for todo in todos_in:
+            if not isinstance(todo, dict):
+                raise ValueError("Each task must be an object.")
+            todo_title = _clean_text(todo.get("title"))
+            if not todo_title:
+                raise ValueError("Each task needs a title.")
+            todos.append({"title": todo_title, "due_date": _valid_date(todo.get("due_date"))})
+        normalized = {
+            "type": action_type,
+            "label": label,
+            "goal": {"title": title, "target_date": _valid_date(goal.get("target_date"))},
+            "todos": todos,
+        }
+        response = _base_response(normalized, f"Prepare goal: {title}", False)
+        response["href"] = "/tracker?view=goals_tasks&draft=1"
+        return response
 
     if action_type == "create_roadmap_with_tasks":
         goals_in = action.get("goals") if isinstance(action.get("goals"), list) else []
@@ -489,6 +803,41 @@ async def validate_action(user_id: str, action: dict[str, Any], source: str = "w
             "note": note,
         }
         return _base_response(normalized, "Save note to application", True)
+
+    if action_type == "prefill_application_note":
+        application_id = _clean_text(action.get("application_id"))
+        note = _clean_text(action.get("note"))
+        if not label or not application_id or not note:
+            raise ValueError("An application note draft needs an application and note.")
+        await _application_for_user(user_id, application_id)
+        normalized = {
+            "type": action_type,
+            "label": label,
+            "application_id": application_id,
+            "note": note,
+        }
+        response = _base_response(normalized, "Prepare application note", False)
+        response["href"] = "/tracker?view=applications&draft=1"
+        return response
+
+    if action_type == "show_feature_explainer":
+        feature = _clean_text(action.get("feature"))
+        if not label or not feature:
+            raise ValueError("A feature explainer needs a feature.")
+        normalized = {
+            "type": action_type,
+            "label": label,
+            "feature": feature,
+            "body": _clean_text(action.get("body")),
+            "href": _clean_text(action.get("href")) or None,
+        }
+        href = normalized.get("href")
+        if href and not _is_allowed_href(href):
+            raise ValueError("That route is not available.")
+        response = _base_response(normalized, label, False)
+        if href:
+            response["href"] = href
+        return response
 
     raise ValueError("Action type is not supported.")
 

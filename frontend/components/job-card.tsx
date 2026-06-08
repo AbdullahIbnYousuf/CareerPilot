@@ -133,6 +133,14 @@ export function JobCard({
       }
 
       setSavedToTracker(true);
+      void fetch(`${baseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mark_step_complete: "applications",
+          feature_exposure: { feature: "save_to_applications" },
+        }),
+      }).catch(() => undefined);
     } catch (err) {
       setSavedToTracker(false);
       setSaveToTrackerError(err instanceof Error ? err.message : "Failed to save job to tracker.");

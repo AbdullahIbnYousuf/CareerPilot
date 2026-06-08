@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { supabase } from "@/lib/supabase";
+import { takeApplicationNoteDraft } from "@/lib/copilot/drafts";
 import { FitScoreBadge } from "./fit-score-badge";
 import type { Application, ApplicationStatus, Todo } from "@/types";
 import {
@@ -600,6 +601,30 @@ export function KanbanBoard({
     };
     void loadApplications();
   }, [userId, fetchApplications]);
+
+  useEffect(() => {
+    if (applications.length === 0) return;
+
+    const draft = takeApplicationNoteDraft();
+    if (!draft) return;
+
+    const timeoutId = window.setTimeout(() => {
+      const application = applications.find((app) => app.id === draft.application_id);
+      if (!application) {
+        setActionNotice("CareerPilot could not find that application note draft.");
+        window.setTimeout(() => setActionNotice(""), 3500);
+        return;
+      }
+
+      const existingNotes = application.notes?.trim();
+      setSelectedApp(application);
+      setNotes(existingNotes ? `${existingNotes}\n\n${draft.note}` : draft.note);
+      setActionNotice("CareerPilot filled a note draft. Review it, then click Save.");
+      window.setTimeout(() => setActionNotice(""), 4500);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [applications]);
 
   // â”€â”€ Supabase Realtime â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   useEffect(() => {

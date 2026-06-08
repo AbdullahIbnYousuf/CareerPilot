@@ -1,28 +1,26 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Calendar,
   CheckCircle2,
-  ChevronDown,
   Circle,
   Clock3,
   Loader2,
   ListTodo,
   Plus,
-  Tag,
   Trash2,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Goal, Todo } from "@/types";
+import type { Todo } from "@/types";
+import type { CopilotGoalsTasksDraft } from "@/lib/copilot/drafts";
 
 interface TodoListProps {
   userId: string;
-  goals: Goal[];
   todos: Todo[];
   onTodosChange: () => void;
+  draft?: CopilotGoalsTasksDraft | null;
   onTodoCreated?: (todo: Todo) => void;
 }
 
@@ -49,7 +47,7 @@ const bucketMeta: Record<
   future: {
     label: "Upcoming",
     description: "Planned next steps",
-    className: "text-sky-200",
+    className: "text-[var(--cp-text-soft)]",
   },
   "no-date": {
     label: "Someday",
@@ -126,14 +124,13 @@ function sortTodos(todos: Todo[]): Todo[] {
 
 export function TodoList({
   userId,
-  goals,
   todos,
   onTodosChange,
+  draft,
   onTodoCreated,
 }: TodoListProps) {
   const [newTitle, setNewTitle] = useState("");
   const [newDueDate, setNewDueDate] = useState("");
-  const [newGoalId, setNewGoalId] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -144,13 +141,26 @@ export function TodoList({
   } | null>(null);
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-  const pendingCount = todos.filter((todo) => !todo.completed).length;
-  const goalMap = Object.fromEntries(goals.map((goal) => [goal.id, goal.title]));
+  const externalTodos = todos.filter((todo) => !todo.goal_id);
+  const pendingCount = externalTodos.filter((todo) => !todo.completed).length;
 
   const flash = (type: "success" | "error", text: string) => {
     setInlineMsg({ type, text });
     window.setTimeout(() => setInlineMsg(null), 3000);
   };
+
+  useEffect(() => {
+    if (draft?.type !== "todo") return;
+
+    const timeoutId = window.setTimeout(() => {
+      setShowForm(true);
+      setNewTitle(draft.todo.title);
+      setNewDueDate(draft.todo.due_date ?? "");
+      flash("success", "CareerPilot filled a task draft. Review it, then click Add.");
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [draft]);
 
   const addTodo = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -165,7 +175,7 @@ export function TodoList({
           user_id: userId,
           title: newTitle.trim(),
           due_date: newDueDate || null,
-          goal_id: newGoalId || null,
+          goal_id: null,
         }),
       });
 
@@ -175,10 +185,8 @@ export function TodoList({
       }
 
       const data = (await res.json()) as { todo?: Todo };
-
       setNewTitle("");
       setNewDueDate("");
-      setNewGoalId("");
       setShowForm(false);
       flash("success", "Task added.");
       if (data.todo) {
@@ -236,7 +244,7 @@ export function TodoList({
     }
   };
 
-  const sortedTodos = sortTodos(todos);
+  const sortedTodos = sortTodos(externalTodos);
   const groupedTodos = sortedTodos.reduce<Record<TodoBucket, Todo[]>>(
     (groups, todo) => {
       groups[getTodoBucket(todo)].push(todo);
@@ -252,14 +260,14 @@ export function TodoList({
   );
 
   return (
-    <Card className="w-full rounded-2xl border border-white/[0.06] bg-[#0E0E12] shadow-xl shadow-black/30">
+    <Card className="w-full rounded-2xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] shadow-xl shadow-black/30">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
-            <ListTodo className="h-4 w-4 text-[#7C74DB]" />
-            Tasks
+            <ListTodo className="h-4 w-4 text-[var(--cp-copper-strong)]" />
+            External tasks
             {pendingCount > 0 && (
-              <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#534AB7]/20 px-1.5 text-[10px] font-bold text-[#AFA9EC]">
+              <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full border border-[var(--cp-border-soft)] bg-[rgba(201,130,74,0.14)] px-1.5 text-[10px] font-bold text-[var(--cp-champagne)]">
                 {pendingCount}
               </span>
             )}
@@ -269,7 +277,7 @@ export function TodoList({
             type="button"
             size="sm"
             onClick={() => setShowForm((value) => !value)}
-            className="bg-[#534AB7]/20 text-[#AFA9EC] hover:bg-[#534AB7]/30"
+            variant="outline"
           >
             <Plus className="h-3.5 w-3.5" />
             Add task
@@ -293,7 +301,7 @@ export function TodoList({
         {showForm && (
           <form
             onSubmit={addTodo}
-            className="animate-in fade-in slide-in-from-top-1 space-y-2.5 rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 duration-200"
+            className="animate-in fade-in slide-in-from-top-1 space-y-2.5 rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3.5 duration-200"
           >
             <input
               id="new-todo-title"
@@ -302,52 +310,24 @@ export function TodoList({
               value={newTitle}
               onChange={(event) => setNewTitle(event.target.value)}
               required
-              className="h-9 w-full rounded-xl border border-white/[0.06] bg-white/[0.04] px-3.5 text-sm text-white transition-all placeholder:text-white/20 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/20"
+              className="h-9 w-full rounded-xl border border-[var(--cp-border-soft)] bg-[rgba(255,255,255,0.035)] px-3.5 text-sm text-white transition-all placeholder:text-white/25 focus:border-[var(--cp-border-strong)] focus:outline-none focus:ring-1 focus:ring-[var(--cp-glow-copper)]"
             />
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <div className="relative flex-1">
-                <Calendar className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/20" />
-                <input
-                  id="new-todo-due-date"
-                  type="date"
-                  value={newDueDate}
-                  onChange={(event) => setNewDueDate(event.target.value)}
-                  className="h-9 w-full rounded-xl border border-white/[0.06] bg-white/[0.04] pl-9 pr-3 text-xs text-white/70 transition-all [color-scheme:dark] focus:border-primary/50 focus:outline-none"
-                />
-              </div>
-
-              {goals.length > 0 && (
-                <div className="relative flex-1">
-                  <Tag className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/20" />
-                  <select
-                    id="new-todo-goal"
-                    value={newGoalId}
-                    onChange={(event) => setNewGoalId(event.target.value)}
-                    className="h-9 w-full appearance-none rounded-xl border border-white/[0.06] bg-[#0E0E12]/80 pl-9 pr-8 text-xs text-white/70 transition-all focus:border-primary/50 focus:outline-none"
-                  >
-                    <option value="" className="bg-[#0E0E12] text-white">
-                      No goal
-                    </option>
-                    {goals.map((goal) => (
-                      <option
-                        key={goal.id}
-                        value={goal.id}
-                        className="bg-[#0E0E12] text-white"
-                      >
-                        {goal.title}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 text-white/20" />
-                </div>
-              )}
+            <div className="relative">
+              <Calendar className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/20" />
+              <input
+                id="new-todo-due-date"
+                type="date"
+                value={newDueDate}
+                onChange={(event) => setNewDueDate(event.target.value)}
+                className="h-9 w-full rounded-xl border border-[var(--cp-border-soft)] bg-[rgba(255,255,255,0.035)] pl-9 pr-3 text-xs text-white/70 transition-all [color-scheme:dark] focus:border-[var(--cp-border-strong)] focus:outline-none"
+              />
             </div>
             <div className="flex gap-2">
               <Button
                 id="submit-todo-btn"
                 type="submit"
                 disabled={submitting || !newTitle.trim()}
-                className="flex-1 bg-[#534AB7] text-white hover:bg-[#6B63CC]"
+                className="flex-1"
               >
                 {submitting ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -359,7 +339,7 @@ export function TodoList({
                 type="button"
                 variant="ghost"
                 onClick={() => setShowForm(false)}
-                className="text-white/50 hover:bg-white/[0.04] hover:text-white"
+                className="text-white/50 hover:bg-[rgba(201,130,74,0.08)] hover:text-white"
               >
                 Cancel
               </Button>
@@ -367,18 +347,16 @@ export function TodoList({
           </form>
         )}
 
-        {todos.length === 0 ? (
+        {externalTodos.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <ListTodo className="h-8 w-8 text-white/10" />
             <p className="max-w-[260px] text-sm text-white/35">
-              Break a goal into one small action for today.
+              Tasks without a goal will show up here.
             </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {(
-              ["overdue", "today", "future", "no-date", "completed"] as const
-            ).map((bucket) => {
+            {(["overdue", "today", "future", "no-date", "completed"] as const).map((bucket) => {
               const items = groupedTodos[bucket];
               if (items.length === 0) return null;
               const meta = bucketMeta[bucket];
@@ -392,9 +370,7 @@ export function TodoList({
                       >
                         {meta.label}
                       </p>
-                      <span className="text-[10px] text-white/20">
-                        {items.length}
-                      </span>
+                      <span className="text-[10px] text-white/20">{items.length}</span>
                     </div>
                     <p className="hidden text-[10px] text-white/25 sm:block">
                       {meta.description}
@@ -406,9 +382,6 @@ export function TodoList({
                         key={todo.id}
                         todo={todo}
                         bucket={bucket}
-                        goalName={
-                          todo.goal_id ? goalMap[todo.goal_id] : undefined
-                        }
                         isDeleting={deletingId === todo.id}
                         isToggling={togglingId === todo.id}
                         onToggle={() => toggleTodo(todo)}
@@ -429,7 +402,6 @@ export function TodoList({
 function TodoItem({
   todo,
   bucket,
-  goalName,
   isDeleting,
   isToggling,
   onToggle,
@@ -437,7 +409,6 @@ function TodoItem({
 }: {
   todo: Todo;
   bucket: TodoBucket;
-  goalName?: string;
   isDeleting: boolean;
   isToggling: boolean;
   onToggle: () => void;
@@ -446,12 +417,12 @@ function TodoItem({
   const isOverdue = bucket === "overdue";
   const isToday = bucket === "today";
   const cardClassName = todo.completed
-    ? "border-white/[0.03] bg-white/[0.01] opacity-55"
+    ? "border-[var(--cp-border-soft)] bg-[rgba(24,23,22,0.68)] opacity-55"
     : isOverdue
       ? "border-red-400/20 bg-red-500/[0.04]"
       : isToday
         ? "border-amber-400/20 bg-amber-400/[0.04]"
-        : "border-white/[0.06] bg-[#0E0E12] hover:border-white/[0.10] hover:bg-white/[0.01]";
+        : "border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.06)]";
 
   return (
     <div
@@ -470,7 +441,7 @@ function TodoItem({
         ) : todo.completed ? (
           <CheckCircle2 className="h-4 w-4 text-emerald-400" />
         ) : (
-          <Circle className="h-4 w-4 text-white/20 hover:text-[#7C74DB]" />
+          <Circle className="h-4 w-4 text-white/20 hover:text-[var(--cp-copper-strong)]" />
         )}
       </button>
 
@@ -486,11 +457,7 @@ function TodoItem({
           {todo.due_date && (
             <span
               className={`flex items-center gap-1 text-[10px] ${
-                isOverdue
-                  ? "text-red-300"
-                  : isToday
-                    ? "text-amber-200"
-                    : "text-white/35"
+                isOverdue ? "text-red-300" : isToday ? "text-amber-200" : "text-white/35"
               }`}
             >
               {isToday ? (
@@ -500,15 +467,6 @@ function TodoItem({
               )}
               {formatDate(todo.due_date)}
             </span>
-          )}
-          {goalName && (
-            <Badge
-              variant="outline"
-              className="max-w-full border-[#534AB7]/20 bg-[#534AB7]/10 text-[#AFA9EC]"
-            >
-              <Tag className="h-3 w-3" />
-              <span className="truncate">{goalName}</span>
-            </Badge>
           )}
         </div>
       </div>

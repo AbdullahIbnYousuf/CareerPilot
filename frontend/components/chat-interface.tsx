@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/markdown-renderer";
 import { CopilotActionCard, type CopilotActionState } from "@/components/copilot-action-card";
 import { extractCopilotActions, stripCopilotDirectives } from "@/lib/copilot/directives";
+import { getCopilotActionSuccessMessage } from "@/lib/copilot/action-guidance";
 import { buildJobSearchHref, isAllowedCopilotHref } from "@/lib/copilot/app-map";
+import { saveApplicationNoteDraft, saveGoalsTasksDraft } from "@/lib/copilot/drafts";
 import { supabase } from "@/lib/supabase";
 import type {
   CopilotAction,
@@ -173,7 +175,11 @@ export function ChatInterface({ sessionId, clientContext, onFirstMessage }: Chat
           return;
         }
         router.push(action.href);
-        updateActionState(actionKey, { status: "success", message: "Opened.", href: action.href });
+        updateActionState(actionKey, {
+          status: "success",
+          message: getCopilotActionSuccessMessage(action, action.href),
+          href: action.href,
+        });
         return;
       }
 
@@ -184,7 +190,68 @@ export function ChatInterface({ sessionId, clientContext, onFirstMessage }: Chat
           return;
         }
         router.push(href);
-        updateActionState(actionKey, { status: "success", message: "Search prepared.", href });
+        updateActionState(actionKey, {
+          status: "success",
+          message: getCopilotActionSuccessMessage(action, href),
+          href,
+        });
+        return;
+      }
+
+      if (action.type === "prefill_goal_with_todos") {
+        const href = "/tracker?view=goals_tasks&draft=1";
+        saveGoalsTasksDraft({
+          type: "goal_with_todos",
+          goal: action.goal,
+          todos: action.todos,
+        });
+        router.push(href);
+        updateActionState(actionKey, {
+          status: "success",
+          message: getCopilotActionSuccessMessage(action, href),
+          href,
+        });
+        return;
+      }
+
+      if (action.type === "prefill_todo") {
+        const href = "/tracker?view=goals_tasks&draft=1";
+        saveGoalsTasksDraft({
+          type: "todo",
+          todo: action.todo,
+        });
+        router.push(href);
+        updateActionState(actionKey, {
+          status: "success",
+          message: getCopilotActionSuccessMessage(action, href),
+          href,
+        });
+        return;
+      }
+
+    if (action.type === "prefill_application_note") {
+      const href = "/tracker?view=applications&draft=1";
+      saveApplicationNoteDraft({
+        application_id: action.application_id,
+        note: action.note,
+      });
+      router.push(href);
+      updateActionState(actionKey, {
+          status: "success",
+          message: getCopilotActionSuccessMessage(action, href),
+          href,
+        });
+        return;
+      }
+
+      if (action.type === "show_feature_explainer") {
+        const href = action.href ?? undefined;
+        if (href) router.push(href);
+        updateActionState(actionKey, {
+          status: "success",
+          message: getCopilotActionSuccessMessage(action, href),
+          href,
+        });
         return;
       }
 
@@ -209,7 +276,7 @@ export function ChatInterface({ sessionId, clientContext, onFirstMessage }: Chat
         const body = (await response.json()) as { message?: string; href?: string };
         updateActionState(actionKey, {
           status: "success",
-          message: body.message ?? "Confirmed.",
+          message: body.message ?? getCopilotActionSuccessMessage(action, body.href),
           href:
             body.href ??
             (action.type === "save_application" ||

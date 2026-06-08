@@ -236,6 +236,7 @@ export interface CopilotClientContext {
   profile_status: CopilotProfileStatus;
   onboarding: CopilotContextOnboarding;
   preferences?: CareerPreferences;
+  copilot_state?: CopilotGuideState;
   app_state?: CopilotAppState;
   app_map: string;
 }
@@ -251,6 +252,31 @@ export interface CareerPreferences {
   target_start_date?: string | null;
   industries: string[];
   updated_at?: string | null;
+}
+
+export type CopilotGuideStep =
+  | "welcome"
+  | "preferences"
+  | "profile_setup"
+  | "job_search"
+  | "job_review"
+  | "applications"
+  | "goals_tasks"
+  | "calendar"
+  | "progress"
+  | "today";
+
+export type CopilotGuidanceLevel = "first_run" | "guided" | "light" | "minimal";
+
+export interface CopilotGuideState {
+  onboarding: CopilotContextOnboarding;
+  completed_steps: CopilotGuideStep[];
+  remaining_steps: CopilotGuideStep[];
+  feature_exposures: Record<string, { count?: number; last_seen_at?: string }>;
+  guidance_level: CopilotGuidanceLevel;
+  next_step?: CopilotGuideStep | null;
+  next_step_prompt?: string | null;
+  guide_steps?: CopilotGuideStep[];
 }
 
 export interface CopilotOpenRouteAction {
@@ -300,6 +326,19 @@ export interface CopilotCreateTodoAction {
   todo: CopilotTodoDraft;
 }
 
+export interface CopilotPrefillGoalWithTodosAction {
+  type: "prefill_goal_with_todos";
+  label: string;
+  goal: CopilotGoalDraft;
+  todos: CopilotTodoDraft[];
+}
+
+export interface CopilotPrefillTodoAction {
+  type: "prefill_todo";
+  label: string;
+  todo: CopilotTodoDraft;
+}
+
 export interface CopilotSaveApplicationAction {
   type: "save_application";
   label: string;
@@ -321,15 +360,34 @@ export interface CopilotSaveApplicationNoteAction {
   note: string;
 }
 
+export interface CopilotPrefillApplicationNoteAction {
+  type: "prefill_application_note";
+  label: string;
+  application_id: string;
+  note: string;
+}
+
+export interface CopilotFeatureExplainerAction {
+  type: "show_feature_explainer";
+  label: string;
+  feature: string;
+  body?: string;
+  href?: string | null;
+}
+
 export type CopilotAction =
   | CopilotOpenRouteAction
   | CopilotPrefillJobSearchAction
   | CopilotCreateGoalWithTodosAction
   | CopilotCreateRoadmapAction
   | CopilotCreateTodoAction
+  | CopilotPrefillGoalWithTodosAction
+  | CopilotPrefillTodoAction
   | CopilotSaveApplicationAction
   | CopilotUpdateApplicationStatusAction
-  | CopilotSaveApplicationNoteAction;
+  | CopilotSaveApplicationNoteAction
+  | CopilotPrefillApplicationNoteAction
+  | CopilotFeatureExplainerAction;
 
 export interface CopilotValidatedAction {
   valid: boolean;

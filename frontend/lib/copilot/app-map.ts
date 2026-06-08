@@ -56,12 +56,16 @@ export const COPILOT_ROUTES = {
 export const ALLOWED_COPILOT_ACTIONS = [
   "open_route",
   "prefill_job_search",
+  "prefill_goal_with_todos",
+  "prefill_todo",
+  "prefill_application_note",
   "create_goal_with_todos",
   "create_roadmap_with_tasks",
   "create_todo",
   "save_application",
   "update_application_status",
   "save_application_note",
+  "show_feature_explainer",
 ] as const;
 
 const ALLOWED_ROUTE_PATHS = Object.keys(COPILOT_ROUTES);
@@ -117,9 +121,11 @@ export function isAllowedCopilotHref(href: string): boolean {
 
   if (path === "/tracker") {
     if (paramKeys.length === 0) return true;
-    if (paramKeys.some((key) => key !== "view")) return false;
+    if (paramKeys.some((key) => !["view", "draft"].includes(key))) return false;
     const view = params.get("view");
-    return Boolean(view && TRACKER_VIEW_KEYS.includes(view));
+    if (!view || !TRACKER_VIEW_KEYS.includes(view)) return false;
+    const draft = params.get("draft");
+    return draft === null || draft === "1";
   }
 
   if (path === "/cv") {
@@ -206,6 +212,36 @@ export function validateCopilotAction(value: unknown): CopilotAction | null {
     };
   }
 
+  if (value.type === "prefill_goal_with_todos") {
+    if (!isNonEmptyString(value.label) || !isPlainObject(value.goal)) return null;
+    if (!isNonEmptyString(value.goal.title)) return null;
+    if (!isValidDateOnly(value.goal.target_date)) return null;
+    if (!Array.isArray(value.todos) || value.todos.length > 5) return null;
+
+    const todos = value.todos
+      .filter(isPlainObject)
+      .map((todo) => ({
+        title: typeof todo.title === "string" ? todo.title.trim() : "",
+        due_date: isValidDateOnly(todo.due_date) && todo.due_date ? todo.due_date : null,
+      }))
+      .filter((todo) => todo.title.length > 0);
+
+    if (todos.length !== value.todos.length) return null;
+
+    return {
+      type: "prefill_goal_with_todos",
+      label: value.label.trim(),
+      goal: {
+        title: value.goal.title.trim(),
+        target_date:
+          isValidDateOnly(value.goal.target_date) && value.goal.target_date
+            ? value.goal.target_date
+            : null,
+      },
+      todos,
+    };
+  }
+
   if (value.type === "create_roadmap_with_tasks") {
     if (!isNonEmptyString(value.label) || !Array.isArray(value.goals)) return null;
     if (value.goals.length === 0 || value.goals.length > 4) return null;
@@ -267,6 +303,23 @@ export function validateCopilotAction(value: unknown): CopilotAction | null {
     };
   }
 
+  if (value.type === "prefill_todo") {
+    if (!isNonEmptyString(value.label) || !isPlainObject(value.todo)) return null;
+    if (!isNonEmptyString(value.todo.title)) return null;
+    if (!isValidDateOnly(value.todo.due_date)) return null;
+    return {
+      type: "prefill_todo",
+      label: value.label.trim(),
+      todo: {
+        title: value.todo.title.trim(),
+        due_date:
+          isValidDateOnly(value.todo.due_date) && value.todo.due_date
+            ? value.todo.due_date
+            : null,
+      },
+    };
+  }
+
   if (value.type === "save_application") {
     if (!isNonEmptyString(value.label) || !isNonEmptyString(value.job_id)) return null;
     if (value.status !== undefined && !isApplicationStatus(value.status)) return null;
@@ -300,6 +353,30 @@ export function validateCopilotAction(value: unknown): CopilotAction | null {
     };
   }
 
+  if (value.type === "prefill_application_note") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.application_id)) return null;
+    if (!isNonEmptyString(value.note)) return null;
+    return {
+      type: "prefill_application_note",
+      label: value.label.trim(),
+      application_id: value.application_id.trim(),
+      note: value.note.trim(),
+    };
+  }
+
+  if (value.type === "show_feature_explainer") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.feature)) return null;
+    const href = typeof value.href === "string" ? value.href.trim() : "";
+    if (href && !isAllowedCopilotHref(href)) return null;
+    return {
+      type: "show_feature_explainer",
+      label: value.label.trim(),
+      feature: value.feature.trim(),
+      body: typeof value.body === "string" ? value.body.trim() : undefined,
+      href: href || null,
+    };
+  }
+
   return null;
 }
 
@@ -308,12 +385,14 @@ export function buildCopilotContext({
   profileStatus,
   onboarding,
   preferences,
+  copilotState,
   appState,
 }: {
   currentPath: string;
   profileStatus: CopilotProfileStatus;
   onboarding: CopilotOnboardingState;
   preferences?: CopilotClientContext["preferences"];
+  copilotState?: CopilotClientContext["copilot_state"];
   appState?: CopilotClientContext["app_state"];
 }): CopilotClientContext {
   const routeDescriptions = Object.entries(COPILOT_ROUTES)
@@ -337,6 +416,7 @@ export function buildCopilotContext({
       careerStage: onboarding.careerStage || undefined,
     },
     preferences,
+    copilot_state: copilotState,
     app_state: appState,
     app_map: [
       `Routes: ${routeDescriptions}`,
@@ -345,6 +425,8 @@ export function buildCopilotContext({
       "After a profile is saved, suggest Preview Resume or Search Jobs when helpful.",
       `My Journey views: ${viewDescriptions}`,
       `Allowed actions: ${actionDescriptions}`,
+      "Use prefill_goal_with_todos or prefill_todo when the user wants to review a plan before clicking Create in Goals & Tasks.",
+      "Use show_feature_explainer when the user needs to understand a feature before moving on.",
       "Application and tracker mutations require backend validation and explicit user confirmation.",
       "Action directives must be hidden in <careerpilot_action>{json}</careerpilot_action>.",
     ].join("\n"),

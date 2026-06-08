@@ -12,9 +12,11 @@ from pydantic import BaseModel, Field
 
 from services.copilot import (
     execute_action,
+    get_copilot_state,
     get_context_snapshot,
     get_preferences,
     list_action_events,
+    patch_copilot_state,
     patch_preferences,
     validate_action,
 )
@@ -62,6 +64,8 @@ class CopilotActionInput(BaseModel):
     application_id: Optional[str] = None
     status: Optional[Literal["saved", "applied", "interviewing", "offer", "rejected"]] = None
     note: Optional[str] = None
+    feature: Optional[str] = None
+    body: Optional[str] = None
 
     class Config:
         extra = "ignore"
@@ -71,6 +75,15 @@ class CopilotActionRequest(BaseModel):
     user_id: str
     action: CopilotActionInput
     source: str = "widget"
+
+
+class CopilotStatePatch(BaseModel):
+    onboarding: Optional[dict[str, Any]] = None
+    completed_steps: Optional[list[str]] = None
+    mark_step_complete: Optional[str] = None
+    feature_exposure: Optional[dict[str, Any]] = None
+    guidance_level: Optional[Literal["first_run", "guided", "light", "minimal"]] = None
+    last_suggested_step: Optional[str] = None
 
 
 def _action_payload(action: CopilotActionInput) -> dict[str, Any]:
@@ -85,6 +98,25 @@ async def read_preferences(user_id: str = Query(...)):
 @router.get("/context")
 async def read_context(user_id: str = Query(...)):
     return {"context": await get_context_snapshot(user_id)}
+
+
+@router.get("/state")
+async def read_state(user_id: str = Query(...)):
+    return {"state": await get_copilot_state(user_id)}
+
+
+@router.patch("/state")
+async def update_state(
+    request: CopilotStatePatch,
+    user_id: str = Query(...),
+):
+    try:
+        payload = request.model_dump(exclude_unset=True)
+        return {"state": await patch_copilot_state(user_id, payload)}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save Copilot state: {str(exc)}")
 
 
 @router.patch("/preferences")

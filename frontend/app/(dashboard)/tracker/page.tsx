@@ -11,6 +11,7 @@ import { NudgeBanner } from "@/components/nudge-banner";
 import { TodayView } from "@/components/today-view";
 import { supabase } from "@/lib/supabase";
 import type { Nudge, Goal, Todo } from "@/types";
+import { takeGoalsTasksDraft, type CopilotGoalsTasksDraft } from "@/lib/copilot/drafts";
 import {
   LayoutGrid,
   BarChart3,
@@ -32,6 +33,10 @@ const QUERY_VIEW_VALUES: View[] = [
 
 function isJourneyView(value: string | null): value is View {
   return Boolean(value && QUERY_VIEW_VALUES.includes(value as View));
+}
+
+function guideStepForView(value: View) {
+  return value;
 }
 
 interface TodoRow {
@@ -85,11 +90,13 @@ function JourneyPageContent() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [copilotDraft, setCopilotDraft] = useState<CopilotGoalsTasksDraft | null>(null);
   // Incrementing this key re-triggers the data-fetch effect after mutations.
   const [refreshKey, setRefreshKey] = useState(0);
 
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const routeView = searchParams.get("view");
+  const shouldLoadDraft = searchParams.get("draft") === "1";
 
   useEffect(() => {
     if (isJourneyView(routeView)) {
@@ -97,6 +104,26 @@ function JourneyPageContent() {
       return () => window.clearTimeout(timeoutId);
     }
   }, [routeView]);
+
+  useEffect(() => {
+    if (!shouldLoadDraft || routeView !== "goals_tasks") return;
+    const timeoutId = window.setTimeout(() => {
+      setCopilotDraft(takeGoalsTasksDraft());
+    }, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [routeView, shouldLoadDraft]);
+
+  useEffect(() => {
+    if (!userId) return;
+    void fetch(`${baseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mark_step_complete: guideStepForView(view),
+        feature_exposure: { feature: `tracker:${view}` },
+      }),
+    }).catch(() => undefined);
+  }, [baseUrl, userId, view]);
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -373,13 +400,16 @@ function JourneyPageContent() {
               userId={userId}
               goals={goals}
               todos={todos}
+              draft={copilotDraft}
               onGoalsChange={handleDataRefresh}
               onGoalCreated={handleGoalCreated}
+              onTodosChange={handleDataRefresh}
+              onTodoCreated={handleTodoCreated}
             />
             <TodoList
               userId={userId}
-              goals={goals}
               todos={todos}
+              draft={copilotDraft}
               onTodosChange={handleDataRefresh}
               onTodoCreated={handleTodoCreated}
             />

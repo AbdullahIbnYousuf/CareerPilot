@@ -16,6 +16,7 @@ import { buildCopilotContext } from "@/lib/copilot/app-map";
 import type {
   ChatSession,
   CopilotClientContext,
+  CopilotGuideState,
   CopilotOnboardingState,
   CopilotProfileStatus,
 } from "@/types";
@@ -30,6 +31,7 @@ interface ChatSessionRow {
 const DEFAULT_SESSION_TITLE = "New conversation";
 const SESSION_TITLE_LIMIT = 42;
 const ACTIVE_SESSION_KEY_PREFIX = "careerpilot:active-chat:";
+const ACTIVE_CHAT_CHANGED_EVENT = "careerpilot:active-chat-changed";
 const DEFAULT_ONBOARDING: CopilotOnboardingState = {
   completed: false,
   name: "",
@@ -55,6 +57,14 @@ function truncate(str: string, n: number) {
 
 function activeSessionStorageKey(userId: string) {
   return `${ACTIVE_SESSION_KEY_PREFIX}${userId}`;
+}
+
+function dispatchActiveChatChanged(userId: string, sessionId: string) {
+  window.dispatchEvent(
+    new CustomEvent(ACTIVE_CHAT_CHANGED_EVENT, {
+      detail: { userId, sessionId },
+    }),
+  );
 }
 
 function mapChatSession(row: ChatSessionRow): ChatSession {
@@ -84,6 +94,7 @@ export default function AiPage() {
   const [loadingSessions, setLoadingSessions] = useState(true);
   const [profileStatus, setProfileStatus] = useState<CopilotProfileStatus>("unknown");
   const [copilotAppState, setCopilotAppState] = useState<CopilotClientContext["app_state"]>();
+  const [copilotGuideState, setCopilotGuideState] = useState<CopilotGuideState | undefined>();
   const activeSessionIdRef = useRef("");
 
   useEffect(() => {
@@ -106,6 +117,8 @@ export default function AiPage() {
             const body: { context?: CopilotClientContext["app_state"] } = await response.json();
             const context = body.context;
             setCopilotAppState(context);
+            const guideState = (context as { copilot?: CopilotGuideState } | undefined)?.copilot;
+            setCopilotGuideState(guideState);
             const nextStatus = context?.profile_status;
             setProfileStatus(
               nextStatus === "has_profile" || nextStatus === "no_profile"
@@ -134,6 +147,7 @@ export default function AiPage() {
           activeSessionStorageKey(userId),
           sessionId
         );
+        dispatchActiveChatChanged(userId, sessionId);
       }
     },
     [userId]
@@ -341,8 +355,9 @@ export default function AiPage() {
         profileStatus,
         onboarding: DEFAULT_ONBOARDING,
         appState: copilotAppState,
+        copilotState: copilotGuideState,
       }),
-    [copilotAppState, profileStatus],
+    [copilotAppState, copilotGuideState, profileStatus],
   );
 
   return (
