@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CareerPilot — Your Agentic AI Career Co-Pilot",
+  title: "CareerPilot",
   description:
     "An agentic co-pilot that hunts jobs, programmatically scores CV fit, drafts context-aware cover letters, and tracks your journey with visual productivity dashboards.",
   keywords: [
