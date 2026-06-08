@@ -39,6 +39,14 @@ async def chat_endpoint(req: ChatRequest):
             match_count=5,
         )
         cv_context = "\n".join(c["content"] for c in cv_chunks)
+        if not cv_context.strip():
+            # Fallback to general chunks if query doesn't match specific CV parts
+            fallback_chunks = await hybrid_search(
+                query="",
+                user_id=req.user_id,
+                match_count=5,
+            )
+            cv_context = "\n".join(c["content"] for c in fallback_chunks)
     except Exception:
         cv_context = "No CV uploaded yet."
 

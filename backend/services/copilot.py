@@ -174,22 +174,25 @@ def _step_prompt(step: str | None) -> str:
 
 
 async def get_copilot_state(user_id: str) -> dict[str, Any]:
-    result = await supabase.table("copilot_user_state").select(
-        "user_id, onboarding, completed_steps, feature_exposures, guidance_level, "
-        "last_suggested_step, updated_at"
-    ).eq("user_id", user_id).limit(1).execute()
+    try:
+        result = await supabase.table("copilot_user_state").select(
+            "user_id, onboarding, completed_steps, feature_exposures, guidance_level, "
+            "last_suggested_step, updated_at"
+        ).eq("user_id", user_id).limit(1).execute()
 
-    if result.data:
-        row = result.data[0]
-        return {
-            "user_id": user_id,
-            "onboarding": _normalize_onboarding(row.get("onboarding")),
-            "completed_steps": _clean_step_list(row.get("completed_steps")),
-            "feature_exposures": row.get("feature_exposures") if isinstance(row.get("feature_exposures"), dict) else {},
-            "guidance_level": row.get("guidance_level") if row.get("guidance_level") in GUIDANCE_LEVELS else "first_run",
-            "last_suggested_step": row.get("last_suggested_step"),
-            "updated_at": row.get("updated_at"),
-        }
+        if result.data:
+            row = result.data[0]
+            return {
+                "user_id": user_id,
+                "onboarding": _normalize_onboarding(row.get("onboarding")),
+                "completed_steps": _clean_step_list(row.get("completed_steps")),
+                "feature_exposures": row.get("feature_exposures") if isinstance(row.get("feature_exposures"), dict) else {},
+                "guidance_level": row.get("guidance_level") if row.get("guidance_level") in GUIDANCE_LEVELS else "first_run",
+                "last_suggested_step": row.get("last_suggested_step"),
+                "updated_at": row.get("updated_at"),
+            }
+    except Exception as e:
+        logger.warning("Failed to query copilot_user_state: %s. Using default state.", e)
 
     state = {
         "user_id": user_id,
@@ -200,15 +203,18 @@ async def get_copilot_state(user_id: str) -> dict[str, Any]:
         "last_suggested_step": None,
         "updated_at": None,
     }
-    await supabase.table("copilot_user_state").upsert({
-        "user_id": user_id,
-        "onboarding": state["onboarding"],
-        "completed_steps": state["completed_steps"],
-        "feature_exposures": state["feature_exposures"],
-        "guidance_level": state["guidance_level"],
-        "last_suggested_step": state["last_suggested_step"],
-        "updated_at": _now_iso(),
-    }, on_conflict="user_id").execute()
+    try:
+        await supabase.table("copilot_user_state").upsert({
+            "user_id": user_id,
+            "onboarding": state["onboarding"],
+            "completed_steps": state["completed_steps"],
+            "feature_exposures": state["feature_exposures"],
+            "guidance_level": state["guidance_level"],
+            "last_suggested_step": state["last_suggested_step"],
+            "updated_at": _now_iso(),
+        }, on_conflict="user_id").execute()
+    except Exception as e:
+        logger.warning("Failed to initialize/upsert copilot_user_state: %s", e)
     return state
 
 
@@ -262,11 +268,15 @@ async def patch_copilot_state(user_id: str, payload: dict[str, Any]) -> dict[str
         "last_suggested_step": last_suggested_step,
         "updated_at": _now_iso(),
     }
-    result = await supabase.table("copilot_user_state").upsert(
-        row,
-        on_conflict="user_id",
-    ).execute()
-    return result.data[0] if result.data else await get_copilot_state(user_id)
+    try:
+        result = await supabase.table("copilot_user_state").upsert(
+            row,
+            on_conflict="user_id",
+        ).execute()
+        return result.data[0] if result.data else await get_copilot_state(user_id)
+    except Exception as e:
+        logger.warning("Failed to patch copilot_user_state: %s", e)
+        return current
 
 
 def _valid_date(value: Any) -> str | None:
