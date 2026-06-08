@@ -6,16 +6,23 @@ Handles business logic for conversational assistant:
   - Saves message logs
   - Streams conversational response from Groq Llama 3.3 70B using session history and RAG context
 """
+Chat Service — CareerPilot (Pillar 3: AI Assistant)
+
+Handles business logic for conversational assistant:
+  - Fetches message history
+  - Saves message logs
+  - Streams conversational response from Groq Llama 3.3 70B using session history and RAG context
+"""
 
 import os
 import json
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Optional
-from groq import Groq
+from groq import Groq, RateLimitError as GroqRateLimitError
 from db.supabase import supabase
+from services.key_pool import groq_pool, KeyPoolExhausted
 
-_groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 _MODEL = "llama-3.3-70b-versatile"
 _MEMORY_LIMIT = 10
 _DEFAULT_SESSION_TITLE = "New conversation"
@@ -507,21 +514,30 @@ For first-run onboarding, behave like a smart conversation, not a rigid form:
     await ensure_chat_session(user_id, session_id, message)
     await save_message(user_id, session_id, "user", message)
 
-    # 4. Stream response from Groq
+    # 4. Stream response from Groq with key-pool fallback on 429
     full_reply = []
     try:
-        stream = _groq.chat.completions.create(
-            model=_MODEL,
-            messages=groq_messages,
-            stream=True,
-            temperature=0.35,
-            max_tokens=1800,
-        )
-        for chunk in stream:
-            token = chunk.choices[0].delta.content or ""
-            if token:
-                full_reply.append(token)
-                yield f"data: {json.dumps({'token': token})}\n\n"
+        rotation = groq_pool.rotate_on_rate_limit()
+        for api_key in rotation:
+            try:
+                groq_client = Groq(api_key=api_key)
+                stream = groq_client.chat.completions.create(
+                    model=_MODEL,
+                    messages=groq_messages,
+                    stream=True,
+                    temperature=0.35,
+                    max_tokens=1800,
+                )
+                for chunk in stream:
+                    token = chunk.choices[0].delta.content or ""
+                    if token:
+                        full_reply.append(token)
+                        yield f"data: {json.dumps({'token': token})}\n\n"
+                rotation.success()
+                break
+            except GroqRateLimitError:
+                full_reply = []  # reset partial output before retry
+                continue
 
         visible_reply = "".join(full_reply)
         if not _has_hidden_action(visible_reply):
@@ -545,5 +561,7 @@ For first-run onboarding, behave like a smart conversation, not a rigid form:
         )
         yield "data: [DONE]\n\n"
 
+    except KeyPoolExhausted as e:
+        yield f"data: {json.dumps({'error': str(e)})}\n\n"
     except Exception as e:
         yield f"data: {json.dumps({'error': str(e)})}\n\n"

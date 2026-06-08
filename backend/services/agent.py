@@ -27,12 +27,11 @@ from db.supabase import supabase
 from services.cache import get_cached_jobs, cache_jobs
 from services.fit_score import FIT_SCORE_VERSION, compute_fit_score, generate_fit_explanations, get_active_cv_id
 from services.searcher import hybrid_search
-from groq import Groq
+from groq import Groq, RateLimitError as GroqRateLimitError
+from services.key_pool import groq_pool, jsearch_pool, tavily_pool, KeyPoolExhausted
 
-# Setup API keys and clients
-JSEARCH_API_KEY: str = os.environ.get("JSEARCH_API_KEY", "")
-TAVILY_API_KEY: str  = os.environ.get("TAVILY_API_KEY", "")
-_groq = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
+# TAVILY_API_KEY still needed directly for the payload dict
+TAVILY_API_KEY: str = tavily_pool.current() if len(tavily_pool) > 0 else ""
 _MODEL = "llama-3.3-70b-versatile"
 logger = logging.getLogger(__name__)
 
@@ -91,14 +90,25 @@ async def _search_jsearch(query: str, location: str = "") -> list[dict]:
         "num_pages": "1",
         "date_posted": "month",
     }
-    headers = {
-        "x-rapidapi-key": JSEARCH_API_KEY,
-        "x-rapidapi-host": "jsearch.p.rapidapi.com",
-    }
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.get(url, params=params, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
+    rotation = jsearch_pool.rotate_on_rate_limit()
+    for api_key in rotation:
+        headers = {
+            "x-rapidapi-key": api_key,
+            "x-rapidapi-host": "jsearch.p.rapidapi.com",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(url, params=params, headers=headers)
+                if resp.status_code == 429:
+                    continue  # rotate to next key
+                resp.raise_for_status()
+                data = resp.json()
+            rotation.success()
+            break
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                continue
+            raise
 
     jobs = []
     for item in data.get("data", []):
@@ -136,16 +146,28 @@ async def _search_remotive(query: str) -> list[dict]:
 
 async def _search_tavily(query: str, location: str = "") -> list[dict]:
     url = "https://api.tavily.com/search"
-    payload = {
-        "api_key": TAVILY_API_KEY,
-        "query": f"{query} jobs {location} site:bdjobs.com OR linkedin.com OR glassdoor.com".strip(),
-        "search_depth": "basic",
-        "max_results": 10,
-    }
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
+    rotation = tavily_pool.rotate_on_rate_limit()
+    data: dict = {}
+    for api_key in rotation:
+        payload = {
+            "api_key": api_key,
+            "query": f"{query} jobs {location} site:bdjobs.com OR linkedin.com OR glassdoor.com".strip(),
+            "search_depth": "basic",
+            "max_results": 10,
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 429:
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
+            rotation.success()
+            break
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429:
+                continue
+            raise
 
     jobs = []
     for item in data.get("results", []):
@@ -218,15 +240,22 @@ def draft_cover_letter_tool(job_description: str, cv_context: str) -> str:
         "Highlight key skills, experience matches, and use persuasive business language. "
         "Keep it concise, elegant, and ready for submission."
     )
-    try:
-        resp = _groq.chat.completions.create(
-            model=_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-        )
-        return (resp.choices[0].message.content or "").strip()
-    except Exception as e:
-        return f"Failed to generate cover letter: {e}"
+    rotation = groq_pool.rotate_on_rate_limit()
+    for api_key in rotation:
+        try:
+            client = Groq(api_key=api_key)
+            resp = client.chat.completions.create(
+                model=_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.4,
+            )
+            rotation.success()
+            return (resp.choices[0].message.content or "").strip()
+        except GroqRateLimitError:
+            continue
+        except Exception as e:
+            return f"Failed to generate cover letter: {e}"
+    return "Cover letter generation unavailable — all API keys are rate-limited. Try again in a few minutes."
 
 
 # ---------------------------------------------------------------------------

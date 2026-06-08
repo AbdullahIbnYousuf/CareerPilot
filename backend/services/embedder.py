@@ -10,15 +10,14 @@ import os
 from typing import Any, Literal
 
 import google.generativeai as genai
+from google.api_core.exceptions import ResourceExhausted
+
+from services.key_pool import google_pool, KeyPoolExhausted
 
 EMBEDDING_MODEL = "models/gemini-embedding-001"
 EMBEDDING_DIMENSIONS = 768
 
 InputType = Literal["document", "query"]
-
-
-def _configure_gemini() -> None:
-    genai.configure(api_key=os.environ.get("GOOGLE_API_KEY", ""))
 
 
 def _validate_embedding(embedding: list[float]) -> list[float]:
@@ -47,14 +46,24 @@ def _embed(texts: list[str], input_type: InputType) -> list[list[float]]:
         return []
 
     task_type = "retrieval_document" if input_type == "document" else "retrieval_query"
-    _configure_gemini()
-    response = genai.embed_content(
-        model=EMBEDDING_MODEL,
-        content=cleaned,
-        task_type=task_type,
-        output_dimensionality=EMBEDDING_DIMENSIONS,
+
+    rotation = google_pool.rotate_on_rate_limit()
+    for api_key in rotation:
+        try:
+            genai.configure(api_key=api_key)
+            response = genai.embed_content(
+                model=EMBEDDING_MODEL,
+                content=cleaned,
+                task_type=task_type,
+                output_dimensionality=EMBEDDING_DIMENSIONS,
+            )
+            rotation.success()
+            return _extract_embeddings(response, expected_count=len(cleaned))
+        except ResourceExhausted:
+            continue  # try next key
+    raise KeyPoolExhausted(
+        f"All {len(google_pool)} Google API keys are quota-exhausted for embeddings."
     )
-    return _extract_embeddings(response, expected_count=len(cleaned))
 
 
 def embed_documents(texts: list[str]) -> list[list[float]]:

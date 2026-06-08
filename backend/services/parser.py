@@ -16,15 +16,9 @@ from typing import Any
 from docx import Document
 import google.generativeai as genai
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception, before_sleep_log
+from services.key_pool import google_pool, KeyPoolExhausted
 
 logger = logging.getLogger(__name__)
-
-# Initialize Gemini client
-_GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY", "")
-
-def _get_gemini_client(model_name: str = 'gemini-2.0-flash'):
-    genai.configure(api_key=_GOOGLE_API_KEY)
-    return genai.GenerativeModel(model_name)
 
 
 def _is_rate_limit(exception):
@@ -63,26 +57,39 @@ def generate_content_with_fallback(contents, generation_config=None):
     ]
     last_exception = None
     
-    for model_name in models:
+    rotation = google_pool.rotate_on_rate_limit()
+    for api_key in rotation:
         try:
-            model = _get_gemini_client(model_name)
-            return _generate_content_with_retry(model, contents, generation_config)
-        except Exception as e:
-            err_str = str(e).lower()
+            genai.configure(api_key=api_key)
+            for model_name in models:
+                try:
+                    model = genai.GenerativeModel(model_name)
+                    res = _generate_content_with_retry(model, contents, generation_config)
+                    rotation.success()
+                    return res
+                except Exception as e:
+                    err_str = str(e).lower()
+                    if "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource exhausted" in err_str:
+                        logger.warning(f"Gemini model '{model_name}' failed with rate limit/quota error. Rotating key...")
+                        last_exception = e
+                        # Raise exception to break the inner model loop and advance key rotation
+                        raise e
+                    elif "not found" in err_str or "404" in err_str:
+                        logger.warning(f"Gemini model '{model_name}' not found. Trying fallback model...")
+                        last_exception = e
+                        continue
+                    else:
+                        raise e
+        except Exception as key_err:
+            err_str = str(key_err).lower()
             if "429" in err_str or "quota" in err_str or "rate limit" in err_str or "resource exhausted" in err_str:
-                logger.warning(f"Gemini model '{model_name}' failed with rate limit/quota error. Trying fallback model...")
-                last_exception = e
+                last_exception = key_err
                 continue
-            elif "not found" in err_str or "404" in err_str:
-                logger.warning(f"Gemini model '{model_name}' not found. Trying fallback model...")
-                last_exception = e
-                continue
-            else:
-                raise e
-    
+            raise key_err
+            
     if last_exception:
         raise last_exception
-    raise RuntimeError("All Gemini fallback models failed to execute.")
+    raise KeyPoolExhausted("All Gemini models/keys failed with rate limits or errors.")
 
 
 # Structured parsing prompt
