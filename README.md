@@ -1,319 +1,209 @@
-# CareerPilot 🚀
+# CareerPilot
 
-Your agentic career co-pilot. Built for Codesprint 2026.
+CareerPilot is an agentic career co-pilot for Codesprint 2026. It hunts jobs, scores fit against a user's real CV, drafts personalized guidance, and keeps the user's daily career work organized in one place.
 
-## Current App Shape
+Built on a free-tier stack. No paid APIs. No credit card.
 
-CareerPilot's main authenticated workspace is **My Journey** at `/tracker`.
-It contains Today, Applications, Goals & Tasks, Calendar, Progress, and
-rule-based suggested nudges. Use `Applications` as the visible label, not
-`Kanban`; use `Progress`, not `Stats`; and do not show `AI Nudge:` as visible
-product copy.
+## What It Does
 
-| Route | Area | Purpose |
+- Job Hunter Agent: searches live roles, scores them programmatically against the user's CV, and returns structured cards with fit explanations, source links, salary/deadline fields, and save-ready metadata.
+- CV Intelligence: parses PDF and DOCX CVs, chunks them by section, embeds them with Gemini, and stores them in Supabase pgvector for retrieval across the product.
+- AI Assistant: streams grounded career advice with session memory, CV retrieval, and Copilot-style actions such as opening routes, pre-filling search boxes, drafting goals/tasks, and preparing application notes for review.
+- My Journey: gives the user a daily workspace with Today, Applications, Goals & Tasks, Calendar, and Progress views, all tied to real tracker data and proactive nudges.
+
+## Product Map
+
+| Route | Visible label | Purpose |
 | --- | --- | --- |
 | `/tracker` | My Journey | Main authenticated workspace |
-| `/jobs` | Job Hunter | Search jobs and save opportunities to My Journey |
-| `/chat` | AI Assistant | Streaming CV-grounded career chat |
-| `/cv` | Profile | CV upload, parsing, and profile intelligence |
-| `/` | Redirect | Redirect authenticated users to `/tracker` |
+| `/jobs` | Jobs | Live job search and fit scoring |
+| `/chat` | AI Assistant | Streaming CV-grounded assistant |
+| `/cv` | Profile | CV upload, parsing, and editable profile intelligence |
+| `/cv/preview` | Resume Preview | Printable resume preview built from the saved profile |
+| `/` | Redirect | Sends authenticated users to `/tracker` |
 
-**CareerPilot** is an AI-powered career assistant that helps you hunt jobs, analyze CV fit scores, get personalized career advice, and track your applications—all powered by free-tier AI services.
+## Why It Stands Out
 
-## 🎯 Features
+- The user's CV is the source of truth for scoring, advice, and drafts.
+- Fit scores are computed programmatically, not guessed by the LLM.
+- Chat is streamed token-by-token from Groq with session memory in Supabase.
+- Tracker actions are visible and user-confirmed before any state mutation.
+- The full workflow covers search, score, chat, cover letters, goals, deadlines, and progress.
 
-- **Job Hunter Agent** — Searches jobs with AI-powered fit scoring
-- **CV Intelligence** — RAG-based CV analysis using vector search
-- **AI Assistant** — Conversational interface with full CV context
-- **Productivity Tracker** — Kanban board, calendar, todos, and AI nudges
+## Judge Demo Flow
 
-## 📁 Project Structure
+1. Upload a PDF or DOCX CV in `/cv`.
+2. Search for jobs in `/jobs` and review the fit score on the returned cards.
+3. Open `/chat` and ask a grounded question like "Am I ready for this role?"
+4. Ask for a cover letter or roadmap and watch the assistant stream the response.
+5. Move a role into My Journey and update progress in `/tracker`.
+6. Show Today, Applications, Goals & Tasks, Calendar, and Progress working together.
 
-```
-careerpilot/
-├── backend/          # FastAPI Python 3.11+ backend
-├── frontend/         # Next.js 14 (App Router) frontend
-├── supabase/         # Database migrations
-├── AGENTS.md         # Architecture & coding conventions
-└── README.md         # This file
-```
+## Architecture
 
-## 🛠️ Tech Stack
+![CareerPilot architecture](diagram.png)
 
-| Component           | Technology                                    |
-| ------------------- | --------------------------------------------- |
-| **Backend**         | FastAPI, Python 3.11+                         |
-| **Frontend**        | Next.js 14, React 19, Tailwind CSS, shadcn/ui |
-| **Database**        | Supabase (PostgreSQL + pgvector)              |
-| **LLMs**            | Groq (Llama 3.3 70B), Gemini 2.0 Flash        |
-| **Embeddings**      | Gemini gemini-embedding-001                   |
-| **Caching**         | Upstash Redis                                 |
-| **Agent Framework** | LangGraph                                     |
-| **Job Search**      | JSearch (RapidAPI), Remotive, Tavily          |
+The current system design and scale notes live in [03_System_Design.md](03_System_Design.md).
 
-## 🚀 Quick Start
+### Core Flow
+
+- Frontend: Next.js App Router, Tailwind CSS, shadcn/ui, dnd-kit, Recharts
+- Backend: FastAPI, async route handlers, SSE for chat
+- Data: Supabase Auth, Postgres, pgvector, Storage, Row Level Security
+- AI: Gemini for parsing and embeddings, Groq for chat, LangGraph for the job hunter
+- Cache: Upstash Redis for raw job search caching
+- Search: JSearch first, then Remotive, then Tavily
+
+## Tech Stack
+
+| Layer | Stack |
+| --- | --- |
+| Frontend | Next.js App Router, React, Tailwind CSS, shadcn/ui |
+| Backend | FastAPI, Python 3.11, Uvicorn |
+| Database | Supabase Postgres, pgvector, Storage, RLS |
+| LLMs | Groq Llama 3.3 70B, Gemini 2.x |
+| Embeddings | Gemini `gemini-embedding-001` |
+| Caching | Upstash Redis |
+| Agent framework | LangGraph |
+| Job search | JSearch, Remotive, Tavily |
+
+## Local Setup
 
 ### Prerequisites
 
-- **Python 3.11+** (3.12 or 3.13 recommended)
-- **Node.js 18+** (v20+ recommended)
-- **npm** or **yarn**
-- **Git**
+- Python 3.11+
+- Node.js 20+
+- npm
+- Git
+- A Supabase project
 
-### 1. Clone the Repository
+### 1. Clone
 
 ```bash
-git clone https://github.com/yourusername/CareerPilot.git
+git clone https://github.com/AbdullahIbnYousuf/CareerPilot.git
 cd CareerPilot
 ```
 
-### 2. Backend Setup
-
-#### Install Python Dependencies
+### 2. Create Environment Files
 
 ```bash
-cd backend
-
-# Create virtual environment (optional but recommended)
-python -m venv .venv
-
-# Activate virtual environment
-# On Windows:
-.venv\Scripts\activate
-# On macOS/Linux:
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
 ```
 
-#### Configure Environment Variables
+On PowerShell, use `Copy-Item` with the same source and destination paths.
 
-Create a `.env` file in the `backend/` directory:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your API keys:
+### 3. Backend Environment
 
 ```env
-# LLM APIs
-GROQ_API_KEY=your_groq_api_key_here
-GOOGLE_API_KEY=your_google_api_key_here
-
-# Database
-SUPABASE_URL=your_supabase_url_here
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
-
-# Cache
-UPSTASH_REDIS_REST_URL=your_upstash_redis_url_here
-UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_token_here
-
-# Job Search APIs
-JSEARCH_API_KEY=your_jsearch_api_key_here
-TAVILY_API_KEY=your_tavily_api_key_here
+GROQ_API_KEY=
+GOOGLE_API_KEY=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+UPSTASH_REDIS_REST_URL=
+UPSTASH_REDIS_REST_TOKEN=
+JSEARCH_API_KEY=
+TAVILY_API_KEY=
 ```
 
-**Where to get API keys (all free tier):**
-
-- **Groq**: https://console.groq.com/
-- **Google AI (Gemini)**: https://aistudio.google.com/apikey
-- **Supabase**: https://supabase.com/ (create a new project)
-- **Upstash Redis**: https://upstash.com/
-- **JSearch**: https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch
-- **Tavily**: https://tavily.com/
-
-#### Run Backend Server
-
-```bash
-# Make sure you're in the backend directory
-cd backend
-
-# Start the server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Backend will be available at: **http://localhost:8000**
-
-API Documentation: **http://localhost:8000/docs**
-
-### 3. Frontend Setup
-
-Open a **new terminal** window/tab:
-
-#### Install Node Dependencies
-
-```bash
-cd frontend
-
-# Install dependencies
-npm install
-```
-
-#### Configure Environment Variables
-
-Create a `.env.local` file in the `frontend/` directory:
-
-```bash
-# Copy from example if available, or create new
-touch .env.local
-```
-
-Edit `.env.local`:
+### 4. Frontend Environment
 
 ```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url_here
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-#### Run Frontend Server
+### 5. Install Backend Dependencies
 
 ```bash
-# Make sure you're in the frontend directory
-cd frontend
-
-# Start the development server
-npm run dev
+cd backend
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+cd ..
 ```
 
-Frontend will be available at: **http://localhost:3000**
+On macOS/Linux, activate with `source .venv/bin/activate`.
 
-### 4. Database Setup
+### 6. Install Frontend Dependencies
 
-1. Create a Supabase project at https://supabase.com/
-2. Run the migrations in `supabase/migrations/` through the Supabase SQL editor
-3. Enable pgvector extension in your Supabase project
-4. Update your `.env` files with Supabase credentials
+```bash
+cd frontend
+npm install
+cd ..
+```
 
-## 📝 Development Workflow
-
-### Running Both Servers
-
-You need **two terminal windows**:
-
-**Terminal 1 - Backend:**
+### 7. Run the Backend
 
 ```bash
 cd backend
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Terminal 2 - Frontend:**
+Backend health: `http://localhost:8000/health`  
+FastAPI docs: `http://localhost:8000/docs`
+
+### 8. Run the Frontend
+
+Open a second terminal:
 
 ```bash
 cd frontend
 npm run dev
 ```
 
-### Common Commands
+Frontend: `http://localhost:3000`
 
-**Backend:**
+### 9. Run Supabase Migrations
 
-```bash
-# Run tests
-python -m pytest
+Run the SQL files in `supabase/migrations/` in your Supabase SQL editor in order.
 
-# Check code style
-black .
-flake8 .
+## Testing And Evaluation
 
-# Run specific test file
-python test_parser.py
-```
-
-**Frontend:**
+The repo includes a documented evaluation suite and backend tests for the main flows.
 
 ```bash
-# Build for production
-npm run build
-
-# Start production server
-npm start
-
-# Lint code
-npm run lint
+cd backend
+pytest
 ```
 
-## 🏗️ Architecture
-
-See **[AGENTS.md](./AGENTS.md)** for detailed architecture, coding conventions, and tech stack decisions.
-
-Key principles:
-
-- **100% free tier** — No paid APIs, no credit card required
-- **Monorepo structure** — Backend and frontend in one repo
-- **Type-safe** — TypeScript frontend, Python type hints backend
-- **RAG-powered** — Vector search with pgvector + Gemini embeddings
-- **Agentic** — LangGraph for job hunting workflows
-
-## 🐛 Troubleshooting
-
-### Backend Issues
-
-**Import Error: `cannot import name 'genai' from 'google'`**
-
-```bash
-pip install google-generativeai
-```
-
-**Module Not Found: `langgraph`**
-
-```bash
-pip install langgraph langchain langchain-groq
-```
-
-**Port 8000 already in use**
-
-```bash
-# Change port in uvicorn command
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
-```
-
-### Frontend Issues
-
-**Module not found errors**
+Helpful checks:
 
 ```bash
 cd frontend
-rm -rf node_modules package-lock.json
-npm install
+npm run lint
+npm run build
 ```
 
-**Port 3000 already in use**
+Key artifacts:
 
-```bash
-# Next.js will automatically try port 3001, 3002, etc.
-# Or specify port manually:
-PORT=3001 npm run dev
-```
+- `evaluation_suite.json`
+- `backend/test_*.py`
+- `backend/run_tests.py`
 
-### Database Issues
+## Deployment
 
-**Connection refused to Supabase**
+Replace these with your live URLs before final submission if you are hosting the app publicly.
 
-- Check your `SUPABASE_URL` and keys in `.env` files
-- Verify your Supabase project is active
-- Check if your IP is allowed in Supabase settings
+- Frontend: `your Vercel URL`
+- Backend: `your Render URL`
 
-## 📚 Documentation
+## Submission Artifacts
 
-- **[AGENTS.md](./AGENTS.md)** — Complete architecture guide and coding rules
-- **[PRD.md](./PRD.md)** — Product requirements document
-- **[Backend API Docs](http://localhost:8000/docs)** — Auto-generated FastAPI docs (when server is running)
+- [diagram.png](diagram.png)
+- [03_System_Design.md](03_System_Design.md)
+- [PRD.md](PRD.md)
+- [AGENTS.md](AGENTS.md)
+- `evaluation_suite.json`
 
+## Submission Highlights
 
-## 📄 License
+- The assistant is more than a chat box: it can guide navigation, prefill search inputs, prepare goal/task drafts, and package application notes for a quick review step.
+- My Journey is the daily command center, with Today, Applications, Goals & Tasks, Calendar, and Progress all working together from live data.
+- Application statuses are exactly: `saved`, `applied`, `interviewing`, `offer`, `rejected`.
+- The repo is designed around free-tier services and a submission-friendly full-stack demo.
 
-This project is built for Codesprint 2026. See license details in the repository.
+## License
 
-## 🙏 Acknowledgments
-
-- Built with free-tier AI services
-- Powered by Groq, Gemini, Supabase, and Upstash
-- UI components from shadcn/ui
-
----
-
-**Happy job hunting! 🎯**
+This project was built for Codesprint 2026. See repository files for any additional submission notes.
