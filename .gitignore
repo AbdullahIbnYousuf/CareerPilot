@@ -24,6 +24,12 @@ backend/venv/
 *.swp
 *.swo
 
+# AI/IDE tool directories (not part of the submission)
+.kiro/
+.puku/
+.antigravitycli/
+.antigravity/
+
 # OS
 .DS_Store
 Thumbs.db
