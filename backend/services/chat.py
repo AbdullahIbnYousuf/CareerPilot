@@ -10,7 +10,7 @@ Handles business logic for conversational assistant:
 import os
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Optional
 from groq import Groq
 from db.supabase import supabase
@@ -52,6 +52,158 @@ def _strip_copilot_actions(content: str) -> str:
     return content.strip()
 
 
+def _has_hidden_action(content: str) -> bool:
+    return bool(_ACTION_PATTERN.search(content))
+
+
+def _hidden_action(action: dict[str, Any]) -> str:
+    return (
+        "\n\n<careerpilot_action>\n"
+        f"{json.dumps(action, ensure_ascii=True)}\n"
+        "</careerpilot_action>"
+    )
+
+
+def _latest_assistant_message(history: list[dict]) -> str:
+    for message in reversed(history):
+        if message.get("role") == "assistant":
+            return str(message.get("content") or "")
+    return ""
+
+
+def _date_days_from_now(days: int) -> str:
+    return (datetime.now(timezone.utc).date() + timedelta(days=days)).isoformat()
+
+
+def _fallback_action_for_turn(
+    message: str,
+    history: list[dict],
+    client_context: Optional[dict[str, Any]],
+    visible_reply: str,
+) -> dict[str, Any] | None:
+    """Create deterministic action cards when the model speaks about an action but omits the directive."""
+    del visible_reply
+
+    normalized = " ".join(message.lower().split())
+    previous = _latest_assistant_message(history).lower()
+    profile_status = str((client_context or {}).get("profile_status") or "")
+
+    is_confirmation = normalized in {
+        "ok",
+        "okay",
+        "yes",
+        "yeah",
+        "yep",
+        "sure",
+        "do it",
+        "ok do it",
+        "okay do it",
+        "do that",
+        "ok do that",
+        "yes do that",
+        "add it",
+        "add them",
+        "confirm",
+    }
+    wants_open = any(
+        phrase in normalized
+        for phrase in (
+            "show me",
+            "open it",
+            "open that",
+            "take me",
+            "go there",
+            "resume preview",
+            "preview resume",
+            "view resume",
+        )
+    )
+    wants_tasks = any(
+        phrase in normalized
+        for phrase in (
+            "add the tasks",
+            "add tasks",
+            "add them",
+            "create the tasks",
+            "create tasks",
+            "do that",
+            "ok do that",
+        )
+    )
+
+    resume_context = "resume preview" in previous or "profile" in previous and "resume" in previous
+    if wants_open and resume_context:
+        if profile_status == "no_profile":
+            return {
+                "type": "open_route",
+                "label": "Upload your CV",
+                "href": "/cv?upload=1",
+            }
+        return {
+            "type": "open_route",
+            "label": "Open Resume Preview",
+            "href": "/cv/preview",
+        }
+
+    task_context = any(
+        phrase in previous
+        for phrase in (
+            "proposed the tasks",
+            "these tasks",
+            "career goal setting",
+            "skill development",
+            "job matching",
+            "resume preview",
+            "ai journey",
+            "roadmap",
+        )
+    )
+    if wants_tasks and (task_context or is_confirmation):
+        return {
+            "type": "create_goal_with_todos",
+            "label": "Add journey tasks",
+            "goal": {
+                "title": "Complete CareerPilot journey setup",
+                "target_date": _date_days_from_now(7),
+            },
+            "todos": [
+                {
+                    "title": "Review Resume Preview for accuracy",
+                    "due_date": _date_days_from_now(1),
+                },
+                {
+                    "title": "Search matched jobs from my profile",
+                    "due_date": _date_days_from_now(2),
+                },
+                {
+                    "title": "Set one clear career goal",
+                    "due_date": _date_days_from_now(4),
+                },
+                {
+                    "title": "Choose one skill to improve this week",
+                    "due_date": _date_days_from_now(7),
+                },
+            ],
+        }
+
+    if "job matching" in normalized or "search jobs" in normalized or "find jobs" in normalized:
+        app_state = (client_context or {}).get("app_state") or {}
+        preferences = app_state.get("preferences") if isinstance(app_state, dict) else {}
+        target_roles = preferences.get("target_roles") if isinstance(preferences, dict) else []
+        preferred_locations = preferences.get("preferred_locations") if isinstance(preferences, dict) else []
+        query = target_roles[0] if isinstance(target_roles, list) and target_roles else "software engineer"
+        location = preferred_locations[0] if isinstance(preferred_locations, list) and preferred_locations else ""
+        return {
+            "type": "prefill_job_search",
+            "label": "Search matching jobs",
+            "query": query,
+            "location": location,
+            "auto": True,
+        }
+
+    return None
+
+
 def _format_client_context(client_context: Optional[dict[str, Any]]) -> str:
     if not client_context:
         return ""
@@ -61,6 +213,8 @@ def _format_client_context(client_context: Optional[dict[str, Any]]) -> str:
         "current_page_label",
         "profile_status",
         "onboarding",
+        "preferences",
+        "app_state",
         "app_map",
     }
     compact_context = {
@@ -68,7 +222,7 @@ def _format_client_context(client_context: Optional[dict[str, Any]]) -> str:
         for key, value in client_context.items()
         if key in allowed_keys
     }
-    return json.dumps(compact_context, ensure_ascii=True, indent=2)[:6000]
+    return json.dumps(compact_context, ensure_ascii=True, indent=2)[:8000]
 
 
 async def ensure_chat_session(user_id: str, session_id: str, message: str) -> None:
@@ -142,10 +296,43 @@ async def stream_chat(
 Product context from the CareerPilot app:
 {formatted_client_context}
 
-You are also the user's in-app product guide. You may recommend safe navigation,
-prepared job searches, and goal/task proposals using a hidden action directive at
-the very end of a response. Never claim an action has been completed unless the
-UI has confirmed it after the user clicks.
+You are also the user's in-app product guide. You should feel like a practical
+career coach plus an app operator: warm, specific, low-drama, and always moving
+the user toward the next useful step.
+
+CareerPilot response shape:
+- Start with the useful answer, not a generic greeting.
+- Give a quick read, the reason, and the next best step.
+- Use the current page and profile status from product context.
+- If the user needs another app area, include a normal markdown link and, when
+  useful, one hidden action directive.
+- Ask at most one follow-up question when required to avoid a bad plan.
+- Prefer concrete actions over long feature explanations.
+
+Guidance playbooks:
+- If profile_status is "no_profile", explain that CV/profile data powers fit
+  scores and personalized advice. Offer Upload CV or Build profile manually.
+- If profile_status is "has_profile", use CV context and preferences to suggest
+  job searches, application steps, goals, tasks, cover-letter drafts, or prep.
+- For job searches, propose a focused query and location. Use
+  prefill_job_search when a clear search exists.
+- For urgent job-search planning, propose one goal and up to five todos, or use
+  create_roadmap_with_tasks for a multi-week plan. The UI will require
+  confirmation before anything is created.
+- For cover letters and readiness checks, ground claims in CV context and never
+  invent experience.
+- For application status changes or saved notes, only propose the change. Never
+  claim the record changed before UI confirmation.
+
+Hidden action rule:
+Use at most one hidden action directive per assistant turn unless the user asks
+for a multi-step setup. Put hidden directives at the very end of the response.
+Never show or explain hidden JSON in visible text. Never claim an action has
+been completed unless the UI has confirmed it after the user clicks.
+If you say "I can propose", "I've proposed", "click", "open", "show", "add",
+"create", or "confirm" for a CareerPilot product action, you must include the
+matching hidden action directive in the same turn. Do not say an action is
+proposed unless the directive is present.
 
 Allowed hidden action directive format:
 <careerpilot_action>
@@ -161,6 +348,7 @@ Allowed action types:
 - open_route: href must be a CareerPilot route from the app map.
 - prefill_job_search: include label, query, optional location, optional auto.
 - create_goal_with_todos: include one goal and at most five todos. This only proposes; the user must confirm.
+- create_roadmap_with_tasks: include at most four goals and at most twelve todos total. This only proposes; the user must confirm.
 - create_todo: include one todo. This only proposes; the user must confirm.
 - save_application: include label, job_id, optional status. This only proposes; the user must confirm.
 - update_application_status: include label, application_id, status. This only proposes; the user must confirm.
@@ -180,11 +368,16 @@ For first-run onboarding, behave like a smart conversation, not a rigid form:
 """
 
     system_prompt = (
-        "You are CareerPilot, an expert career co-pilot. "
-        "You help users find jobs, improve their CVs, write cover letters, and plan their careers. "
-        "Always ground your answers in the user's actual CV context when available. "
+        "You are CareerPilot, the user's expert career co-pilot. "
+        "Your job is to help them make progress: find jobs, judge readiness, improve their CV, "
+        "write tailored application material, prepare interviews, and turn advice into goals and tasks. "
+        "Be warm, direct, and useful. Avoid generic chatbot filler. "
+        "Always ground answers in the user's actual CV context when available. "
         "Only reference experience, skills, education, or projects that appear in the CV context. "
-        "If CV context is missing, say what you can do after a CV is uploaded instead of inventing background.\n\n"
+        "If CV context is missing, say what you can do after a CV/profile is added instead of inventing background. "
+        "When giving career advice, make it specific enough that the user can act on it today. "
+        "When proposing product actions, remember that navigation is safe but tracker/application mutations require explicit UI confirmation. "
+        f"Current UTC timestamp: {_now_iso()}\n\n"
         f"User CV context:\n{cv_context or 'No CV data available.'}"
         f"{action_rules}"
     )
@@ -205,14 +398,27 @@ For first-run onboarding, behave like a smart conversation, not a rigid form:
             model=_MODEL,
             messages=groq_messages,
             stream=True,
-            temperature=0.4,
-            max_tokens=1024,
+            temperature=0.35,
+            max_tokens=1800,
         )
         for chunk in stream:
             token = chunk.choices[0].delta.content or ""
             if token:
                 full_reply.append(token)
                 yield f"data: {json.dumps({'token': token})}\n\n"
+
+        visible_reply = "".join(full_reply)
+        if not _has_hidden_action(visible_reply):
+            fallback_action = _fallback_action_for_turn(
+                message=message,
+                history=history,
+                client_context=client_context,
+                visible_reply=visible_reply,
+            )
+            if fallback_action:
+                directive = _hidden_action(fallback_action)
+                full_reply.append(directive)
+                yield f"data: {json.dumps({'token': directive})}\n\n"
 
         # 5. Save assistant's answer once fully streamed
         await save_message(

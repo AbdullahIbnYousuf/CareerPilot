@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from services.copilot import (
     execute_action,
+    get_context_snapshot,
     get_preferences,
     list_action_events,
     patch_preferences,
@@ -42,6 +43,10 @@ class CopilotTodoDraft(BaseModel):
     due_date: Optional[str] = None
 
 
+class CopilotRoadmapGoalDraft(CopilotGoalDraft):
+    todos: list[CopilotTodoDraft] = Field(default_factory=list)
+
+
 class CopilotActionInput(BaseModel):
     type: str
     label: Optional[str] = None
@@ -50,6 +55,7 @@ class CopilotActionInput(BaseModel):
     location: Optional[str] = None
     auto: Optional[bool] = None
     goal: Optional[CopilotGoalDraft] = None
+    goals: list[CopilotRoadmapGoalDraft] = Field(default_factory=list)
     todos: list[CopilotTodoDraft] = Field(default_factory=list)
     todo: Optional[CopilotTodoDraft] = None
     job_id: Optional[str] = None
@@ -74,6 +80,11 @@ def _action_payload(action: CopilotActionInput) -> dict[str, Any]:
 @router.get("/preferences")
 async def read_preferences(user_id: str = Query(...)):
     return {"preferences": await get_preferences(user_id)}
+
+
+@router.get("/context")
+async def read_context(user_id: str = Query(...)):
+    return {"context": await get_context_snapshot(user_id)}
 
 
 @router.patch("/preferences")

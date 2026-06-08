@@ -18,7 +18,7 @@ ApplicationStatus = Literal["saved", "applied", "interviewing", "offer", "reject
 
 APPLICATION_STATUSES: set[str] = {"saved", "applied", "interviewing", "offer", "rejected"}
 TRACKER_VIEWS: set[str] = {"today", "applications", "goals_tasks", "calendar", "progress"}
-ROUTES: set[str] = {"/tracker", "/jobs", "/chat", "/cv"}
+ROUTES: set[str] = {"/tracker", "/jobs", "/chat", "/cv", "/cv/preview"}
 CV_PARAMS: set[str] = {"upload", "build", "preview"}
 JOB_PARAMS: set[str] = {"query", "location", "auto"}
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -77,6 +77,9 @@ def _is_allowed_href(href: str) -> bool:
             return True
         return param_keys.issubset(CV_PARAMS) and all(values == ["1"] for values in params.values())
 
+    if parsed.path == "/cv/preview":
+        return not param_keys
+
     if parsed.path == "/jobs":
         return param_keys.issubset(JOB_PARAMS)
 
@@ -112,6 +115,133 @@ async def get_preferences(user_id: str) -> dict[str, Any]:
         "target_start_date": None,
         "industries": [],
         "updated_at": None,
+    }
+
+
+async def get_context_snapshot(user_id: str) -> dict[str, Any]:
+    today = datetime.now(timezone.utc).date().isoformat()
+    preferences = await get_preferences(user_id)
+
+    profile: dict[str, Any] | None = None
+    try:
+        profile_result = await supabase.table("profiles").select(
+            "user_id, active_cv_id, headline, location, skills, updated_at"
+        ).eq("user_id", user_id).limit(1).execute()
+        if profile_result.data:
+            profile = profile_result.data[0]
+    except Exception:
+        profile = None
+
+    application_counts = {status: 0 for status in APPLICATION_STATUSES}
+    high_fit_saved_jobs: list[dict[str, Any]] = []
+    interviewing_applications: list[dict[str, Any]] = []
+
+    try:
+        app_result = await supabase.table("applications").select(
+            "id, status, job_id, applied_at"
+        ).eq("user_id", user_id).execute()
+        applications = app_result.data or []
+        for application in applications:
+            status = _clean_text(application.get("status"))
+            if status in application_counts:
+                application_counts[status] += 1
+
+        job_ids = list({
+            _clean_text(application.get("job_id"))
+            for application in applications
+            if _clean_text(application.get("job_id"))
+        })
+        jobs_map: dict[str, dict[str, Any]] = {}
+        if job_ids:
+            try:
+                jobs_result = await supabase.table("jobs").select(
+                    "id, title, company, location, fit_score, url"
+                ).in_("id", job_ids).execute()
+            except Exception:
+                jobs_result = await supabase.table("jobs").select(
+                    "id, title, company, location, fit_score"
+                ).in_("id", job_ids).execute()
+            jobs_map = {job["id"]: job for job in jobs_result.data or []}
+
+        for application in applications:
+            job = jobs_map.get(_clean_text(application.get("job_id")))
+            if not job:
+                continue
+            fit_score = job.get("fit_score")
+            summary = {
+                "application_id": application.get("id"),
+                "job_id": job.get("id"),
+                "title": job.get("title"),
+                "company": job.get("company"),
+                "location": job.get("location"),
+                "fit_score": fit_score,
+            }
+            if (
+                application.get("status") == "saved"
+                and isinstance(fit_score, (int, float))
+                and fit_score >= 70
+            ):
+                high_fit_saved_jobs.append(summary)
+            if application.get("status") == "interviewing":
+                interviewing_applications.append(summary)
+    except Exception:
+        pass
+
+    try:
+        todos_result = await supabase.table("todos").select(
+            "id, title, due_date, completed"
+        ).eq("user_id", user_id).eq("completed", False).order(
+            "due_date", desc=False
+        ).limit(25).execute()
+        todos = todos_result.data or []
+    except Exception:
+        todos = []
+
+    due_today = [
+        todo for todo in todos
+        if _clean_text(todo.get("due_date")) == today
+    ]
+    overdue = [
+        todo for todo in todos
+        if _clean_text(todo.get("due_date")) and _clean_text(todo.get("due_date")) < today
+    ]
+
+    try:
+        goals_result = await supabase.table("goals").select(
+            "id, title, target_date, completed"
+        ).eq("user_id", user_id).eq("completed", False).order(
+            "target_date", desc=False
+        ).limit(10).execute()
+        active_goals = goals_result.data or []
+    except Exception:
+        active_goals = []
+
+    skills = profile.get("skills") if profile else []
+    top_skills = skills[:8] if isinstance(skills, list) else []
+
+    return {
+        "profile_status": "has_profile" if profile and profile.get("active_cv_id") else "no_profile",
+        "profile": {
+            "headline": profile.get("headline") if profile else None,
+            "location": profile.get("location") if profile else None,
+            "top_skills": top_skills,
+            "updated_at": profile.get("updated_at") if profile else None,
+        },
+        "preferences": preferences,
+        "applications": {
+            "counts": application_counts,
+            "high_fit_saved_jobs": high_fit_saved_jobs[:3],
+            "interviewing": interviewing_applications[:3],
+        },
+        "goals": {
+            "active_count": len(active_goals),
+            "next": active_goals[:3],
+        },
+        "todos": {
+            "due_today_count": len(due_today),
+            "overdue_count": len(overdue),
+            "next": todos[:5],
+        },
     }
 
 
@@ -271,6 +401,53 @@ async def validate_action(user_id: str, action: dict[str, Any], source: str = "w
         }
         return _base_response(normalized, f"Create goal: {title}", True)
 
+    if action_type == "create_roadmap_with_tasks":
+        goals_in = action.get("goals") if isinstance(action.get("goals"), list) else []
+        if not label:
+            raise ValueError("A roadmap needs a label.")
+        if not goals_in:
+            raise ValueError("A roadmap needs at least one goal.")
+        if len(goals_in) > 4:
+            raise ValueError("A roadmap can include at most four goals.")
+
+        total_todos = 0
+        goals = []
+        for goal in goals_in:
+            if not isinstance(goal, dict):
+                raise ValueError("Each roadmap goal must be an object.")
+            title = _clean_text(goal.get("title"))
+            if not title:
+                raise ValueError("Each roadmap goal needs a title.")
+            todos_in = goal.get("todos") if isinstance(goal.get("todos"), list) else []
+            if len(todos_in) > 5:
+                raise ValueError("Each roadmap goal can include at most five tasks.")
+
+            todos = []
+            for todo in todos_in:
+                if not isinstance(todo, dict):
+                    raise ValueError("Each roadmap task must be an object.")
+                todo_title = _clean_text(todo.get("title"))
+                if not todo_title:
+                    raise ValueError("Each roadmap task needs a title.")
+                todos.append({"title": todo_title, "due_date": _valid_date(todo.get("due_date"))})
+
+            total_todos += len(todos)
+            goals.append({
+                "title": title,
+                "target_date": _valid_date(goal.get("target_date")),
+                "todos": todos,
+            })
+
+        if total_todos > 12:
+            raise ValueError("A roadmap can include at most twelve tasks.")
+
+        normalized = {
+            "type": action_type,
+            "label": label,
+            "goals": goals,
+        }
+        return _base_response(normalized, f"Create roadmap: {len(goals)} goals", True)
+
     if action_type == "save_application":
         job_id = _clean_text(action.get("job_id"))
         status = _clean_text(action.get("status")) or "saved"
@@ -373,6 +550,35 @@ async def execute_action(user_id: str, action: dict[str, Any], source: str = "wi
                 if todo_result.data:
                     todo_rows.append(todo_result.data[0])
             created_records = {"goal": goal_row, "todos": todo_rows}
+            href = "/tracker?view=goals_tasks"
+
+        elif action_type == "create_roadmap_with_tasks":
+            goal_rows = []
+            todo_rows = []
+            for goal in normalized["goals"]:
+                goal_result = await supabase.table("goals").insert({
+                    "user_id": user_id,
+                    "title": goal["title"],
+                    "target_date": goal.get("target_date"),
+                    "completed": False,
+                }).execute()
+                if not goal_result.data:
+                    raise ValueError("Failed to create roadmap goal.")
+                goal_row = goal_result.data[0]
+                goal_rows.append(goal_row)
+
+                for todo in goal["todos"]:
+                    todo_result = await supabase.table("todos").insert({
+                        "user_id": user_id,
+                        "goal_id": goal_row["id"],
+                        "title": todo["title"],
+                        "due_date": todo.get("due_date"),
+                        "completed": False,
+                    }).execute()
+                    if todo_result.data:
+                        todo_rows.append(todo_result.data[0])
+
+            created_records = {"goals": goal_rows, "todos": todo_rows}
             href = "/tracker?view=goals_tasks"
 
         elif action_type == "save_application":
