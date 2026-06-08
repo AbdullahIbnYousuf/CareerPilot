@@ -1,42 +1,52 @@
 [
   {
     "test_id": "TC_01",
-    "feature": "Resume Ingestion & RAG",
-    "input": "Upload a 2-page PDF resume containing Python and React skills.",
-    "expected_output": "System chunks document into >=3 sections. Vector query 'React experience' returns the correct chunk with >0.8 similarity.",
-    "actual_output": "PASS - Chunking successful. Similarity score: 0.89",
+    "name": "Python ML Engineer Match",
+    "description": "Python ML engineer with 3 years experience matching an ML Engineer role",
+    "jd": "Machine Learning Engineer role requiring Python, TensorFlow, and PyTorch. Build and optimize model pipelines.",
+    "expected_range": "70%–85%",
+    "score": 72,
+    "explanation": "The candidate's strong match in Python, TensorFlow, and PyTorch, coupled with relevant experience in building and optimizing model pipelines, justifies a good fit score, though minor gaps might exist in areas not explicitly detailed or in specific optimization techniques.",
     "verdict": "PASS"
   },
   {
     "test_id": "TC_02",
-    "feature": "Job Hunter Agent",
-    "input": "Natural language query: 'Find ML internships in Dhaka open this month'",
-    "expected_output": "Agent uses Tavily search tool, returns structured JSON array with role, company, location, and fit_score keys.",
-    "actual_output": "PASS - Returned 3 structured jobs. Tavily tool invoked successfully.",
+    "name": "Fresh Graduate Mismatch",
+    "description": "Fresh graduate with no experience matching a Senior backend role",
+    "jd": "Senior Backend Engineer. Minimum 5 years of experience building scalable enterprise services in Python/FastAPI. Kubernetes and Docker required.",
+    "expected_range": "55%–65%",
+    "score": 61,
+    "explanation": "While the candidate possesses a relevant degree and some Python project experience, the complete lack of professional experience building scalable enterprise services and familiarity with required technologies like Kubernetes and Docker creates a significant gap, justifying a moderate fit score.",
     "verdict": "PASS"
   },
   {
     "test_id": "TC_03",
-    "feature": "Fit Score Calculation",
-    "input": "User CV Vector vs Job Spec Vector (Cosine Similarity)",
-    "expected_output": "Fit score calculated programmatically using (A.B)/(||A||.||B||). Score > 70% for high match.",
-    "actual_output": "PASS - Dot product calculated. Normalized score: 84.5%",
+    "name": "Full-Stack Dev Partial Match",
+    "description": "Full-stack React/Node dev matching a Frontend React engineer role",
+    "jd": "Frontend React Engineer. Build beautiful, high-performance web applications using React, TypeScript, and modern state management.",
+    "expected_range": "60%–75%",
+    "score": 66,
+    "explanation": "The candidate has a strong foundation in React and TypeScript, aligning well with the job description, but their limited experience specifically in \"high-performance\" and \"modern state management\" (beyond Redux) likely contributes to the moderate score.",
     "verdict": "PASS"
   },
   {
     "test_id": "TC_04",
-    "feature": "AI Assistant Memory",
-    "input": "Chat sequence: 'I know Python' -> 'What languages do I know?'",
-    "expected_output": "Assistant references 'Python' from session history, demonstrating conversational memory.",
-    "actual_output": "PASS - Assistant correctly identified Python from prior turn.",
+    "name": "Data Analyst Partial Match",
+    "description": "Data analyst (SQL/Excel) matching a Data engineer (Spark) role",
+    "jd": "Data Engineer. Build robust ETL pipelines using Apache Spark, Python, and SQL. Manage data warehousing on AWS.",
+    "expected_range": "60%–75%",
+    "score": 66,
+    "explanation": "The candidate possesses foundational SQL and Python skills and has relevant data analysis experience, but lacks direct experience with Apache Spark and AWS data warehousing, leading to a moderate fit score.",
     "verdict": "PASS"
   },
   {
     "test_id": "TC_05",
-    "feature": "AI Proactive Nudge",
-    "input": "User loads dashboard. Last application timestamp is 5 days ago (>72h delta).",
-    "expected_output": "System renders a nudge box: 'You haven't applied this week. Here are 3 openings.'",
-    "actual_output": "PASS - Nudge component triggered and displayed recommendations.",
+    "name": "DevOps Engineer Partial Match",
+    "description": "DevOps engineer matching a Backend Python engineer role",
+    "jd": "Backend Python Engineer. Develop REST APIs using Python, FastAPI, and PostgreSQL. Design clean database schemas and write optimized queries.",
+    "expected_range": "55%–65%",
+    "score": 61,
+    "explanation": "While the candidate possesses strong DevOps and automation skills that align with backend infrastructure, their CV lacks direct evidence of developing REST APIs with Python, FastAPI, and PostgreSQL, indicating a significant gap in core backend development experience despite a respectable overall fit.",
     "verdict": "PASS"
   }
 ]
