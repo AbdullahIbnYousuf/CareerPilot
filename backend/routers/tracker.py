@@ -479,6 +479,13 @@ async def update_goal(goal_id: str, req: UpdateGoalRequest):
     return {"goal": result.data[0]}
 
 
+@router.delete("/goals/{goal_id}")
+async def delete_goal(goal_id: str):
+    """Delete a goal without deleting its linked todos."""
+    await supabase.table("goals").delete().eq("id", goal_id).execute()
+    return {"status": "deleted"}
+
+
 # ─── Todos ───────────────────────────────────────────────────────────────────
 
 @router.get("/todos")

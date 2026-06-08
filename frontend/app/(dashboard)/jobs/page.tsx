@@ -179,6 +179,14 @@ function JobsPageContent() {
       if (storageKey) {
         localStorage.setItem(storageKey, JSON.stringify(state));
       }
+      void fetch(`${baseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mark_step_complete: "job_review",
+          feature_exposure: { feature: "jobs_results" },
+        }),
+      }).catch(() => undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -245,42 +253,42 @@ function JobsPageContent() {
       {/* Page header */}
       <div className="space-y-1">
         <div className="flex items-center gap-2 mb-1">
-          <div className="h-6 w-6 rounded-md bg-primary/20 flex items-center justify-center">
+          <div className="h-6 w-6 rounded-md border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] flex items-center justify-center">
             <Briefcase className="h-3.5 w-3.5 text-primary" />
           </div>
-          <span className="text-xs font-semibold text-primary uppercase tracking-widest">AI-Powered</span>
+          <span className="text-xs font-semibold text-[var(--cp-copper-strong)] uppercase tracking-widest">AI-Powered</span>
         </div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Job Hunter</h1>
-        <p className="text-white/40 text-sm mt-1">
+        <h1 className="font-display text-4xl font-semibold tracking-normal text-[var(--cp-text-main)]">Job Hunter</h1>
+        <p className="text-[var(--cp-text-muted)] text-sm mt-1">
           Search for jobs and get personalized fit scores based on your CV.
         </p>
       </div>
 
       {/* Search bar */}
       <form onSubmit={handleSearch} className="relative">
-        <div className="flex flex-col sm:flex-row gap-3 p-4 rounded-2xl border border-white/[0.06] bg-[#0E0E12]">
+        <div className="cp-surface flex flex-col sm:flex-row gap-3 p-4 rounded-2xl">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20 pointer-events-none" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--cp-text-subtle)] pointer-events-none" />
             <Input
               placeholder="Job title, skills, or company..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="pl-9 h-11 bg-white/[0.04] border-white/[0.06] text-white placeholder:text-white/20 focus-visible:border-primary/50 focus-visible:ring-primary/20 rounded-xl"
+              className="pl-9 h-11 rounded-xl"
             />
           </div>
           <div className="relative flex-1 sm:max-w-[200px]">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/20 pointer-events-none" />
+            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--cp-text-subtle)] pointer-events-none" />
             <Input
               placeholder="City or Remote"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              className="pl-9 h-11 bg-white/[0.04] border-white/[0.06] text-white placeholder:text-white/20 focus-visible:border-primary/50 focus-visible:ring-primary/20 rounded-xl"
+              className="pl-9 h-11 rounded-xl"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="h-11 px-6 flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] hover:from-[#5E55CC] hover:to-[#7A73DD] disabled:opacity-50 text-white text-sm font-medium transition-all duration-200 shadow-lg shadow-primary/20 shrink-0"
+            className="h-11 px-6 flex items-center gap-2 rounded-xl border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] via-[var(--cp-copper)] to-[var(--cp-copper-strong)] disabled:opacity-50 text-[var(--cp-bg-deep)] text-sm font-semibold transition-all duration-200 shadow-lg shadow-[var(--cp-glow-copper)] hover:brightness-110 shrink-0"
           >
             {loading ? (
               <>
@@ -306,14 +314,14 @@ function JobsPageContent() {
       {/* Results */}
       {jobs.length > 0 ? (
         <>
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl border border-white/[0.06] bg-[#0E0E12]/80 backdrop-blur-md">
+          <div className="cp-surface flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-xl backdrop-blur-md">
             <div>
-              <p className="text-sm font-semibold text-white">Top ranked matches</p>
-              <p className="text-xs text-white/30 mt-0.5">Sorted by your CV fit score.</p>
+              <p className="text-sm font-semibold text-[var(--cp-text-main)]">Best matches</p>
+              <p className="text-xs text-[var(--cp-text-muted)] mt-0.5">Sorted by your CV fit score.</p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-emerald-400 px-2">
+            <div className="flex items-center gap-1.5 text-xs text-[var(--cp-champagne)] px-2">
               <Sparkles className="h-4 w-4" />
-              <span>Scored and ranked</span>
+              <span>CV-ranked</span>
             </div>
           </div>
 
@@ -324,27 +332,27 @@ function JobsPageContent() {
           </div>
         </>
       ) : searched && !loading ? (
-        <div className="flex h-[300px] items-center justify-center rounded-2xl border border-dashed border-white/[0.06]">
+        <div className="cp-map-lines flex h-[300px] items-center justify-center rounded-2xl border border-dashed border-[var(--cp-border-medium)] bg-[rgba(255,255,255,0.015)]">
           <div className="flex flex-col items-center text-center max-w-sm gap-3">
-            <div className="h-12 w-12 rounded-2xl bg-white/[0.04] flex items-center justify-center">
-              <Search className="h-5 w-5 text-white/20" />
+            <div className="h-12 w-12 rounded-2xl bg-[rgba(201,130,74,0.12)] border border-[var(--cp-border-medium)] flex items-center justify-center">
+              <Search className="h-5 w-5 text-[var(--cp-champagne)]" />
             </div>
             <div>
-              <p className="font-semibold text-white/50">No jobs found</p>
-              <p className="text-sm text-white/25 mt-1">Try different keywords or broaden your location.</p>
+              <p className="font-semibold text-[var(--cp-text-soft)]">No jobs found</p>
+              <p className="text-sm text-[var(--cp-text-muted)] mt-1">Try different keywords or broaden your location.</p>
             </div>
           </div>
         </div>
       ) : !searched ? (
-        <div className="flex h-[320px] items-center justify-center rounded-2xl border border-dashed border-white/[0.05]">
+        <div className="cp-map-lines flex h-[320px] items-center justify-center rounded-2xl border border-dashed border-[var(--cp-border-medium)] bg-[rgba(255,255,255,0.015)]">
           <div className="flex flex-col items-center text-center max-w-sm gap-4">
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-primary/20 to-primary/10 flex items-center justify-center shadow-lg shadow-primary/10">
+            <div className="h-14 w-14 rounded-2xl bg-[rgba(201,130,74,0.14)] border border-[var(--cp-border-medium)] flex items-center justify-center shadow-lg shadow-[var(--cp-glow-copper)]">
               <Briefcase className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <p className="font-semibold text-white/60">Ready to hunt</p>
-              <p className="text-sm text-white/25 mt-1">
-                Enter a job title and location above to find jobs and personalize fit scores.
+              <p className="font-semibold text-[var(--cp-text-soft)]">Ready to discover</p>
+              <p className="text-sm text-[var(--cp-text-muted)] mt-1">
+                Enter a job title and location to find roles and personalize fit scores.
               </p>
             </div>
           </div>

@@ -199,6 +199,13 @@ export interface CVUploadResult {
   message: string;
 }
 
+export interface ProfileSaveResult {
+  profile: UserProfile;
+  cv_id: string;
+  chunks_stored: number;
+  message: string;
+}
+
 export type CopilotProfileStatus = "unknown" | "no_profile" | "has_profile";
 
 export interface CopilotOnboardingState {
@@ -221,12 +228,55 @@ export interface CopilotContextOnboarding {
   completed?: boolean;
 }
 
+export type CopilotAppState = Record<string, unknown>;
+
 export interface CopilotClientContext {
   current_path: string;
   current_page_label: string;
   profile_status: CopilotProfileStatus;
   onboarding: CopilotContextOnboarding;
+  preferences?: CareerPreferences;
+  copilot_state?: CopilotGuideState;
+  app_state?: CopilotAppState;
   app_map: string;
+}
+
+export interface CareerPreferences {
+  user_id: string;
+  preferred_name?: string | null;
+  target_roles: string[];
+  preferred_locations: string[];
+  work_modes: string[];
+  seniority?: string | null;
+  weekly_capacity_hours?: number | null;
+  target_start_date?: string | null;
+  industries: string[];
+  updated_at?: string | null;
+}
+
+export type CopilotGuideStep =
+  | "welcome"
+  | "preferences"
+  | "profile_setup"
+  | "job_search"
+  | "job_review"
+  | "applications"
+  | "goals_tasks"
+  | "calendar"
+  | "progress"
+  | "today";
+
+export type CopilotGuidanceLevel = "first_run" | "guided" | "light" | "minimal";
+
+export interface CopilotGuideState {
+  onboarding: CopilotContextOnboarding;
+  completed_steps: CopilotGuideStep[];
+  remaining_steps: CopilotGuideStep[];
+  feature_exposures: Record<string, { count?: number; last_seen_at?: string }>;
+  guidance_level: CopilotGuidanceLevel;
+  next_step?: CopilotGuideStep | null;
+  next_step_prompt?: string | null;
+  guide_steps?: CopilotGuideStep[];
 }
 
 export interface CopilotOpenRouteAction {
@@ -253,11 +303,21 @@ export interface CopilotTodoDraft {
   due_date?: string | null;
 }
 
+export interface CopilotRoadmapGoalDraft extends CopilotGoalDraft {
+  todos: CopilotTodoDraft[];
+}
+
 export interface CopilotCreateGoalWithTodosAction {
   type: "create_goal_with_todos";
   label: string;
   goal: CopilotGoalDraft;
   todos: CopilotTodoDraft[];
+}
+
+export interface CopilotCreateRoadmapAction {
+  type: "create_roadmap_with_tasks";
+  label: string;
+  goals: CopilotRoadmapGoalDraft[];
 }
 
 export interface CopilotCreateTodoAction {
@@ -266,8 +326,88 @@ export interface CopilotCreateTodoAction {
   todo: CopilotTodoDraft;
 }
 
+export interface CopilotPrefillGoalWithTodosAction {
+  type: "prefill_goal_with_todos";
+  label: string;
+  goal: CopilotGoalDraft;
+  todos: CopilotTodoDraft[];
+}
+
+export interface CopilotPrefillTodoAction {
+  type: "prefill_todo";
+  label: string;
+  todo: CopilotTodoDraft;
+}
+
+export interface CopilotSaveApplicationAction {
+  type: "save_application";
+  label: string;
+  job_id: string;
+  status?: ApplicationStatus;
+}
+
+export interface CopilotUpdateApplicationStatusAction {
+  type: "update_application_status";
+  label: string;
+  application_id: string;
+  status: ApplicationStatus;
+}
+
+export interface CopilotSaveApplicationNoteAction {
+  type: "save_application_note";
+  label: string;
+  application_id: string;
+  note: string;
+}
+
+export interface CopilotPrefillApplicationNoteAction {
+  type: "prefill_application_note";
+  label: string;
+  application_id: string;
+  note: string;
+}
+
+export interface CopilotFeatureExplainerAction {
+  type: "show_feature_explainer";
+  label: string;
+  feature: string;
+  body?: string;
+  href?: string | null;
+}
+
 export type CopilotAction =
   | CopilotOpenRouteAction
   | CopilotPrefillJobSearchAction
   | CopilotCreateGoalWithTodosAction
-  | CopilotCreateTodoAction;
+  | CopilotCreateRoadmapAction
+  | CopilotCreateTodoAction
+  | CopilotPrefillGoalWithTodosAction
+  | CopilotPrefillTodoAction
+  | CopilotSaveApplicationAction
+  | CopilotUpdateApplicationStatusAction
+  | CopilotSaveApplicationNoteAction
+  | CopilotPrefillApplicationNoteAction
+  | CopilotFeatureExplainerAction;
+
+export interface CopilotValidatedAction {
+  valid: boolean;
+  action: CopilotAction;
+  action_type: CopilotAction["type"];
+  label: string;
+  summary: string;
+  is_mutating: boolean;
+  confirmation_label: string;
+  href?: string;
+}
+
+export interface CopilotActionEvent {
+  id: string;
+  user_id: string;
+  action_type: string;
+  status: "validated" | "executed" | "rejected" | "failed";
+  source: string;
+  summary?: string | null;
+  created_records: Record<string, unknown>;
+  error?: string | null;
+  created_at: string;
+}

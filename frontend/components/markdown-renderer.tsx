@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 
@@ -41,9 +42,21 @@ function CopyButton({ text }: { text: string }) {
 function InlineMarkdown({ text }: { text: string }) {
   // Process bold (**text**), inline code (`code`), and plain text
   const parts: React.ReactNode[] = [];
-  const regex = /(\*\*(.+?)\*\*|`([^`]+)`)/g;
+  const regex = /(\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\))/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
+
+  const isSafeInternalHref = (href: string) =>
+    href.startsWith("/") && !href.startsWith("//");
+
+  const isSafeExternalHref = (href: string) => {
+    try {
+      const url = new URL(href);
+      return url.protocol === "http:" || url.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
@@ -59,11 +72,39 @@ function InlineMarkdown({ text }: { text: string }) {
       parts.push(
         <code
           key={match.index}
-          className="bg-white/[0.08] text-[#AFA9EC] px-1.5 py-0.5 rounded text-[0.8em] font-mono"
+          className="bg-white/[0.08] text-[var(--cp-champagne)] px-1.5 py-0.5 rounded text-[0.8em] font-mono"
         >
           {match[3]}
         </code>
       );
+    } else {
+      const label = match[4];
+      const href = match[5];
+      if (isSafeInternalHref(href)) {
+        parts.push(
+          <Link
+            key={match.index}
+            href={href}
+            className="text-[var(--cp-champagne)] underline underline-offset-2 hover:text-[var(--cp-text-main)]"
+          >
+            {label}
+          </Link>
+        );
+      } else if (isSafeExternalHref(href)) {
+        parts.push(
+          <a
+            key={match.index}
+            href={href}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-[var(--cp-champagne)] underline underline-offset-2 hover:text-[var(--cp-text-main)]"
+          >
+            {label}
+          </a>
+        );
+      } else {
+        parts.push(match[0]);
+      }
     }
     lastIndex = match.index + match[0].length;
   }
@@ -157,7 +198,7 @@ export function MarkdownRenderer({
           <ul key={`${idx}-ul-${i}`} className="my-2 space-y-1 pl-1">
             {bullets.map((b, bi) => (
               <li key={bi} className="flex items-start gap-2 text-white/80">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#AFA9EC]/60" />
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--cp-copper-strong)]/60" />
                 <InlineMarkdown text={b} />
               </li>
             ))}
@@ -181,7 +222,7 @@ export function MarkdownRenderer({
           >
             {items.map((item, ii) => (
               <li key={ii} className="flex items-start gap-2.5 text-white/80">
-                <span className="mt-0.5 min-w-[1.25rem] text-xs font-mono text-[#AFA9EC]/60 text-right">
+                <span className="mt-0.5 min-w-[1.25rem] text-xs font-mono text-[var(--cp-copper-strong)]/70 text-right">
                   {ii + 1}.
                 </span>
                 <InlineMarkdown text={item} />

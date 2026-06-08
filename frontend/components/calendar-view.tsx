@@ -79,9 +79,9 @@ const ITEM_TYPE_META: Record<
   },
   goal: {
     label: "Goal",
-    dot: "bg-[#7C74DB]",
+    dot: "bg-[var(--cp-copper-strong)]",
     icon: Target,
-    accent: "text-[#AFA9EC]",
+    accent: "text-[var(--cp-champagne)]",
   },
   job_deadline: {
     label: "Job deadline",
@@ -294,24 +294,24 @@ export function CalendarView() {
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-      <Card className="rounded-2xl border border-white/[0.06] bg-[#0E0E12] shadow-xl shadow-black/30 lg:col-span-2">
+      <Card className="rounded-2xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] shadow-xl shadow-black/30 lg:col-span-2">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
-            <CalendarIcon className="h-4 w-4 text-[#7C74DB]" />
+            <CalendarIcon className="h-4 w-4 text-[var(--cp-copper-strong)]" />
             {MONTH_NAMES[viewDate.getMonth()]} {viewDate.getFullYear()}
           </CardTitle>
           <div className="flex gap-1.5">
             <button
               onClick={prevMonth}
               id="calendar-prev-btn"
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] text-white/50 transition-colors hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.08)] hover:text-white"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
               onClick={nextMonth}
               id="calendar-next-btn"
-              className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.03] text-white/50 transition-colors hover:bg-white/[0.06] hover:text-white"
+              className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] text-white/50 transition-colors hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.08)] hover:text-white"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -358,18 +358,18 @@ export function CalendarView() {
                   onClick={() => setSelectedDate(dateStr)}
                   className={`flex h-14 flex-col items-center justify-between rounded-xl border p-2 transition-all duration-150 ${
                     isSelected
-                      ? "border-[#7C74DB]/60 bg-[#7C74DB]/10 shadow-lg shadow-[#7C74DB]/5"
+                      ? "border-[var(--cp-border-strong)] bg-[rgba(201,130,74,0.12)] shadow-lg shadow-[rgba(201,130,74,0.10)]"
                       : isToday
-                        ? "border-[#534AB7]/40 bg-[#534AB7]/5"
-                        : "border-white/[0.04] bg-transparent hover:border-white/[0.10] hover:bg-white/[0.02]"
+                        ? "border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.06)]"
+                        : "border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.06)]"
                   }`}
                 >
                   <span
                     className={`text-sm font-semibold leading-none ${
                       isSelected
-                        ? "text-[#AFA9EC]"
+                        ? "text-[var(--cp-champagne)]"
                         : isToday
-                          ? "text-[#7C74DB]"
+                          ? "text-[var(--cp-copper-strong)]"
                           : "text-white/70"
                     }`}
                   >
@@ -392,7 +392,7 @@ export function CalendarView() {
         </CardContent>
       </Card>
 
-      <Card className="rounded-2xl border border-white/[0.06] bg-[#0E0E12] shadow-xl shadow-black/30">
+      <Card className="rounded-2xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] shadow-xl shadow-black/30">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-bold text-white">
             {new Date(`${selectedDate}T12:00:00`).toLocaleDateString("en-US", {
@@ -405,7 +405,7 @@ export function CalendarView() {
         <CardContent>
           {loading ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-[#7C74DB]" />
+              <Loader2 className="h-5 w-5 animate-spin text-[var(--cp-copper-strong)]" />
             </div>
           ) : selectedItems.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
@@ -447,8 +447,8 @@ function CalendarItemRow({
         onClick={() => onToggleTodo(item.todo)}
         className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all duration-200 ${
           item.completed
-            ? "border-white/[0.03] bg-white/[0.01] opacity-50"
-            : "border-white/[0.06] bg-white/[0.03] hover:border-white/[0.12]"
+            ? "border-[var(--cp-border-soft)] bg-[rgba(24,23,22,0.68)] opacity-50"
+            : "border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.06)]"
         }`}
       >
         {item.completed ? (
@@ -476,7 +476,7 @@ function CalendarItemRow({
   }
 
   const content = (
-    <div className="flex w-full items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3 text-left">
+    <div className="flex w-full items-start gap-3 rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3 text-left">
       <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${meta.accent}`} />
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex items-center gap-1.5">

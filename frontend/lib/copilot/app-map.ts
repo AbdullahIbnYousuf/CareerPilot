@@ -45,15 +45,27 @@ export const COPILOT_ROUTES = {
   },
   "/cv": {
     label: "Profile",
-    purpose: "CV upload, profile intelligence, and editable career profile.",
+    purpose: "CV upload, manual profile building, and editable profile intelligence.",
+  },
+  "/cv/preview": {
+    label: "Resume Preview",
+    purpose: "Dedicated resume preview and print/export page generated from the saved profile.",
   },
 } as const;
 
 export const ALLOWED_COPILOT_ACTIONS = [
   "open_route",
   "prefill_job_search",
+  "prefill_goal_with_todos",
+  "prefill_todo",
+  "prefill_application_note",
   "create_goal_with_todos",
+  "create_roadmap_with_tasks",
   "create_todo",
+  "save_application",
+  "update_application_status",
+  "save_application_note",
+  "show_feature_explainer",
 ] as const;
 
 const ALLOWED_ROUTE_PATHS = Object.keys(COPILOT_ROUTES);
@@ -72,10 +84,22 @@ function isValidDateOnly(value: unknown): value is string {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
-export function pageLabelForPath(pathname: string): string {
-  const route = ALLOWED_ROUTE_PATHS.find((allowedPath) =>
-    pathname === allowedPath || pathname.startsWith(`${allowedPath}/`),
+function isApplicationStatus(value: unknown): value is "saved" | "applied" | "interviewing" | "offer" | "rejected" {
+  return (
+    value === "saved" ||
+    value === "applied" ||
+    value === "interviewing" ||
+    value === "offer" ||
+    value === "rejected"
   );
+}
+
+export function pageLabelForPath(pathname: string): string {
+  const route = [...ALLOWED_ROUTE_PATHS]
+    .sort((a, b) => b.length - a.length)
+    .find((allowedPath) =>
+      pathname === allowedPath || pathname.startsWith(`${allowedPath}/`),
+    );
   return route ? COPILOT_ROUTES[route as keyof typeof COPILOT_ROUTES].label : "CareerPilot";
 }
 
@@ -97,14 +121,21 @@ export function isAllowedCopilotHref(href: string): boolean {
 
   if (path === "/tracker") {
     if (paramKeys.length === 0) return true;
-    if (paramKeys.some((key) => key !== "view")) return false;
+    if (paramKeys.some((key) => !["view", "draft"].includes(key))) return false;
     const view = params.get("view");
-    return Boolean(view && TRACKER_VIEW_KEYS.includes(view));
+    if (!view || !TRACKER_VIEW_KEYS.includes(view)) return false;
+    const draft = params.get("draft");
+    return draft === null || draft === "1";
   }
 
   if (path === "/cv") {
     if (paramKeys.length === 0) return true;
-    return paramKeys.every((key) => key === "upload") && params.get("upload") === "1";
+    const allowedCvParams = ["upload", "build"];
+    return paramKeys.every((key) => allowedCvParams.includes(key) && params.get(key) === "1");
+  }
+
+  if (path === "/cv/preview") {
+    return paramKeys.length === 0;
   }
 
   if (path === "/jobs") {
@@ -181,6 +212,80 @@ export function validateCopilotAction(value: unknown): CopilotAction | null {
     };
   }
 
+  if (value.type === "prefill_goal_with_todos") {
+    if (!isNonEmptyString(value.label) || !isPlainObject(value.goal)) return null;
+    if (!isNonEmptyString(value.goal.title)) return null;
+    if (!isValidDateOnly(value.goal.target_date)) return null;
+    if (!Array.isArray(value.todos) || value.todos.length > 5) return null;
+
+    const todos = value.todos
+      .filter(isPlainObject)
+      .map((todo) => ({
+        title: typeof todo.title === "string" ? todo.title.trim() : "",
+        due_date: isValidDateOnly(todo.due_date) && todo.due_date ? todo.due_date : null,
+      }))
+      .filter((todo) => todo.title.length > 0);
+
+    if (todos.length !== value.todos.length) return null;
+
+    return {
+      type: "prefill_goal_with_todos",
+      label: value.label.trim(),
+      goal: {
+        title: value.goal.title.trim(),
+        target_date:
+          isValidDateOnly(value.goal.target_date) && value.goal.target_date
+            ? value.goal.target_date
+            : null,
+      },
+      todos,
+    };
+  }
+
+  if (value.type === "create_roadmap_with_tasks") {
+    if (!isNonEmptyString(value.label) || !Array.isArray(value.goals)) return null;
+    if (value.goals.length === 0 || value.goals.length > 4) return null;
+
+    let totalTodos = 0;
+    const goals = value.goals
+      .filter(isPlainObject)
+      .map((goal) => {
+        const todosInput = Array.isArray(goal.todos) ? goal.todos : [];
+        if (!isNonEmptyString(goal.title)) return null;
+        if (!isValidDateOnly(goal.target_date)) return null;
+        if (todosInput.length > 5) return null;
+
+        const todos = todosInput
+          .filter(isPlainObject)
+          .map((todo) => ({
+            title: typeof todo.title === "string" ? todo.title.trim() : "",
+            due_date: isValidDateOnly(todo.due_date) && todo.due_date ? todo.due_date : null,
+          }))
+          .filter((todo) => todo.title.length > 0);
+
+        if (todos.length !== todosInput.length) return null;
+        totalTodos += todos.length;
+
+        return {
+          title: goal.title.trim(),
+          target_date:
+            isValidDateOnly(goal.target_date) && goal.target_date
+              ? goal.target_date
+              : null,
+          todos,
+        };
+      });
+
+    if (goals.some((goal) => goal === null) || goals.length !== value.goals.length) return null;
+    if (totalTodos > 12) return null;
+
+    return {
+      type: "create_roadmap_with_tasks",
+      label: value.label.trim(),
+      goals: goals as NonNullable<(typeof goals)[number]>[],
+    };
+  }
+
   if (value.type === "create_todo") {
     if (!isNonEmptyString(value.label) || !isPlainObject(value.todo)) return null;
     if (!isNonEmptyString(value.todo.title)) return null;
@@ -198,6 +303,80 @@ export function validateCopilotAction(value: unknown): CopilotAction | null {
     };
   }
 
+  if (value.type === "prefill_todo") {
+    if (!isNonEmptyString(value.label) || !isPlainObject(value.todo)) return null;
+    if (!isNonEmptyString(value.todo.title)) return null;
+    if (!isValidDateOnly(value.todo.due_date)) return null;
+    return {
+      type: "prefill_todo",
+      label: value.label.trim(),
+      todo: {
+        title: value.todo.title.trim(),
+        due_date:
+          isValidDateOnly(value.todo.due_date) && value.todo.due_date
+            ? value.todo.due_date
+            : null,
+      },
+    };
+  }
+
+  if (value.type === "save_application") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.job_id)) return null;
+    if (value.status !== undefined && !isApplicationStatus(value.status)) return null;
+    return {
+      type: "save_application",
+      label: value.label.trim(),
+      job_id: value.job_id.trim(),
+      status: value.status,
+    };
+  }
+
+  if (value.type === "update_application_status") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.application_id)) return null;
+    if (!isApplicationStatus(value.status)) return null;
+    return {
+      type: "update_application_status",
+      label: value.label.trim(),
+      application_id: value.application_id.trim(),
+      status: value.status,
+    };
+  }
+
+  if (value.type === "save_application_note") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.application_id)) return null;
+    if (!isNonEmptyString(value.note)) return null;
+    return {
+      type: "save_application_note",
+      label: value.label.trim(),
+      application_id: value.application_id.trim(),
+      note: value.note.trim(),
+    };
+  }
+
+  if (value.type === "prefill_application_note") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.application_id)) return null;
+    if (!isNonEmptyString(value.note)) return null;
+    return {
+      type: "prefill_application_note",
+      label: value.label.trim(),
+      application_id: value.application_id.trim(),
+      note: value.note.trim(),
+    };
+  }
+
+  if (value.type === "show_feature_explainer") {
+    if (!isNonEmptyString(value.label) || !isNonEmptyString(value.feature)) return null;
+    const href = typeof value.href === "string" ? value.href.trim() : "";
+    if (href && !isAllowedCopilotHref(href)) return null;
+    return {
+      type: "show_feature_explainer",
+      label: value.label.trim(),
+      feature: value.feature.trim(),
+      body: typeof value.body === "string" ? value.body.trim() : undefined,
+      href: href || null,
+    };
+  }
+
   return null;
 }
 
@@ -205,10 +384,16 @@ export function buildCopilotContext({
   currentPath,
   profileStatus,
   onboarding,
+  preferences,
+  copilotState,
+  appState,
 }: {
   currentPath: string;
   profileStatus: CopilotProfileStatus;
   onboarding: CopilotOnboardingState;
+  preferences?: CopilotClientContext["preferences"];
+  copilotState?: CopilotClientContext["copilot_state"];
+  appState?: CopilotClientContext["app_state"];
 }): CopilotClientContext {
   const routeDescriptions = Object.entries(COPILOT_ROUTES)
     .map(([href, route]) => `${route.label}: ${href} (${route.purpose})`)
@@ -230,10 +415,19 @@ export function buildCopilotContext({
       workMode: onboarding.workMode || undefined,
       careerStage: onboarding.careerStage || undefined,
     },
+    preferences,
+    copilot_state: copilotState,
+    app_state: appState,
     app_map: [
       `Routes: ${routeDescriptions}`,
+      "Profile route helpers: /cv?upload=1 opens CV upload, /cv?build=1 opens manual profile building, /cv/preview opens resume preview/export when a profile exists.",
+      "If profile_status is no_profile, offer Upload CV or Build profile manually. Do not generate, create, or overwrite profile data automatically.",
+      "After a profile is saved, suggest Preview Resume or Search Jobs when helpful.",
       `My Journey views: ${viewDescriptions}`,
       `Allowed actions: ${actionDescriptions}`,
+      "Use prefill_goal_with_todos or prefill_todo when the user wants to review a plan before clicking Create in Goals & Tasks.",
+      "Use show_feature_explainer when the user needs to understand a feature before moving on.",
+      "Application and tracker mutations require backend validation and explicit user confirmation.",
       "Action directives must be hidden in <careerpilot_action>{json}</careerpilot_action>.",
     ].join("\n"),
   };

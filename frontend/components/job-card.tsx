@@ -133,6 +133,14 @@ export function JobCard({
       }
 
       setSavedToTracker(true);
+      void fetch(`${baseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mark_step_complete: "applications",
+          feature_exposure: { feature: "save_to_applications" },
+        }),
+      }).catch(() => undefined);
     } catch (err) {
       setSavedToTracker(false);
       setSaveToTrackerError(err instanceof Error ? err.message : "Failed to save job to tracker.");
@@ -183,23 +191,23 @@ export function JobCard({
   return (
     <>
       {/* ── Card ── */}
-      <div className="group relative flex flex-col rounded-2xl border border-white/[0.06] bg-[#0E0E12] overflow-hidden transition-all duration-300 hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5">
+      <div className="group cp-surface relative flex flex-col rounded-2xl overflow-hidden transition-all duration-300 hover:border-[var(--cp-border-medium)]">
         {/* Hover glow strip */}
-        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[var(--cp-champagne)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
         {/* Header */}
         <div className="p-5 pb-4">
           <div className="flex justify-between items-start gap-3">
             <div className="flex-1 min-w-0">
-              <h3 className="text-base font-semibold text-white leading-snug line-clamp-2 group-hover:text-primary transition-colors duration-200">
+              <h3 className="text-base font-semibold text-[var(--cp-text-main)] leading-snug line-clamp-2 group-hover:text-[var(--cp-champagne)] transition-colors duration-200">
                 {job.title}
               </h3>
               <div className="flex flex-col gap-1 mt-2">
                 <span className="flex items-center gap-1.5 text-sm">
-                  <Building2 className="h-3.5 w-3.5 shrink-0 text-white/30" />
-                  <span className="truncate font-medium text-white/70">{job.company || "Unknown"}</span>
+                  <Building2 className="h-3.5 w-3.5 shrink-0 text-[var(--cp-text-subtle)]" />
+                  <span className="truncate font-medium text-[var(--cp-text-soft)]">{job.company || "Unknown"}</span>
                 </span>
-                <span className="flex items-center gap-1.5 text-xs text-white/30">
+                <span className="flex items-center gap-1.5 text-xs text-[var(--cp-text-muted)]">
                   <MapPin className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{job.location || "N/A"}</span>
                 </span>
@@ -214,7 +222,7 @@ export function JobCard({
         </div>
 
         {/* Meta row */}
-        <div className="mx-5 mb-4 flex items-center gap-3 rounded-xl bg-white/[0.03] border border-white/[0.04] px-3 py-2 text-xs text-white/30">
+        <div className="mx-5 mb-4 flex items-center gap-3 rounded-xl bg-white/[0.03] border border-[var(--cp-border-soft)] px-3 py-2 text-xs text-[var(--cp-text-muted)]">
           <span className="flex items-center gap-1.5">
             <DollarSign className="h-3.5 w-3.5 text-primary/60" />
             {salary}
@@ -228,12 +236,12 @@ export function JobCard({
 
         {/* Description */}
         <div className="px-5 flex-1">
-          <p className="text-sm text-white/40 line-clamp-3 leading-relaxed">{cleanDescription}</p>
+          <p className="text-sm text-[var(--cp-text-muted)] line-clamp-3 leading-relaxed">{cleanDescription}</p>
         </div>
 
         {/* Footer */}
-        <div className="px-5 pb-5 pt-4 mt-3 border-t border-white/[0.04] flex items-center gap-2">
-          <span className="text-[10px] text-white/20 bg-white/[0.04] px-2 py-0.5 rounded-md font-mono uppercase tracking-wider">
+        <div className="px-5 pb-5 pt-4 mt-3 border-t border-[var(--cp-border-soft)] flex items-center gap-2">
+          <span className="text-[10px] text-[var(--cp-text-subtle)] bg-white/[0.04] px-2 py-0.5 rounded-md font-mono uppercase tracking-wider">
             {job.source}
           </span>
           <div className="flex flex-wrap justify-end gap-2 ml-auto items-center min-w-0">
@@ -246,7 +254,7 @@ export function JobCard({
                 className={`h-7 inline-flex shrink-0 whitespace-nowrap items-center gap-1.5 px-2.5 rounded-lg text-[11px] font-medium border transition-all duration-200 ${
                   savedToTracker
                     ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-default"
-                    : "border-white/[0.06] bg-white/[0.02] text-white/40 hover:text-white/70 hover:border-primary/30 hover:bg-primary/10"
+                    : "border-[var(--cp-border-soft)] bg-white/[0.02] text-[var(--cp-text-muted)] hover:text-[var(--cp-text-main)] hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.10)]"
                 } disabled:opacity-60`}
               >
                 {savedToTracker ? (
@@ -266,7 +274,7 @@ export function JobCard({
               variant="ghost"
               size="sm"
               onClick={() => setShowModal(true)}
-              className="text-xs text-white/40 hover:text-white hover:bg-white/[0.06] rounded-lg gap-1"
+              className="text-xs rounded-lg gap-1"
             >
               Details <ChevronRight className="h-3 w-3" />
             </Button>
@@ -274,7 +282,7 @@ export function JobCard({
               href={job.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary/90 hover:bg-primary text-white text-xs font-medium px-3 py-1.5 transition-colors duration-150"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] text-[var(--cp-bg-deep)] text-xs font-semibold px-3 py-1.5 transition-all duration-150 hover:brightness-110"
             >
               Apply <ExternalLink className="h-3 w-3" />
             </a>
@@ -291,14 +299,14 @@ export function JobCard({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
           onClick={(e) => e.target === e.currentTarget && setShowModal(false)}
         >
-          <div className="w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 overflow-hidden">
+          <div className="cp-surface-elevated w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden">
             {/* Modal header */}
-            <div className="flex justify-between items-start p-6 border-b border-white/[0.06] bg-white/[0.02]">
+            <div className="flex justify-between items-start p-6 border-b border-[var(--cp-border-soft)] bg-white/[0.02]">
               <div className="flex-1 min-w-0 pr-4">
                 <span className="text-[10px] text-white/20 bg-white/[0.05] px-2 py-0.5 rounded font-mono uppercase tracking-wider">
                   {job.source}
                 </span>
-                <h2 className="text-xl font-bold text-white mt-2 leading-snug">{job.title}</h2>
+                <h2 className="font-display text-2xl font-semibold text-[var(--cp-text-main)] mt-2 leading-snug">{job.title}</h2>
                 <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-white/40">
                   <span className="flex items-center gap-1.5 text-white/70 font-medium">
                     <Building2 className="h-4 w-4 text-white/30" /> {job.company}
@@ -320,13 +328,13 @@ export function JobCard({
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
               {/* Fit score calculation section */}
               {hasFitScore ? (
-                <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-primary/5 border border-primary/15 p-4">
+                <div className="flex flex-col md:flex-row gap-4 items-center md:items-start rounded-xl bg-[rgba(201,130,74,0.08)] border border-[var(--cp-border-medium)] p-4">
                   <div className="shrink-0">
                     <FitScoreBadge score={localFitScore} />
                   </div>
                   <div className="space-y-1 text-center md:text-left flex-1">
-                    <p className="text-xs font-semibold text-primary uppercase tracking-wider">Fit Match</p>
-                    <p className="text-sm text-white/60 italic leading-relaxed">
+                    <p className="text-xs font-semibold text-[var(--cp-copper-strong)] uppercase tracking-wider">Fit Match</p>
+                    <p className="text-sm text-[var(--cp-text-muted)] italic leading-relaxed">
                       &ldquo;{localFitExplanation}&rdquo;
                     </p>
                   </div>
@@ -341,7 +349,7 @@ export function JobCard({
                   ) : (
                     <button
                       onClick={handleCheckFitScore}
-                      className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] hover:from-[#5E55CC] hover:to-[#7A73DD] text-white text-sm font-medium py-3 px-4 transition-all duration-200 shadow-md shadow-primary/10"
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] via-[var(--cp-copper)] to-[var(--cp-copper-strong)] text-[var(--cp-bg-deep)] text-sm font-semibold py-3 px-4 transition-all duration-200 shadow-md shadow-[var(--cp-glow-copper)] hover:brightness-110"
                     >
                       <Sparkles className="h-4 w-4 text-white animate-pulse" />
                       Check My Fit Score
@@ -354,7 +362,7 @@ export function JobCard({
               )}
 
               {/* Quick info */}
-              <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.03] border border-white/[0.05] p-4 text-xs">
+              <div className="grid grid-cols-2 gap-4 rounded-xl bg-white/[0.03] border border-[var(--cp-border-soft)] p-4 text-xs">
                 <div className="space-y-1">
                   <span className="text-white/30 block">Salary Range</span>
                   <span className="text-white font-semibold flex items-center gap-1.5">

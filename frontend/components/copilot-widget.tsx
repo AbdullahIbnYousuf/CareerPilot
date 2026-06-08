@@ -13,13 +13,16 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Bot,
   Calendar,
+  ChevronDown,
   CheckCircle2,
   ExternalLink,
   Loader2,
   MapPin,
   Maximize2,
+  MessageSquare,
   Minus,
   Navigation,
+  Plus,
   Search,
   Send,
   Target,
@@ -35,14 +38,17 @@ import {
   isAllowedCopilotHref,
   validateCopilotAction,
 } from "@/lib/copilot/app-map";
+import { getCopilotActionSuccessMessage } from "@/lib/copilot/action-guidance";
+import { saveApplicationNoteDraft, saveGoalsTasksDraft } from "@/lib/copilot/drafts";
 import type {
+  CareerPreferences,
   CopilotAction,
   CopilotClientContext,
+  CopilotGuideState,
+  CopilotGuideStep,
   CopilotOnboardingState,
   CopilotProfileStatus,
-  CopilotTodoDraft,
-  Goal,
-  Todo,
+  CopilotValidatedAction,
 } from "@/types";
 
 type PanelState = "closed" | "open" | "minimized";
@@ -51,6 +57,22 @@ type LocalMessage = {
   role: "user" | "assistant";
   content: string;
   actions?: CopilotAction[];
+};
+type ChatMessageRow = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+type ChatSessionRow = {
+  id: string;
+  title: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+type ChatSessionSummary = {
+  id: string;
+  title: string;
+  updatedAt: string;
 };
 type ActionExecutionState = {
   status: "idle" | "loading" | "success" | "error";
@@ -63,6 +85,11 @@ type PanelPosition = {
 };
 
 const ACTION_PATTERN = /<careerpilot_action>\s*([\s\S]*?)\s*<\/careerpilot_action>/g;
+const ONBOARDING_PATTERN = /<careerpilot_onboarding>\s*([\s\S]*?)\s*<\/careerpilot_onboarding>/g;
+const DEFAULT_SESSION_TITLE = "New conversation";
+const COPILOT_SESSION_KEY_PREFIX = "careerpilot:copilot-chat:";
+const ACTIVE_SESSION_KEY_PREFIX = "careerpilot:active-chat:";
+const ACTIVE_CHAT_CHANGED_EVENT = "careerpilot:active-chat-changed";
 
 const DEFAULT_ONBOARDING: CopilotOnboardingState = {
   completed: false,
@@ -73,6 +100,19 @@ const DEFAULT_ONBOARDING: CopilotOnboardingState = {
   careerStage: "",
   lastStep: "name",
   updatedAt: "",
+};
+
+const DEFAULT_PREFERENCES: CareerPreferences = {
+  user_id: "",
+  preferred_name: null,
+  target_roles: [],
+  preferred_locations: [],
+  work_modes: [],
+  seniority: null,
+  weekly_capacity_hours: null,
+  target_start_date: null,
+  industries: [],
+  updated_at: null,
 };
 
 const PANEL_MARGIN = 16;
@@ -95,6 +135,22 @@ function onboardingKey(userId: string): string {
   return `careerpilot:onboarding:v1:${userId}`;
 }
 
+function copilotSessionKey(userId: string): string {
+  return `${COPILOT_SESSION_KEY_PREFIX}${userId}`;
+}
+
+function activeSessionStorageKey(userId: string): string {
+  return `${ACTIVE_SESSION_KEY_PREFIX}${userId}`;
+}
+
+function dispatchActiveChatChanged(userId: string, sessionId: string): void {
+  window.dispatchEvent(
+    new CustomEvent(ACTIVE_CHAT_CHANGED_EVENT, {
+      detail: { userId, sessionId },
+    }),
+  );
+}
+
 function normalizeOnboarding(value: unknown): CopilotOnboardingState {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return { ...DEFAULT_ONBOARDING };
@@ -115,26 +171,25 @@ function normalizeOnboarding(value: unknown): CopilotOnboardingState {
   };
 }
 
-function initialAssistantMessage(onboarding: CopilotOnboardingState): LocalMessage {
+function initialAssistantContent(onboarding: CopilotOnboardingState): string {
   if (onboarding.completed) {
     const name = onboarding.name ? `, ${onboarding.name}` : "";
-    return {
-      id: messageId(),
-      role: "assistant",
-      content: `Welcome back${name}. What should we move forward today?`,
-    };
+    return `Welcome back${name}. What should we move forward today?`;
   }
 
+  return "Hi, I am CareerPilot. I will help turn your CV into job matches, applications, goals, and next steps. What can I call you?";
+}
+
+function initialAssistantMessage(onboarding: CopilotOnboardingState): LocalMessage {
   return {
     id: messageId(),
     role: "assistant",
-    content:
-      "Hi, I am CareerPilot. I will help turn your CV into job matches, applications, goals, and next steps. What can I call you?",
+    content: initialAssistantContent(onboarding),
   };
 }
 
-function stripActionDirectives(content: string): string {
-  return content.replace(ACTION_PATTERN, "").trim();
+function stripHiddenDirectives(content: string): string {
+  return content.replace(ACTION_PATTERN, "").replace(ONBOARDING_PATTERN, "").trim();
 }
 
 function extractActions(content: string): CopilotAction[] {
@@ -154,29 +209,156 @@ function extractActions(content: string): CopilotAction[] {
   return actions;
 }
 
-function parseTargetRoles(input: string): string[] {
-  return input
-    .split(/,|\/|\band\b/i)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 4);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseLocationAndMode(input: string): Pick<CopilotOnboardingState, "location" | "workMode"> {
-  const normalized = input.toLowerCase();
-  const modes = ["remote", "hybrid", "on-site", "onsite", "any"];
-  const matchedMode = modes.find((mode) => normalized.includes(mode));
-  const workMode = matchedMode === "onsite" ? "on-site" : matchedMode ?? "any";
-  const location = input
-    .replace(/\b(remote|hybrid|on-site|onsite|any)\b/gi, "")
-    .replace(/[(),]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function cleanText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  return cleaned.length > 0 ? cleaned : undefined;
+}
 
-  return {
-    location: location || input.trim(),
-    workMode,
+function normalizeName(value: unknown): string | undefined {
+  const cleaned = cleanText(value);
+  if (!cleaned) return undefined;
+
+  const lower = cleaned.toLowerCase();
+  const looksLikeSentence =
+    /\s/.test(cleaned) &&
+    !/^[a-z]+(?:[-'][a-z]+)?(?:\s+[a-z]+(?:[-'][a-z]+)?){0,2}$/i.test(cleaned);
+  if (looksLikeSentence || /^(hi|hello|hey|my name|i am|i'm|im)\b/.test(lower)) {
+    return undefined;
+  }
+
+  return cleaned
+    .split(" ")
+    .slice(0, 3)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function normalizeRoles(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const roles = value
+    .map(cleanText)
+    .filter((item): item is string => Boolean(item))
+    .slice(0, 4);
+  return roles.length > 0 ? roles : undefined;
+}
+
+function normalizeWorkMode(value: unknown): string | undefined {
+  const cleaned = cleanText(value)?.toLowerCase();
+  if (!cleaned) return undefined;
+  if (cleaned === "onsite") return "on-site";
+  if (["remote", "hybrid", "on-site", "any"].includes(cleaned)) return cleaned;
+  return undefined;
+}
+
+function deriveLastStep(onboarding: CopilotOnboardingState): CopilotOnboardingState["lastStep"] {
+  if (onboarding.completed) return "complete";
+  if (!onboarding.name) return "name";
+  if (onboarding.targetRoles.length === 0) return "target_role";
+  if (!onboarding.location && !onboarding.workMode) return "location_work_mode";
+  if (!onboarding.careerStage) return "career_stage";
+  return "complete";
+}
+
+function applyOnboardingPatch(
+  current: CopilotOnboardingState,
+  patch: Record<string, unknown>,
+): CopilotOnboardingState {
+  const next: CopilotOnboardingState = {
+    ...current,
+    updatedAt: new Date().toISOString(),
   };
+
+  const name = normalizeName(patch.name);
+  if (name) next.name = name;
+
+  const targetRoles = normalizeRoles(patch.targetRoles ?? patch.target_roles);
+  if (targetRoles) next.targetRoles = targetRoles;
+
+  const location = cleanText(patch.location);
+  if (location) next.location = location;
+
+  const workMode = normalizeWorkMode(patch.workMode ?? patch.work_mode);
+  if (workMode) next.workMode = workMode;
+
+  const careerStage = cleanText(patch.careerStage ?? patch.career_stage);
+  if (careerStage) next.careerStage = careerStage;
+
+  const hasRequiredFields =
+    Boolean(next.name) &&
+    next.targetRoles.length > 0 &&
+    Boolean(next.location || next.workMode) &&
+    Boolean(next.careerStage);
+  next.completed = patch.completed === true && hasRequiredFields ? true : hasRequiredFields;
+  next.lastStep = deriveLastStep(next);
+
+  return next;
+}
+
+function mergePreferencesIntoOnboarding(
+  current: CopilotOnboardingState,
+  preferences: CareerPreferences,
+): CopilotOnboardingState {
+  const next: CopilotOnboardingState = {
+    ...current,
+    name: current.name || preferences.preferred_name || "",
+    targetRoles: current.targetRoles.length > 0 ? current.targetRoles : preferences.target_roles,
+    location: current.location || preferences.preferred_locations[0] || "",
+    workMode: current.workMode || preferences.work_modes[0] || "",
+    updatedAt: new Date().toISOString(),
+  };
+  next.completed =
+    Boolean(next.name) &&
+    next.targetRoles.length > 0 &&
+    Boolean(next.location || next.workMode) &&
+    Boolean(next.careerStage);
+  next.lastStep = deriveLastStep(next);
+  return next;
+}
+
+function mergeCopilotStateIntoOnboarding(
+  current: CopilotOnboardingState,
+  state?: CopilotGuideState | null,
+): CopilotOnboardingState {
+  if (!state?.onboarding) return current;
+  const onboarding = state.onboarding;
+  const next: CopilotOnboardingState = {
+    ...current,
+    name: current.name || onboarding.name || "",
+    targetRoles:
+      current.targetRoles.length > 0
+        ? current.targetRoles
+        : onboarding.targetRoles ?? [],
+    location: current.location || onboarding.location || "",
+    workMode: current.workMode || onboarding.workMode || "",
+    careerStage: current.careerStage || onboarding.careerStage || "",
+    completed: Boolean(onboarding.completed) || current.completed,
+    updatedAt: new Date().toISOString(),
+  };
+  next.lastStep = deriveLastStep(next);
+  return next;
+}
+
+function extractOnboardingPatch(content: string): Record<string, unknown> | null {
+  let patch: Record<string, unknown> | null = null;
+  const matches = content.matchAll(ONBOARDING_PATTERN);
+
+  for (const match of matches) {
+    try {
+      const parsed = JSON.parse(match[1]) as unknown;
+      if (isPlainObject(parsed)) {
+        patch = { ...(patch ?? {}), ...parsed };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return patch;
 }
 
 function formatDraftDate(date?: string | null): string {
@@ -188,6 +370,32 @@ function formatDraftDate(date?: string | null): string {
   });
 }
 
+function mapChatSession(row: ChatSessionRow): ChatSessionSummary {
+  return {
+    id: row.id,
+    title: row.title || DEFAULT_SESSION_TITLE,
+    updatedAt: row.updated_at ?? row.created_at ?? new Date().toISOString(),
+  };
+}
+
+function sortChatSessions(sessions: ChatSessionSummary[]): ChatSessionSummary[] {
+  return [...sessions].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+  );
+}
+
+function truncateSessionTitle(title: string, limit = 30): string {
+  const cleaned = title.trim() || DEFAULT_SESSION_TITLE;
+  return cleaned.length > limit ? `${cleaned.slice(0, limit)}...` : cleaned;
+}
+
+function guideStepForPath(pathname: string): CopilotGuideStep | null {
+  if (pathname.startsWith("/cv")) return "profile_setup";
+  if (pathname.startsWith("/jobs")) return "job_search";
+  if (pathname.startsWith("/tracker")) return "today";
+  return null;
+}
+
 export function CopilotWidget() {
   const pathname = usePathname();
   const router = useRouter();
@@ -196,8 +404,13 @@ export function CopilotWidget() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState("");
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+  const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
   const [profileStatus, setProfileStatus] = useState<CopilotProfileStatus>("unknown");
   const [onboarding, setOnboarding] = useState<CopilotOnboardingState>(DEFAULT_ONBOARDING);
+  const [preferences, setPreferences] = useState<CareerPreferences | null>(null);
+  const [copilotState, setCopilotState] = useState<CopilotGuideState | null>(null);
   const [actionStates, setActionStates] = useState<Record<string, ActionExecutionState>>({});
   const [connectionError, setConnectionError] = useState("");
   const [panelPosition, setPanelPosition] = useState<PanelPosition | null>(null);
@@ -291,6 +504,7 @@ export function CopilotWidget() {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (panelRef.current?.contains(target)) return;
+      setIsSessionMenuOpen(false);
       setPanelState("minimized");
     };
 
@@ -319,6 +533,84 @@ export function CopilotWidget() {
     return () => window.removeEventListener("resize", handleResize);
   }, [clampPanelPosition]);
 
+  const loadSessionMessages = useCallback(
+    async (id: string, sessionId: string, greetingOnboarding: CopilotOnboardingState) => {
+      const { data: messageRows } = await supabase
+        .from("chat_messages")
+        .select("id, role, content")
+        .eq("user_id", id)
+        .eq("session_id", sessionId)
+        .order("created_at", { ascending: true })
+        .limit(50);
+
+      const persistedMessages = ((messageRows as ChatMessageRow[] | null) ?? [])
+        .filter((row) => row.role === "user" || row.role === "assistant")
+        .map((row) => ({
+          id: row.id,
+          role: row.role,
+          content: row.content,
+        }));
+
+      setActionStates({});
+
+      if (persistedMessages.length > 0) {
+        setMessages(persistedMessages);
+        return;
+      }
+
+      const greeting = initialAssistantMessage(greetingOnboarding);
+      setMessages([greeting]);
+
+      await supabase.from("chat_messages").insert({
+        user_id: id,
+        session_id: sessionId,
+        role: "assistant",
+        content: greeting.content,
+      });
+    },
+    [],
+  );
+
+  const loadChatSessions = useCallback(async (id: string) => {
+    const { data } = await supabase
+      .from("chat_sessions")
+      .select("id, title, created_at, updated_at")
+      .eq("user_id", id)
+      .order("updated_at", { ascending: false });
+
+    const loadedSessions = sortChatSessions(((data as ChatSessionRow[] | null) ?? []).map(mapChatSession));
+    setSessions(loadedSessions);
+    return loadedSessions;
+  }, []);
+
+  const activateSession = useCallback(
+    async (id: string, sessionId: string, greetingOnboarding: CopilotOnboardingState) => {
+      const { data: sessionRows } = await supabase
+        .from("chat_sessions")
+        .select("id, title, created_at, updated_at")
+        .eq("user_id", id)
+        .eq("id", sessionId)
+        .limit(1);
+
+      const sessionExists = ((sessionRows as ChatSessionRow[] | null) ?? []).length > 0;
+      if (!sessionExists) return false;
+
+      sessionIdRef.current = sessionId;
+      setActiveSessionId(sessionId);
+      window.localStorage.setItem(activeSessionStorageKey(id), sessionId);
+      window.localStorage.setItem(copilotSessionKey(id), sessionId);
+      setSessions((current) =>
+        sortChatSessions([
+          ...((sessionRows as ChatSessionRow[] | null) ?? []).map(mapChatSession),
+          ...current.filter((session) => session.id !== sessionId),
+        ]),
+      );
+      await loadSessionMessages(id, sessionId, greetingOnboarding);
+      return true;
+    },
+    [loadSessionMessages],
+  );
+
   useEffect(() => {
     const loadUser = async () => {
       const { data, error } = await supabase.auth.getUser();
@@ -340,8 +632,88 @@ export function CopilotWidget() {
         }
       }
       setOnboarding(parsed);
-      setMessages([initialAssistantMessage(parsed)]);
-      setPanelState(parsed.completed ? "minimized" : "open");
+      setPanelState("minimized");
+
+      try {
+        const prefResponse = await fetch(
+          `${apiBaseUrl}/copilot/preferences?user_id=${encodeURIComponent(id)}`,
+        );
+        if (prefResponse.ok) {
+          const prefBody = (await prefResponse.json()) as { preferences?: CareerPreferences };
+          const loadedPreferences = prefBody.preferences ?? { ...DEFAULT_PREFERENCES, user_id: id };
+          setPreferences(loadedPreferences);
+          const merged = mergePreferencesIntoOnboarding(parsed, loadedPreferences);
+          parsed = merged;
+          setOnboarding(merged);
+        }
+      } catch {
+        setPreferences({ ...DEFAULT_PREFERENCES, user_id: id });
+      }
+
+      try {
+        const contextResponse = await fetch(
+          `${apiBaseUrl}/copilot/context?user_id=${encodeURIComponent(id)}`,
+        );
+        if (contextResponse.ok) {
+          const body = (await contextResponse.json()) as {
+            context?: {
+              profile_status?: CopilotProfileStatus;
+              copilot?: CopilotGuideState;
+            };
+          };
+          if (body.context?.copilot) {
+            setCopilotState(body.context.copilot);
+            parsed = mergeCopilotStateIntoOnboarding(parsed, body.context.copilot);
+            setOnboarding(parsed);
+          }
+          if (
+            body.context?.profile_status === "has_profile" ||
+            body.context?.profile_status === "no_profile"
+          ) {
+            setProfileStatus(body.context.profile_status);
+          }
+        }
+      } catch {
+        /* Context refresh should not block chat startup. */
+      }
+
+      const loadedSessions = await loadChatSessions(id);
+      const storedActiveSessionId = window.localStorage.getItem(activeSessionStorageKey(id));
+      const storedWidgetSessionId = window.localStorage.getItem(copilotSessionKey(id));
+      const nextSession =
+        loadedSessions.find((session) => session.id === storedActiveSessionId) ??
+        loadedSessions.find((session) => session.id === storedWidgetSessionId) ??
+        loadedSessions[0];
+      let nextSessionId = nextSession?.id ?? generateUUID();
+      let sessionReady = Boolean(nextSession);
+
+      if (!sessionReady) {
+        nextSessionId = generateUUID();
+        const now = new Date().toISOString();
+        const { error: insertSessionError } = await supabase.from("chat_sessions").insert({
+          id: nextSessionId,
+          user_id: id,
+          title: DEFAULT_SESSION_TITLE,
+          created_at: now,
+          updated_at: now,
+        });
+        sessionReady = !insertSessionError;
+        if (sessionReady) {
+          setSessions([{ id: nextSessionId, title: DEFAULT_SESSION_TITLE, updatedAt: now }]);
+        }
+      }
+
+      sessionIdRef.current = nextSessionId;
+      setActiveSessionId(nextSessionId);
+      window.localStorage.setItem(activeSessionStorageKey(id), nextSessionId);
+      window.localStorage.setItem(copilotSessionKey(id), nextSessionId);
+
+      if (sessionReady) {
+        await loadSessionMessages(id, nextSessionId, parsed);
+      } else {
+        setActionStates({});
+        setMessages([initialAssistantMessage(parsed)]);
+      }
 
       try {
         const response = await fetch(
@@ -359,7 +731,36 @@ export function CopilotWidget() {
     };
 
     void loadUser();
-  }, [apiBaseUrl]);
+  }, [activateSession, apiBaseUrl, loadChatSessions, loadSessionMessages]);
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const syncActiveSession = async (sessionId: string | null) => {
+      if (!sessionId || sessionId === sessionIdRef.current) return;
+      await activateSession(userId, sessionId, onboarding);
+    };
+
+    const handleActiveChatChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string; sessionId?: string }>).detail;
+      if (detail?.userId !== userId) return;
+      void syncActiveSession(detail.sessionId ?? null);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== activeSessionStorageKey(userId)) return;
+      void syncActiveSession(event.newValue);
+    };
+
+    window.addEventListener(ACTIVE_CHAT_CHANGED_EVENT, handleActiveChatChanged);
+    window.addEventListener("storage", handleStorage);
+    void syncActiveSession(window.localStorage.getItem(activeSessionStorageKey(userId)));
+
+    return () => {
+      window.removeEventListener(ACTIVE_CHAT_CHANGED_EVENT, handleActiveChatChanged);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [activateSession, onboarding, userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -368,6 +769,38 @@ export function CopilotWidget() {
       JSON.stringify({ ...onboarding, updatedAt: new Date().toISOString() }),
     );
   }, [onboarding, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const step = guideStepForPath(pathname);
+    if (!step) return;
+
+    const markStep = async () => {
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mark_step_complete: step,
+              feature_exposure: { feature: pathname },
+            }),
+          },
+        );
+        if (response.ok) {
+          const body = (await response.json()) as { state?: CopilotGuideState };
+          if (body.state) {
+            setCopilotState(body.state);
+          }
+        }
+      } catch {
+        /* Step tracking is best effort. */
+      }
+    };
+
+    void markStep();
+  }, [apiBaseUrl, pathname, userId]);
 
   useEffect(() => {
     const handleCvUpdated = (event: Event) => {
@@ -394,7 +827,7 @@ export function CopilotWidget() {
           ],
         },
       ]);
-      setPanelState("open");
+      setPanelState("minimized");
     };
 
     window.addEventListener("careerpilot:cv-updated", handleCvUpdated);
@@ -409,8 +842,10 @@ export function CopilotWidget() {
         currentPath: pathname,
         profileStatus,
         onboarding,
+        preferences: preferences ?? undefined,
+        copilotState: copilotState ?? undefined,
       }),
-    [onboarding, pathname, profileStatus],
+    [copilotState, onboarding, pathname, preferences, profileStatus],
   );
 
   const appendAssistantMessage = useCallback((content: string, actions?: CopilotAction[]) => {
@@ -425,89 +860,95 @@ export function CopilotWidget() {
     ]);
   }, []);
 
-  const finishOnboardingWithCvStatus = useCallback(
-    (nextOnboarding: CopilotOnboardingState) => {
-      const name = nextOnboarding.name ? `${nextOnboarding.name}, ` : "";
-      if (profileStatus === "has_profile") {
-        const role = nextOnboarding.targetRoles[0] ?? "software engineer";
-        appendAssistantMessage(`${name}you are set. Want me to start with matching jobs?`, [
+  const persistPreferencesFromOnboarding = useCallback(
+    async (nextOnboarding: CopilotOnboardingState) => {
+      if (!userId) return;
+
+      const payload = {
+        preferred_name: nextOnboarding.name || undefined,
+        target_roles: nextOnboarding.targetRoles,
+        preferred_locations: nextOnboarding.location ? [nextOnboarding.location] : [],
+        work_modes: nextOnboarding.workMode ? [nextOnboarding.workMode] : [],
+        seniority: nextOnboarding.careerStage || undefined,
+      };
+
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/copilot/preferences?user_id=${encodeURIComponent(userId)}`,
           {
-            type: "prefill_job_search",
-            label: `Search ${role} roles`,
-            query: role,
-            location: nextOnboarding.location,
-            auto: true,
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
           },
-        ]);
-        return;
+        );
+        if (response.ok) {
+          const body = (await response.json()) as { preferences?: CareerPreferences };
+          if (body.preferences) setPreferences(body.preferences);
+        }
+      } catch {
+        /* Preference persistence should not block chat. */
       }
 
-      appendAssistantMessage(`${name}your CV is the foundation for fit scores and grounded advice. Upload it first.`, [
-        {
-          type: "open_route",
-          label: "Upload your CV",
-          href: "/cv?upload=1",
-        },
-      ]);
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/copilot/state?user_id=${encodeURIComponent(userId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              onboarding: nextOnboarding,
+              mark_step_complete: nextOnboarding.completed ? "preferences" : "welcome",
+            }),
+          },
+        );
+        if (response.ok) {
+          const body = (await response.json()) as { state?: CopilotGuideState };
+          if (body.state) {
+            setCopilotState((current) => ({
+              ...(current ?? {
+                remaining_steps: [],
+                completed_steps: [],
+                feature_exposures: {},
+                guidance_level: "first_run",
+                onboarding: {},
+              }),
+              ...body.state,
+            }));
+          }
+        }
+      } catch {
+        /* Copilot state persistence should not block chat. */
+      }
     },
-    [appendAssistantMessage, profileStatus],
+    [apiBaseUrl, userId],
   );
 
-  const handleOnboardingAnswer = useCallback(
-    (text: string): boolean => {
-      if (onboarding.completed) return false;
+  const validateActions = useCallback(
+    async (actions: CopilotAction[]): Promise<CopilotAction[]> => {
+      if (!userId || actions.length === 0) return [];
 
-      const now = new Date().toISOString();
-      if (onboarding.lastStep === "name") {
-        const next = {
-          ...onboarding,
-          name: text.trim(),
-          lastStep: "target_role" as const,
-          updatedAt: now,
-        };
-        setOnboarding(next);
-        appendAssistantMessage(`Nice to meet you, ${next.name}. What role are you aiming for?`);
-        return true;
+      const validated: CopilotAction[] = [];
+      for (const action of actions) {
+        try {
+          const response = await fetch(`${apiBaseUrl}/copilot/actions/validate`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: userId,
+              source: "widget",
+              action,
+            }),
+          });
+          if (!response.ok) continue;
+          const body = (await response.json()) as CopilotValidatedAction;
+          if (body.valid) validated.push(body.action);
+        } catch {
+          continue;
+        }
       }
-
-      if (onboarding.lastStep === "target_role") {
-        const roles = parseTargetRoles(text);
-        const next = {
-          ...onboarding,
-          targetRoles: roles.length > 0 ? roles : [text.trim()],
-          lastStep: "location_work_mode" as const,
-          updatedAt: now,
-        };
-        setOnboarding(next);
-        appendAssistantMessage("Where do you want to work, and do you prefer on-site, hybrid, remote, or any?");
-        return true;
-      }
-
-      if (onboarding.lastStep === "location_work_mode") {
-        const locationAndMode = parseLocationAndMode(text);
-        const next = {
-          ...onboarding,
-          ...locationAndMode,
-          lastStep: "career_stage" as const,
-          updatedAt: now,
-        };
-        setOnboarding(next);
-        appendAssistantMessage("What stage are you in right now: student, fresh graduate, experienced, switching career, or urgent search?");
-        return true;
-      }
-
-      const next = {
-        ...onboarding,
-        careerStage: text.trim(),
-        completed: true,
-        lastStep: "complete" as const,
-        updatedAt: now,
-      };
-      setOnboarding(next);
-      finishOnboardingWithCvStatus(next);
-      return true;
+      return validated;
     },
-    [appendAssistantMessage, finishOnboardingWithCvStatus, onboarding],
+    [apiBaseUrl, userId],
   );
 
   const sendChatMessage = useCallback(
@@ -551,20 +992,34 @@ export function CopilotWidget() {
           setMessages((current) =>
             current.map((message) =>
               message.id === assistantId
-                ? { ...message, content: stripActionDirectives(fullReply) }
+                ? { ...message, content: stripHiddenDirectives(fullReply) }
                 : message,
             ),
           );
         }
 
         const actions = extractActions(fullReply);
+        const onboardingPatch = extractOnboardingPatch(fullReply);
+        if (onboardingPatch) {
+          let nextOnboarding: CopilotOnboardingState | null = null;
+          setOnboarding((current) => {
+            nextOnboarding = applyOnboardingPatch(current, onboardingPatch);
+            return nextOnboarding;
+          });
+          if (nextOnboarding) {
+            void persistPreferencesFromOnboarding(nextOnboarding);
+          }
+        }
+        const validatedActions = await validateActions(actions);
+        void loadChatSessions(userId);
+
         setMessages((current) =>
           current.map((message) =>
             message.id === assistantId
               ? {
                   ...message,
-                  content: stripActionDirectives(fullReply),
-                  actions: actions.length > 0 ? actions : undefined,
+                  content: stripHiddenDirectives(fullReply),
+                  actions: validatedActions.length > 0 ? validatedActions : undefined,
                 }
               : message,
           ),
@@ -585,7 +1040,7 @@ export function CopilotWidget() {
         setIsStreaming(false);
       }
     },
-    [appendAssistantMessage, clientContext, userId],
+    [appendAssistantMessage, clientContext, loadChatSessions, persistPreferencesFromOnboarding, userId, validateActions],
   );
 
   const submitCurrentInput = useCallback(async () => {
@@ -595,9 +1050,72 @@ export function CopilotWidget() {
     setMessages((current) => [...current, { id: messageId(), role: "user", content: text }]);
     setInput("");
 
-    if (handleOnboardingAnswer(text)) return;
     await sendChatMessage(text);
-  }, [handleOnboardingAnswer, input, isStreaming, sendChatMessage]);
+  }, [input, isStreaming, sendChatMessage]);
+
+  const createNewChat = useCallback(async () => {
+    if (!userId || isStreaming) return;
+
+    const now = new Date().toISOString();
+    const nextSessionId = generateUUID();
+    const { error } = await supabase.from("chat_sessions").insert({
+      id: nextSessionId,
+      user_id: userId,
+      title: DEFAULT_SESSION_TITLE,
+      created_at: now,
+      updated_at: now,
+    });
+
+    if (error) {
+      setConnectionError("I could not start a new chat. Try again in a moment.");
+      return;
+    }
+
+    sessionIdRef.current = nextSessionId;
+    setActiveSessionId(nextSessionId);
+    window.localStorage.setItem(activeSessionStorageKey(userId), nextSessionId);
+    window.localStorage.setItem(copilotSessionKey(userId), nextSessionId);
+    dispatchActiveChatChanged(userId, nextSessionId);
+
+    setSessions((current) =>
+      sortChatSessions([
+        { id: nextSessionId, title: DEFAULT_SESSION_TITLE, updatedAt: now },
+        ...current.filter((session) => session.id !== nextSessionId),
+      ]),
+    );
+    setActionStates({});
+    setConnectionError("");
+    setIsSessionMenuOpen(false);
+
+    const greeting = initialAssistantMessage(onboarding);
+    setMessages([greeting]);
+
+    await supabase.from("chat_messages").insert({
+      user_id: userId,
+      session_id: nextSessionId,
+      role: "assistant",
+      content: greeting.content,
+    });
+  }, [isStreaming, onboarding, userId]);
+
+  const selectChatSession = useCallback(
+    async (sessionId: string) => {
+      if (!userId || isStreaming || sessionId === sessionIdRef.current) {
+        setIsSessionMenuOpen(false);
+        return;
+      }
+
+      const activated = await activateSession(userId, sessionId, onboarding);
+      if (activated) {
+        dispatchActiveChatChanged(userId, sessionId);
+        setConnectionError("");
+      } else {
+        setConnectionError("I could not open that chat. Try another one.");
+      }
+      setIsSessionMenuOpen(false);
+    },
+    [activateSession, isStreaming, onboarding, userId],
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -605,6 +1123,11 @@ export function CopilotWidget() {
   };
 
   const openFullAssistant = () => {
+    if (userId && sessionIdRef.current) {
+      window.localStorage.setItem(activeSessionStorageKey(userId), sessionIdRef.current);
+      window.localStorage.setItem(copilotSessionKey(userId), sessionIdRef.current);
+      dispatchActiveChatChanged(userId, sessionIdRef.current);
+    }
     setPanelState("minimized");
     router.push("/chat");
   };
@@ -697,33 +1220,6 @@ export function CopilotWidget() {
     setActionStates((current) => ({ ...current, [actionKey]: state }));
   };
 
-  const executeCreateTodo = async (actionKey: string, todo: CopilotTodoDraft, goalId?: string) => {
-    if (!userId) throw new Error("Please sign in first.");
-    const response = await fetch(`${apiBaseUrl}/tracker/todos`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id: userId,
-        title: todo.title,
-        due_date: todo.due_date ?? null,
-        goal_id: goalId ?? null,
-      }),
-    });
-
-    if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { detail?: string };
-      throw new Error(body.detail ?? "Failed to create task.");
-    }
-
-    const body = (await response.json()) as { todo?: Todo };
-    if (!body.todo?.id) throw new Error("Task was not confirmed.");
-    updateActionState(actionKey, {
-      status: "success",
-      message: "Task added.",
-      href: "/tracker?view=goals_tasks",
-    });
-  };
-
   const executeAction = async (messageIdValue: string, index: number, action: CopilotAction) => {
     const actionKey = `${messageIdValue}-${index}`;
 
@@ -733,7 +1229,11 @@ export function CopilotWidget() {
         return;
       }
       router.push(action.href);
-      updateActionState(actionKey, { status: "success", message: "Opened.", href: action.href });
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, action.href),
+        href: action.href,
+      });
       return;
     }
 
@@ -744,59 +1244,100 @@ export function CopilotWidget() {
         return;
       }
       router.push(href);
-      updateActionState(actionKey, { status: "success", message: "Search prepared.", href });
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "prefill_goal_with_todos") {
+      const href = "/tracker?view=goals_tasks&draft=1";
+      saveGoalsTasksDraft({
+        type: "goal_with_todos",
+        goal: action.goal,
+        todos: action.todos,
+      });
+      router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "prefill_todo") {
+      const href = "/tracker?view=goals_tasks&draft=1";
+      saveGoalsTasksDraft({
+        type: "todo",
+        todo: action.todo,
+      });
+      router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "prefill_application_note") {
+      const href = "/tracker?view=applications&draft=1";
+      saveApplicationNoteDraft({
+        application_id: action.application_id,
+        note: action.note,
+      });
+      router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
+      return;
+    }
+
+    if (action.type === "show_feature_explainer") {
+      const href = action.href ?? undefined;
+      if (href) router.push(href);
+      updateActionState(actionKey, {
+        status: "success",
+        message: getCopilotActionSuccessMessage(action, href),
+        href,
+      });
       return;
     }
 
     updateActionState(actionKey, { status: "loading" });
     try {
-      if (action.type === "create_todo") {
-        await executeCreateTodo(actionKey, action.todo);
-        return;
-      }
-
       if (!userId) throw new Error("Please sign in first.");
-      const goalResponse = await fetch(`${apiBaseUrl}/tracker/goals`, {
+      const response = await fetch(`${apiBaseUrl}/copilot/actions/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           user_id: userId,
-          title: action.goal.title,
-          target_date: action.goal.target_date ?? null,
+          source: "widget",
+          action,
         }),
       });
 
-      if (!goalResponse.ok) {
-        const body = (await goalResponse.json().catch(() => ({}))) as { detail?: string };
-        throw new Error(body.detail ?? "Failed to create goal.");
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { detail?: string };
+        throw new Error(body.detail ?? "I could not confirm that action.");
       }
 
-      const goalBody = (await goalResponse.json()) as { goal?: Goal };
-      const goalId = goalBody.goal?.id;
-      if (!goalId) throw new Error("Goal was not confirmed.");
-
-      for (const todo of action.todos) {
-        const todoResponse = await fetch(`${apiBaseUrl}/tracker/todos`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_id: userId,
-            goal_id: goalId,
-            title: todo.title,
-            due_date: todo.due_date ?? null,
-          }),
-        });
-
-        if (!todoResponse.ok) {
-          const body = (await todoResponse.json().catch(() => ({}))) as { detail?: string };
-          throw new Error(body.detail ?? "Goal was created, but a task failed.");
-        }
-      }
-
+      const body = (await response.json()) as { message?: string; href?: string };
       updateActionState(actionKey, {
         status: "success",
-        message: "Plan created in My Journey.",
-        href: "/tracker?view=goals_tasks",
+        message: body.message ?? getCopilotActionSuccessMessage(action, body.href),
+        href: body.href ?? (
+          action.type === "save_application" ||
+          action.type === "update_application_status" ||
+          action.type === "save_application_note"
+            ? "/tracker?view=applications"
+            : "/tracker?view=goals_tasks"
+        ),
       });
     } catch (error) {
       updateActionState(actionKey, {
@@ -808,6 +1349,9 @@ export function CopilotWidget() {
       });
     }
   };
+
+  const activeSession = sessions.find((session) => session.id === activeSessionId);
+  const activeSessionTitle = activeSession ? truncateSessionTitle(activeSession.title) : DEFAULT_SESSION_TITLE;
 
   if (isFullAssistantPage) {
     return null;
@@ -822,13 +1366,8 @@ export function CopilotWidget() {
         onPointerMove={handleTriggerPointerMove}
         onPointerUp={handleTriggerPointerUp}
         onPointerCancel={handleTriggerPointerUp}
-        className="fixed z-50 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-2xl border border-[#7C74DB]/30 bg-[#534AB7] text-white shadow-xl shadow-[#534AB7]/25 transition-transform hover:scale-105 active:cursor-grabbing"
-        style={{
-          left: triggerPosition ? `${triggerPosition.x}px` : "auto",
-          top: triggerPosition ? `${triggerPosition.y}px` : "auto",
-          right: triggerPosition ? "auto" : "16px",
-          bottom: triggerPosition ? "auto" : "96px",
-        }}
+        className="fixed z-50 flex h-12 w-12 touch-none cursor-grab select-none items-center justify-center rounded-2xl border border-[var(--cp-border-strong)] bg-[var(--cp-surface-elevated)] text-[var(--cp-champagne)] shadow-xl shadow-[var(--cp-glow-copper)] transition-transform hover:scale-105 active:cursor-grabbing"
+        style={{ right: "24px", bottom: "24px" }}
       >
         <Bot className="h-5 w-5" />
       </button>
@@ -843,16 +1382,11 @@ export function CopilotWidget() {
         onPointerMove={handleTriggerPointerMove}
         onPointerUp={handleTriggerPointerUp}
         onPointerCancel={handleTriggerPointerUp}
-        className="fixed z-50 flex touch-none cursor-grab select-none items-center gap-2 rounded-2xl border border-[#7C74DB]/30 bg-[#0E0E12] px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-black/40 transition-all hover:border-[#AFA9EC]/50 active:cursor-grabbing"
-        style={{
-          left: triggerPosition ? `${triggerPosition.x}px` : "auto",
-          top: triggerPosition ? `${triggerPosition.y}px` : "auto",
-          right: triggerPosition ? "auto" : "16px",
-          bottom: triggerPosition ? "auto" : "96px",
-        }}
+        className="fixed z-50 flex touch-none cursor-grab select-none items-center gap-2 rounded-full border border-[var(--cp-border-strong)] bg-[var(--cp-surface-elevated)] px-4 py-3 text-sm font-semibold text-[var(--cp-text-main)] shadow-xl shadow-[var(--cp-glow-copper)] transition-all hover:border-[var(--cp-champagne)] active:cursor-grabbing"
+        style={{ right: "24px", bottom: "24px" }}
       >
-        <Bot className="h-4 w-4 text-[#AFA9EC]" />
-        CareerPilot
+        <Navigation className="h-4 w-4 text-[var(--cp-champagne)]" />
+        CareerPilot guide
       </button>
     );
   }
@@ -860,52 +1394,109 @@ export function CopilotWidget() {
   return (
     <section
       ref={panelRef}
-      className="fixed z-50 flex max-h-[calc(100vh-32px)] w-[calc(100vw-24px)] flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0E0E12] shadow-2xl shadow-black/60 md:max-h-[680px] md:w-[390px]"
-      style={{
-        left: panelPosition ? `${panelPosition.x}px` : "auto",
-        top: panelPosition ? `${panelPosition.y}px` : "auto",
-        right: panelPosition ? "auto" : "12px",
-        bottom: panelPosition ? "auto" : "80px",
-      }}
+      className="cp-panel-solid fixed bottom-6 right-6 z-50 flex max-h-[calc(100vh-48px)] w-[calc(100vw-48px)] flex-col overflow-hidden rounded-2xl md:max-h-[680px] md:w-[390px]"
     >
       <header
-        className="flex cursor-grab touch-none select-none items-center gap-3 border-b border-white/[0.06] px-4 py-3 active:cursor-grabbing"
+        className="flex cursor-grab touch-none select-none items-center gap-3 border-b border-[var(--cp-border-soft)] px-4 py-3 active:cursor-grabbing"
         onPointerDown={handleDragPointerDown}
         onPointerMove={handleDragPointerMove}
         onPointerUp={handleDragPointerUp}
         onPointerCancel={handleDragPointerUp}
       >
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-[#534AB7] to-[#7C74DB] text-white">
-          <Bot className="h-4 w-4" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
+          <Navigation className="h-4 w-4" />
         </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-bold text-white">CareerPilot</h2>
-          <p className="truncate text-xs text-white/35">
-            {profileStatus === "has_profile" ? "CV-aware guide" : "Career guide"}
-          </p>
+        <div className="relative min-w-0 flex-1">
+          <h2 className="text-sm font-bold text-[var(--cp-text-main)]">CareerPilot guide</h2>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSessionMenuOpen((open) => !open);
+              if (userId) void loadChatSessions(userId);
+            }}
+            className="mt-0.5 flex max-w-full items-center gap-1.5 rounded-md text-left text-xs text-[var(--cp-text-muted)] hover:text-[var(--cp-text-soft)]"
+            aria-expanded={isSessionMenuOpen}
+            aria-label="Choose chat session"
+            title="Choose chat"
+          >
+            <span className="truncate">{activeSessionTitle}</span>
+            <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${isSessionMenuOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {isSessionMenuOpen && (
+            <div className="absolute left-0 top-full z-50 mt-2 w-[240px] overflow-hidden rounded-xl border border-[var(--cp-border-medium)] bg-[var(--cp-surface-elevated)] shadow-xl shadow-black/30">
+              <div className="max-h-60 overflow-y-auto py-1">
+                {sessions.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-[var(--cp-text-subtle)]">No conversations yet</p>
+                ) : (
+                  sessions.map((session) => {
+                    const isActiveSession = session.id === activeSessionId;
+                    return (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => {
+                          void selectChatSession(session.id);
+                        }}
+                        disabled={isStreaming}
+                        className={`flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors disabled:opacity-50 ${
+                          isActiveSession
+                            ? "bg-[rgba(201,130,74,0.12)] text-[var(--cp-champagne)]"
+                            : "text-[var(--cp-text-muted)] hover:bg-white/[0.04] hover:text-[var(--cp-text-soft)]"
+                        }`}
+                      >
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 opacity-70" />
+                        <span className="line-clamp-2 min-w-0 leading-snug">
+                          {session.title || DEFAULT_SESSION_TITLE}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={() => {
+            void createNewChat();
+          }}
+          disabled={isStreaming}
+          aria-label="New CareerPilot chat"
+          title="New chat"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)] disabled:opacity-40"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={openFullAssistant}
           aria-label="Open full AI Assistant"
           title="Open full AI Assistant"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
           <Maximize2 className="h-4 w-4" />
         </button>
         <button
           type="button"
-          onClick={() => setPanelState("minimized")}
+          onClick={() => {
+            setIsSessionMenuOpen(false);
+            setPanelState("minimized");
+          }}
           aria-label="Minimize CareerPilot"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
           <Minus className="h-4 w-4" />
         </button>
         <button
           type="button"
-          onClick={() => setPanelState("closed")}
+          onClick={() => {
+            setIsSessionMenuOpen(false);
+            setPanelState("closed");
+          }}
           aria-label="Close CareerPilot"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--cp-text-muted)] hover:bg-white/[0.05] hover:text-[var(--cp-text-main)]"
         >
           <X className="h-4 w-4" />
         </button>
@@ -918,7 +1509,7 @@ export function CopilotWidget() {
             className={`flex gap-2 ${message.role === "user" ? "justify-end" : "justify-start"}`}
           >
             {message.role === "assistant" && (
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#534AB7] text-white">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
                 <Bot className="h-3.5 w-3.5" />
               </div>
             )}
@@ -926,8 +1517,8 @@ export function CopilotWidget() {
               <div
                 className={`rounded-2xl border px-3 py-2.5 text-sm leading-relaxed ${
                   message.role === "user"
-                    ? "rounded-tr-none border-white/[0.08] bg-[#534AB7] text-white"
-                    : "rounded-tl-none border-white/[0.06] bg-white/[0.03] text-white/90"
+                ? "rounded-tr-none border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.20)] text-[var(--cp-text-main)]"
+                    : "rounded-tl-none border-[var(--cp-border-soft)] bg-white/[0.03] text-[var(--cp-text-main)]"
                 }`}
               >
                 {message.role === "assistant" ? (
@@ -938,7 +1529,7 @@ export function CopilotWidget() {
                       {["first", "second", "third"].map((dot) => (
                         <span
                           key={dot}
-                          className="h-1.5 w-1.5 rounded-full bg-[#AFA9EC]/70 animate-bounce"
+                          className="h-1.5 w-1.5 rounded-full bg-[var(--cp-copper-strong)]/70 animate-bounce"
                         />
                       ))}
                     </div>
@@ -960,7 +1551,7 @@ export function CopilotWidget() {
               ))}
             </div>
             {message.role === "user" && (
-              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/[0.08] bg-[#1E1B3A] text-[#AFA9EC]">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--cp-border-soft)] bg-[rgba(201,130,74,0.10)] text-[var(--cp-champagne)]">
                 <User className="h-3.5 w-3.5" />
               </div>
             )}
@@ -974,8 +1565,8 @@ export function CopilotWidget() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="border-t border-white/[0.06] p-3">
-        <div className="flex items-end gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] p-2 focus-within:border-[#7C74DB]/50">
+      <form onSubmit={handleSubmit} className="border-t border-[var(--cp-border-soft)] p-3">
+        <div className="flex items-end gap-2 rounded-2xl border border-[var(--cp-border-soft)] bg-white/[0.03] p-2 focus-within:border-[var(--cp-border-strong)]">
           <textarea
             value={input}
             onChange={(event) => setInput(event.target.value)}
@@ -988,13 +1579,13 @@ export function CopilotWidget() {
             rows={1}
             placeholder="Ask CareerPilot..."
             disabled={isStreaming}
-            className="max-h-24 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed text-white outline-none placeholder:text-white/20"
+            className="max-h-24 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-relaxed text-[var(--cp-text-main)] outline-none placeholder:text-[var(--cp-text-subtle)]"
           />
           <Button
             type="submit"
             size="icon"
             disabled={!input.trim() || isStreaming}
-            className="h-9 w-9 shrink-0 rounded-xl bg-[#534AB7] text-white hover:bg-[#6B63CC] disabled:opacity-40"
+            className="h-9 w-9 shrink-0 rounded-xl disabled:opacity-40"
           >
             {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
@@ -1015,27 +1606,51 @@ function CopilotActionCard({
   onExecute: () => void;
   onOpenHref: (href: string) => void;
 }) {
-  const isMutation = action.type === "create_goal_with_todos" || action.type === "create_todo";
+  const isApplicationAction =
+    action.type === "save_application" ||
+    action.type === "update_application_status" ||
+    action.type === "save_application_note";
+  const isMutation =
+    action.type === "create_goal_with_todos" ||
+    action.type === "create_roadmap_with_tasks" ||
+    action.type === "create_todo" ||
+    isApplicationAction;
   const isLoading = state.status === "loading";
-  const successHref = state.href ?? "/tracker?view=goals_tasks";
+  const successHref = state.href ?? (isApplicationAction ? "/tracker?view=applications" : "/tracker?view=goals_tasks");
   const Icon =
     action.type === "open_route"
       ? Navigation
       : action.type === "prefill_job_search"
         ? Search
-        : action.type === "create_todo"
+        : action.type === "create_todo" || action.type === "prefill_todo"
           ? Calendar
-          : Target;
+          : isApplicationAction
+            ? CheckCircle2
+            : Target;
+  const buttonLabel =
+    action.type === "prefill_goal_with_todos" || action.type === "prefill_todo"
+      ? "Open Draft"
+      : action.type === "prefill_application_note"
+        ? "Open Note"
+        : action.type === "show_feature_explainer"
+          ? action.href ? "Open" : "Got it"
+          : action.type === "create_goal_with_todos" || action.type === "create_roadmap_with_tasks"
+      ? "Add to Goals & Tasks"
+      : action.type === "create_todo"
+        ? "Add Task"
+        : isMutation
+          ? "Confirm"
+          : "Open";
 
   return (
-    <div className="mt-2 rounded-xl border border-[#7C74DB]/20 bg-[#1E1B3A]/40 p-3 text-xs text-white/70">
+    <div className="mt-2 rounded-xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.08)] p-3 text-xs text-[var(--cp-text-soft)]">
       <div className="flex items-start gap-2">
-        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#534AB7]/30 text-[#AFA9EC]">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[rgba(201,130,74,0.14)] text-[var(--cp-champagne)]">
           <Icon className="h-3.5 w-3.5" />
         </div>
         <div className="min-w-0 flex-1 space-y-2">
           <div>
-            <p className="font-semibold text-white">{action.label}</p>
+            <p className="font-semibold text-[var(--cp-text-main)]">{action.label}</p>
             <ActionSummary action={action} />
           </div>
 
@@ -1056,9 +1671,9 @@ function CopilotActionCard({
               <button
                 type="button"
                 onClick={() => onOpenHref(successHref)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#534AB7] px-3 py-1.5 font-semibold text-white hover:bg-[#6B63CC]"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] px-3 py-1.5 font-semibold text-[var(--cp-bg-deep)] hover:brightness-110"
               >
-                Open Goals & Tasks
+                {isApplicationAction ? "Open Applications" : "Open Goals & Tasks"}
                 <ExternalLink className="h-3 w-3" />
               </button>
             ) : (
@@ -1066,10 +1681,10 @@ function CopilotActionCard({
                 type="button"
                 onClick={onExecute}
                 disabled={isLoading || state.status === "success"}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#534AB7] px-3 py-1.5 font-semibold text-white hover:bg-[#6B63CC] disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--cp-border-strong)] bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] px-3 py-1.5 font-semibold text-[var(--cp-bg-deep)] hover:brightness-110 disabled:opacity-50"
               >
                 {isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
-                {isMutation ? "Confirm" : "Open"}
+                {buttonLabel}
               </button>
             )}
           </div>
@@ -1107,6 +1722,69 @@ function ActionSummary({ action }: { action: CopilotAction }) {
     );
   }
 
+  if (action.type === "prefill_todo") {
+    return (
+      <p className="mt-1 text-white/45">
+        {action.todo.title} - {formatDraftDate(action.todo.due_date)}
+      </p>
+    );
+  }
+
+  if (action.type === "create_roadmap_with_tasks") {
+    const todoCount = action.goals.reduce((count, goal) => count + goal.todos.length, 0);
+    return (
+      <div className="mt-1 space-y-1 text-white/45">
+        <p>
+          {action.goals.length} goals · {todoCount} tasks
+        </p>
+        <ul className="space-y-1">
+          {action.goals.map((goal) => (
+            <li key={`${goal.title}-${goal.target_date}`} className="flex gap-1.5">
+              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-[var(--cp-champagne)]" />
+              <span>{goal.title} · {formatDraftDate(goal.target_date)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
+  if (action.type === "save_application") {
+    return (
+      <p className="mt-1 text-white/45">
+        Save job to Applications{action.status ? ` as ${action.status}` : ""}
+      </p>
+    );
+  }
+
+  if (action.type === "update_application_status") {
+    return (
+      <p className="mt-1 text-white/45">
+        Move application to {action.status}
+      </p>
+    );
+  }
+
+  if (action.type === "save_application_note") {
+    return (
+      <p className="mt-1 text-white/45">
+        Save note: {action.note}
+      </p>
+    );
+  }
+
+  if (action.type === "prefill_application_note") {
+    return (
+      <p className="mt-1 text-white/45">
+        Draft note: {action.note}
+      </p>
+    );
+  }
+
+  if (action.type === "show_feature_explainer") {
+    return <p className="mt-1 text-white/45">{action.body || action.feature}</p>;
+  }
+
   return (
     <div className="mt-1 space-y-1 text-white/45">
       <p>{action.goal.title} · {formatDraftDate(action.goal.target_date)}</p>
@@ -1114,7 +1792,7 @@ function ActionSummary({ action }: { action: CopilotAction }) {
         <ul className="space-y-1">
           {action.todos.map((todo) => (
             <li key={`${todo.title}-${todo.due_date}`} className="flex gap-1.5">
-              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-[#AFA9EC]" />
+              <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-[var(--cp-champagne)]" />
               <span>{todo.title} · {formatDraftDate(todo.due_date)}</span>
             </li>
           ))}

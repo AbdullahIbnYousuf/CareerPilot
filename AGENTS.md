@@ -44,9 +44,12 @@ Do not use `Kanban`, `Stats`, or plain `Tasks` as primary visible tab labels.
 Do not show `AI Nudge:` as visible copy. Nudges should read like native product
 guidance. Do not expose demo/dev nudge trigger buttons in the normal UI.
 
-AI Assistant action automation is deferred: chat may advise on roadmaps, cover
-letters, and interview prep, but it should not yet create goals, tasks, or
-application state changes automatically.
+AI Assistant hidden action automation is deferred: chat may advise, prepare,
+and propose roadmaps, cover letters, interview prep, goals, tasks, and
+application changes, but it must not silently mutate product state. Confirmed
+Copilot proposals are allowed: after the user explicitly clicks a visible
+confirmation control, Copilot may create goals/tasks or update application
+state through validated backend action handlers.
 
 ---
 

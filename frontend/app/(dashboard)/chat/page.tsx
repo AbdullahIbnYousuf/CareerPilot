@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChatInterface } from "@/components/chat-interface";
 import {
   Bot,
@@ -12,7 +12,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
-import type { ChatSession } from "@/types";
+import { buildCopilotContext } from "@/lib/copilot/app-map";
+import type {
+  ChatSession,
+  CopilotClientContext,
+  CopilotGuideState,
+  CopilotOnboardingState,
+  CopilotProfileStatus,
+} from "@/types";
 
 interface ChatSessionRow {
   id: string;
@@ -24,6 +31,17 @@ interface ChatSessionRow {
 const DEFAULT_SESSION_TITLE = "New conversation";
 const SESSION_TITLE_LIMIT = 42;
 const ACTIVE_SESSION_KEY_PREFIX = "careerpilot:active-chat:";
+const ACTIVE_CHAT_CHANGED_EVENT = "careerpilot:active-chat-changed";
+const DEFAULT_ONBOARDING: CopilotOnboardingState = {
+  completed: false,
+  name: "",
+  targetRoles: [],
+  location: "",
+  workMode: "",
+  careerStage: "",
+  lastStep: "name",
+  updatedAt: "",
+};
 
 function generateUUID(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
@@ -39,6 +57,14 @@ function truncate(str: string, n: number) {
 
 function activeSessionStorageKey(userId: string) {
   return `${ACTIVE_SESSION_KEY_PREFIX}${userId}`;
+}
+
+function dispatchActiveChatChanged(userId: string, sessionId: string) {
+  window.dispatchEvent(
+    new CustomEvent(ACTIVE_CHAT_CHANGED_EVENT, {
+      detail: { userId, sessionId },
+    }),
+  );
 }
 
 function mapChatSession(row: ChatSessionRow): ChatSession {
@@ -66,6 +92,9 @@ export default function AiPage() {
   const [isClearing, setIsClearing] = useState(false);
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [loadingSessions, setLoadingSessions] = useState(true);
+  const [profileStatus, setProfileStatus] = useState<CopilotProfileStatus>("unknown");
+  const [copilotAppState, setCopilotAppState] = useState<CopilotClientContext["app_state"]>();
+  const [copilotGuideState, setCopilotGuideState] = useState<CopilotGuideState | undefined>();
   const activeSessionIdRef = useRef("");
 
   useEffect(() => {
@@ -75,7 +104,32 @@ export default function AiPage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data, error }) => {
       if (!error && data.user) {
-        setUserId(data.user.id);
+        const id = data.user.id;
+        setUserId(id);
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        fetch(`${baseUrl}/copilot/context?user_id=${encodeURIComponent(id)}`)
+          .then(async (response) => {
+            if (!response.ok) {
+              setProfileStatus("unknown");
+              setCopilotAppState(undefined);
+              return;
+            }
+            const body: { context?: CopilotClientContext["app_state"] } = await response.json();
+            const context = body.context;
+            setCopilotAppState(context);
+            const guideState = (context as { copilot?: CopilotGuideState } | undefined)?.copilot;
+            setCopilotGuideState(guideState);
+            const nextStatus = context?.profile_status;
+            setProfileStatus(
+              nextStatus === "has_profile" || nextStatus === "no_profile"
+                ? nextStatus
+                : "unknown",
+            );
+          })
+          .catch(() => {
+            setProfileStatus("unknown");
+            setCopilotAppState(undefined);
+          });
       } else {
         setUserId(null);
         setLoadingSessions(false);
@@ -93,6 +147,7 @@ export default function AiPage() {
           activeSessionStorageKey(userId),
           sessionId
         );
+        dispatchActiveChatChanged(userId, sessionId);
       }
     },
     [userId]
@@ -293,12 +348,23 @@ export default function AiPage() {
   };
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const clientContext = useMemo(
+    () =>
+      buildCopilotContext({
+        currentPath: "/chat",
+        profileStatus,
+        onboarding: DEFAULT_ONBOARDING,
+        appState: copilotAppState,
+        copilotState: copilotGuideState,
+      }),
+    [copilotAppState, copilotGuideState, profileStatus],
+  );
 
   return (
     <div className="flex h-[calc(100vh-100px)] gap-0">
-      <aside className="hidden md:flex flex-col w-60 shrink-0 bg-white/[0.015] border border-white/[0.05] rounded-2xl mr-4 overflow-hidden">
-        <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-white/[0.05]">
-          <span className="text-xs font-semibold text-white/40 uppercase tracking-wider">
+      <aside className="cp-surface hidden md:flex flex-col w-60 shrink-0 rounded-2xl mr-4 overflow-hidden">
+        <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[var(--cp-border-soft)]">
+          <span className="text-xs font-semibold text-[var(--cp-text-muted)] uppercase tracking-wider">
             Chats
           </span>
           <button
@@ -306,7 +372,7 @@ export default function AiPage() {
               void handleNewChat();
             }}
             title="New chat"
-            className="h-7 w-7 rounded-lg border border-white/[0.07] flex items-center justify-center text-white/40 hover:text-white/70 hover:bg-white/[0.05] transition-all"
+            className="h-7 w-7 rounded-lg border border-[var(--cp-border-soft)] flex items-center justify-center text-[var(--cp-text-muted)] hover:text-[var(--cp-text-main)] hover:border-[var(--cp-border-medium)] hover:bg-white/[0.05] transition-all"
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
@@ -315,7 +381,7 @@ export default function AiPage() {
         <div className="flex-1 overflow-y-auto py-2 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
           {loadingSessions && (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-4 w-4 animate-spin text-white/20" />
+              <Loader2 className="h-4 w-4 animate-spin text-[var(--cp-copper-strong)]" />
             </div>
           )}
           {!loadingSessions && sessions.length === 0 && (
@@ -328,8 +394,8 @@ export default function AiPage() {
               key={s.id}
               className={`w-full flex items-start gap-2.5 px-3 py-2.5 rounded-xl mx-1 text-left transition-all duration-150 group ${
                 s.id === activeSessionId
-                  ? "bg-[#1E1B3A] text-[#AFA9EC]"
-                  : "text-white/35 hover:bg-white/[0.03] hover:text-white/60"
+              ? "cp-active-glow bg-[rgba(201,130,74,0.12)] text-[var(--cp-champagne)]"
+                  : "text-[var(--cp-text-muted)] hover:bg-white/[0.03] hover:text-[var(--cp-text-soft)]"
               }`}
             >
               <button
@@ -367,21 +433,21 @@ export default function AiPage() {
         <div className="shrink-0 flex items-start justify-between mb-5">
           <div className="space-y-1">
             <div className="flex items-center gap-2 mb-1">
-              <div className="h-6 w-6 rounded-md bg-primary/20 flex items-center justify-center">
+              <div className="h-6 w-6 rounded-md border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] flex items-center justify-center">
                 <Bot className="h-3.5 w-3.5 text-primary" />
               </div>
-              <span className="text-xs font-semibold text-primary uppercase tracking-widest">
+              <span className="text-xs font-semibold text-[var(--cp-copper-strong)] uppercase tracking-widest">
                 Co-Pilot
               </span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white">
+            <h1 className="font-display text-4xl font-semibold tracking-normal text-[var(--cp-text-main)]">
               AI Assistant
             </h1>
-            <p className="text-white/40 text-sm mt-1">
+            <p className="text-[var(--cp-text-muted)] text-sm mt-1">
               {activeSession?.title &&
               activeSession.title !== DEFAULT_SESSION_TITLE
                 ? truncate(activeSession.title, 60)
-                : "Chat with an AI that knows your CV inside out."}
+                : "CareerPilot guide"}
             </p>
           </div>
 
@@ -391,18 +457,18 @@ export default function AiPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setIsMobileDropdownOpen((v) => !v)}
-                className="gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/50 text-xs"
+                className="gap-1.5 text-xs"
               >
                 Sessions
                 <ChevronDown className="h-3 w-3" />
               </Button>
               {isMobileDropdownOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-56 bg-[#0E0E12] border border-white/[0.08] rounded-xl shadow-xl z-50 overflow-hidden">
+                <div className="absolute right-0 top-full mt-1.5 w-56 cp-surface-elevated rounded-xl z-50 overflow-hidden">
                   <button
                     onClick={() => {
                       void handleNewChat();
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-white/60 hover:bg-white/[0.05] transition-colors"
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 text-xs text-[var(--cp-text-muted)] hover:bg-white/[0.05] transition-colors"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     New conversation
@@ -413,8 +479,8 @@ export default function AiPage() {
                         key={s.id}
                         className={`w-full flex items-start gap-2 px-3 py-2.5 text-left transition-colors ${
                           s.id === activeSessionId
-                            ? "bg-[#1E1B3A] text-[#AFA9EC]"
-                            : "text-white/40 hover:bg-white/[0.04]"
+                            ? "bg-[rgba(201,130,74,0.12)] text-[var(--cp-champagne)]"
+                            : "text-[var(--cp-text-muted)] hover:bg-white/[0.04]"
                         }`}
                       >
                         <button
@@ -456,7 +522,7 @@ export default function AiPage() {
               onClick={() => {
                 void handleNewChat();
               }}
-              className="hidden md:flex gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/50 hover:text-white/70 hover:bg-white/[0.04] text-xs"
+              className="hidden md:flex gap-1.5 text-xs"
             >
               <Plus className="h-3.5 w-3.5" />
               New chat
@@ -469,7 +535,7 @@ export default function AiPage() {
                 void handleClearHistory();
               }}
               disabled={isClearing || !activeSession || sessions.length === 0}
-              className="gap-1.5 border-white/[0.08] bg-white/[0.02] text-white/30 hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 text-xs disabled:opacity-30 transition-all"
+              className="gap-1.5 text-xs hover:text-red-400 hover:border-red-500/30 hover:bg-red-500/5 disabled:opacity-30 transition-all"
             >
               {isClearing ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -486,6 +552,7 @@ export default function AiPage() {
             <ChatInterface
               key={activeSessionId}
               sessionId={activeSessionId}
+              clientContext={clientContext}
               onFirstMessage={handleFirstMessage}
             />
           ) : (

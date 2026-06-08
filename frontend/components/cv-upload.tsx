@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { UploadCloud, Loader2, FileUp } from "lucide-react";
+import { Compass, Loader2, FileUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
 import type { CVUploadResult } from "@/types";
@@ -105,10 +105,10 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
   return (
     <div className="w-full">
       <div
-        className={`border border-dashed rounded-2xl p-16 flex flex-col items-center justify-center text-center transition-all duration-300 cursor-pointer bg-[#0E0E12]/80 backdrop-blur-md shadow-xl shadow-black/20 ${
+        className={`cp-map-lines border border-dashed rounded-2xl p-16 flex flex-col items-center justify-center text-center transition-all duration-300 cursor-pointer bg-[var(--cp-surface-glass)] backdrop-blur-md shadow-xl shadow-black/20 ${
           isDragging
-            ? "border-[#7C74DB] bg-[#7C74DB]/5 scale-[1.01]"
-            : "border-white/[0.08] hover:border-white/[0.15] hover:shadow-black/30"
+            ? "border-[var(--cp-border-strong)] bg-[rgba(201,130,74,0.10)] scale-[1.01]"
+            : "border-[var(--cp-border-medium)] hover:border-[var(--cp-border-strong)] hover:shadow-black/30"
         }`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -117,30 +117,33 @@ export function CvUpload({ onUploadSuccess }: CvUploadProps) {
       >
         {isUploading ? (
           <>
-            <div className="h-14 w-14 rounded-2xl bg-[#0E0E12] flex items-center justify-center border border-white/[0.06] mb-4">
-              <Loader2 className="h-6 w-6 text-[#7C74DB] animate-spin" />
+            <div className="h-14 w-14 rounded-2xl bg-[var(--cp-bg-deep)] flex items-center justify-center border border-[var(--cp-border-soft)] mb-4">
+              <Loader2 className="h-6 w-6 text-[var(--cp-copper-strong)] animate-spin" />
             </div>
-            <p className="text-sm font-semibold text-white">Parsing {fileName}...</p>
-            <p className="text-xs text-white/40 mt-1 max-w-xs leading-relaxed">
+            <p className="text-sm font-semibold text-[var(--cp-text-main)]">Parsing {fileName}...</p>
+            <p className="text-xs text-[var(--cp-text-muted)] mt-1 max-w-xs leading-relaxed">
               Extracting skills, experience, education, and projects via AI
             </p>
           </>
         ) : (
           <>
-            <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-[#534AB7]/20 to-[#7C74DB]/10 flex items-center justify-center border border-white/[0.04] mb-4 shadow-lg shadow-[#534AB7]/5">
-              <UploadCloud className="h-6 w-6 text-[#7C74DB]" />
+            <div className="h-14 w-14 rounded-2xl bg-[rgba(201,130,74,0.14)] flex items-center justify-center border border-[var(--cp-border-medium)] mb-4 shadow-lg shadow-[var(--cp-glow-copper)]">
+              <Compass className="h-5 w-5 text-[var(--cp-champagne)]" />
             </div>
-            <h3 className="text-lg font-bold text-white mb-1">
-              Drag &amp; drop your CV here
+            <h3 className="font-display text-3xl font-semibold tracking-normal text-[var(--cp-text-main)] mb-2">
+              Turn your CV into a career engine.
             </h3>
-            <p className="text-sm text-white/40 mb-5">
-              Supports PDF and DOCX — max 5 MB
+            <p className="max-w-xl text-sm leading-6 text-[var(--cp-text-muted)] mb-2">
+              Upload your resume and CareerPilot will build your profile, match jobs, and personalize guidance.
+            </p>
+            <p className="text-xs text-[var(--cp-text-subtle)] mb-5">
+              Supports PDF and DOCX - max 5 MB.
             </p>
             <Button
               type="button"
-              className="bg-[#1E1B3A]/40 border border-white/[0.06] text-white hover:bg-[#1E1B3A]/80 hover:text-white rounded-xl h-10 px-4 transition-colors"
+              className="rounded-xl h-10 px-4"
             >
-              <FileUp className="mr-2 h-4 w-4 text-[#AFA9EC]" /> Browse Files
+              <FileUp className="mr-2 h-4 w-4" /> Browse Files
             </Button>
           </>
         )}

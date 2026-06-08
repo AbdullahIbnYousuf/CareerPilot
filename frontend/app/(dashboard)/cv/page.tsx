@@ -2,10 +2,11 @@
 
 import { Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Briefcase,
   CheckCircle2,
+  Eye,
   FileUp,
   GraduationCap,
   Link as LinkIcon,
@@ -30,6 +31,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
 import type {
   CVUploadResult,
+  ProfileSaveResult,
   ProfileEducation,
   ProfileExperience,
   ProfileLink,
@@ -68,6 +70,24 @@ const emptyLink = (): ProfileLink => ({
   url: "",
 });
 
+const emptyUserProfile = (userId: string): UserProfile => ({
+  user_id: userId,
+  active_cv_id: null,
+  full_name: "",
+  headline: "",
+  location: "",
+  email: "",
+  phone: "",
+  links: [],
+  summary: "",
+  skills: [],
+  experience: [],
+  education: [],
+  projects: [],
+  certifications: [],
+  raw_sections: {},
+});
+
 const listToText = (items: string[]) => items.join(", ");
 
 const textToList = (value: string) =>
@@ -92,6 +112,7 @@ const profileToPayload = (profile: UserProfile): ProfilePayload => ({
 });
 
 function ProfilePageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -105,6 +126,8 @@ function ProfilePageContent() {
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   const shouldOpenUploader = searchParams.get("upload") === "1";
+  const shouldOpenBuilder = searchParams.get("build") === "1";
+  const shouldOpenPreview = searchParams.get("preview") === "1";
 
   useEffect(() => {
     if (shouldOpenUploader) {
@@ -139,8 +162,20 @@ function ProfilePageContent() {
         }
 
         const body: { profile: UserProfile | null } = await response.json();
-        setProfile(body.profile);
-        setDraft(body.profile);
+        const loadedProfile = body.profile;
+        setProfile(loadedProfile);
+
+        if (shouldOpenBuilder) {
+          setDraft(loadedProfile ?? emptyUserProfile(id));
+          setIsEditing(true);
+          setShowUploader(false);
+        } else {
+          setDraft(loadedProfile);
+        }
+
+        if (shouldOpenPreview && loadedProfile) {
+          router.replace("/cv/preview");
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load profile");
       } finally {
@@ -149,9 +184,10 @@ function ProfilePageContent() {
     };
 
     loadProfile();
-  }, [apiBaseUrl]);
+  }, [apiBaseUrl, router, shouldOpenBuilder, shouldOpenPreview]);
 
-  const hasProfile = Boolean(profile && draft);
+  const hasProfile = Boolean(profile);
+  const hasDraft = Boolean(draft);
 
   const generatedLabel = profile?.updated_at
     ? new Date(profile.updated_at).toLocaleDateString(undefined, {
@@ -168,6 +204,24 @@ function ProfilePageContent() {
     setShowUploader(false);
     setNotice(`${data.file_name} parsed into your profile.`);
     setError("");
+  };
+
+  const startManualBuild = () => {
+    if (!userId) return;
+    setDraft(profile ?? emptyUserProfile(userId));
+    setIsEditing(true);
+    setShowUploader(false);
+    setError("");
+    setNotice("");
+  };
+
+  const clearStaleJobSearchCache = () => {
+    if (userId) {
+      window.localStorage.removeItem(`careerPilot_lastJobSearch:v2:${userId}`);
+    }
+    Object.keys(window.localStorage)
+      .filter((key) => key.startsWith("careerpilot:jobs:"))
+      .forEach((key) => window.localStorage.removeItem(key));
   };
 
   const updateDraft = <K extends keyof ProfilePayload>(
@@ -266,7 +320,7 @@ function ProfilePageContent() {
       const response = await fetch(
         `${apiBaseUrl}/api/cv/profile?user_id=${encodeURIComponent(userId)}`,
         {
-          method: "PATCH",
+          method: profile ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(profileToPayload(draft)),
         },
@@ -277,11 +331,22 @@ function ProfilePageContent() {
         throw new Error(errData.detail || "Failed to save profile");
       }
 
-      const saved: UserProfile = await response.json();
+      const body: ProfileSaveResult | UserProfile = await response.json();
+      const saved: UserProfile = "profile" in body ? body.profile : body;
       setProfile(saved);
       setDraft(saved);
       setIsEditing(false);
-      setNotice("Profile saved.");
+      clearStaleJobSearchCache();
+      window.dispatchEvent(
+        new CustomEvent("careerpilot:cv-updated", {
+          detail: { userId, cvId: "cv_id" in body ? body.cv_id : saved.active_cv_id },
+        }),
+      );
+      setNotice(
+        "message" in body
+          ? body.message
+          : "Profile saved and CV intelligence updated.",
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save profile");
     } finally {
@@ -295,25 +360,30 @@ function ProfilePageContent() {
     setError("");
   };
 
+  const openResumePreview = () => {
+    if (!profile) return;
+    router.push("/cv/preview");
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div className="no-print flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2 mb-1">
-            <div className="h-6 w-6 rounded-md bg-primary/20 flex items-center justify-center">
+            <div className="h-6 w-6 rounded-md border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.14)] flex items-center justify-center">
               <User2 className="h-3.5 w-3.5 text-primary" />
             </div>
-            <span className="text-xs font-semibold text-primary uppercase tracking-widest">
+            <span className="text-xs font-semibold text-[var(--cp-copper-strong)] uppercase tracking-widest">
               Workspace
             </span>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Profile</h1>
-          <p className="text-white/40 text-sm mt-1">
+          <h1 className="font-display text-4xl font-semibold tracking-normal text-[var(--cp-text-main)]">Profile</h1>
+          <p className="text-[var(--cp-text-muted)] text-sm mt-1">
             Your CV-powered career profile for matching, chat, and applications.
           </p>
         </div>
 
-        {hasProfile && (
+        {hasDraft && (
           <div className="flex flex-wrap items-center gap-2">
             {isEditing ? (
               <>
@@ -321,7 +391,7 @@ function ProfilePageContent() {
                   type="button"
                   onClick={saveProfile}
                   disabled={isSaving}
-                  className="h-10 rounded-xl bg-gradient-to-r from-[#534AB7] to-[#6B63CC] text-white hover:from-[#5E55CC] hover:to-[#7A73DD]"
+                  className="h-10 rounded-xl"
                 >
                   {isSaving ? (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -333,7 +403,7 @@ function ProfilePageContent() {
                 <Button
                   type="button"
                   onClick={cancelEditing}
-                  className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+                  className="h-10 rounded-xl"
                 >
                   <X className="mr-2 h-4 w-4" />
                   Cancel
@@ -341,10 +411,22 @@ function ProfilePageContent() {
               </>
             ) : (
               <>
+                {profile && (
+                  <>
+                    <Button
+                      type="button"
+                      onClick={openResumePreview}
+                      className="h-10 rounded-xl"
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
+                      Preview Resume
+                    </Button>
+                  </>
+                )}
                 <Button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="h-10 rounded-xl bg-[#1E1B3A]/50 border border-white/[0.08] text-white hover:bg-[#1E1B3A]"
+                  className="h-10 rounded-xl"
                 >
                   <Pencil className="mr-2 h-4 w-4" />
                   Edit
@@ -352,7 +434,7 @@ function ProfilePageContent() {
                 <Button
                   type="button"
                   onClick={() => setShowUploader((current) => !current)}
-                  className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+                  className="h-10 rounded-xl"
                 >
                   <FileUp className="mr-2 h-4 w-4" />
                   New CV
@@ -364,31 +446,31 @@ function ProfilePageContent() {
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+        <div className="no-print rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </div>
       )}
 
       {notice && (
-        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
+        <div className="no-print rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4" />
           {notice}
         </div>
       )}
 
       {isLoading ? (
-        <div className="flex h-[320px] items-center justify-center rounded-2xl border border-dashed border-white/[0.06] bg-[#0E0E12]/70">
+        <div className="no-print flex h-[320px] items-center justify-center rounded-2xl border border-dashed border-white/[0.06] bg-[#0E0E12]/70">
           <div className="flex flex-col items-center gap-3 text-white/50">
             <Loader2 className="h-6 w-6 animate-spin text-primary" />
             <p className="text-sm">Loading profile</p>
           </div>
         </div>
       ) : !userId ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 text-sm text-white/50">
+        <div className="no-print rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 text-sm text-white/50">
           Please sign in to manage your profile.
         </div>
-      ) : !hasProfile || showUploader ? (
-        <div className="space-y-4">
+      ) : showUploader ? (
+        <div className="no-print space-y-4">
           {hasProfile && (
             <Button
               type="button"
@@ -401,15 +483,42 @@ function ProfilePageContent() {
           )}
           <CvUpload onUploadSuccess={handleUploadSuccess} />
         </div>
+      ) : !hasDraft ? (
+        <div className="no-print rounded-2xl border border-white/[0.06] bg-[#0E0E12] p-6 shadow-xl shadow-black/30">
+          <div className="max-w-2xl space-y-3">
+            <h2 className="text-xl font-bold text-white">Start your career profile</h2>
+            <p className="text-sm leading-6 text-white/50">
+              Upload an existing CV or build one here. CareerPilot uses this profile for job matching, chat, and your resume export.
+            </p>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button
+              type="button"
+              onClick={() => setShowUploader(true)}
+              className="h-10 rounded-xl"
+            >
+              <FileUp className="mr-2 h-4 w-4" />
+              Upload CV
+            </Button>
+            <Button
+              type="button"
+              onClick={startManualBuild}
+              className="h-10 rounded-xl bg-white/[0.04] border border-white/[0.08] text-white hover:bg-white/[0.08]"
+            >
+              <Pencil className="mr-2 h-4 w-4" />
+              Build profile manually
+            </Button>
+          </div>
+        </div>
       ) : draft ? (
-        <div className="space-y-5">
-          <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
-            <CardHeader className="border-b border-white/[0.04]">
-              <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
-                <Sparkles className="h-4 w-4 text-[#7C74DB]" />
+        <div className="no-print space-y-5">
+          <Card className="cp-surface-elevated rounded-2xl">
+            <CardHeader className="border-b border-[var(--cp-border-soft)]">
+              <CardTitle className="flex items-center gap-2 text-base font-bold text-[var(--cp-text-main)]">
+                <Sparkles className="h-4 w-4 text-[var(--cp-copper-strong)]" />
                 Overview
                 {generatedLabel && (
-                  <span className="ml-auto text-xs font-medium text-white/25">
+                    <span className="ml-auto text-xs font-medium text-[var(--cp-text-subtle)]">
                     Updated {generatedLabel}
                   </span>
                 )}
@@ -470,7 +579,7 @@ function ProfilePageContent() {
           <Card className="bg-[#0E0E12] border border-white/[0.06] rounded-2xl shadow-xl shadow-black/30">
             <CardHeader className="border-b border-white/[0.04]">
               <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
-                <LinkIcon className="h-4 w-4 text-[#7C74DB]" />
+                <LinkIcon className="h-4 w-4 text-[var(--cp-copper-strong)]" />
                 Links
                 {isEditing && (
                   <IconButton onClick={() => updateDraft("links", [...draft.links, emptyLink()])}>
@@ -542,7 +651,7 @@ function ProfilePageContent() {
 
           <ProfileSection
             title="Experience"
-            icon={<Briefcase className="h-4 w-4 text-[#7C74DB]" />}
+            icon={<Briefcase className="h-4 w-4 text-[var(--cp-copper-strong)]" />}
             canEdit={isEditing}
             onAdd={() => updateDraft("experience", [...draft.experience, emptyExperience()])}
             emptyText="No experience extracted."
@@ -606,7 +715,7 @@ function ProfilePageContent() {
 
           <ProfileSection
             title="Education"
-            icon={<GraduationCap className="h-4 w-4 text-[#7C74DB]" />}
+            icon={<GraduationCap className="h-4 w-4 text-[var(--cp-copper-strong)]" />}
             canEdit={isEditing}
             onAdd={() => updateDraft("education", [...draft.education, emptyEducation()])}
             emptyText="No education extracted."
@@ -670,7 +779,7 @@ function ProfilePageContent() {
 
           <ProfileSection
             title="Projects"
-            icon={<Sparkles className="h-4 w-4 text-[#7C74DB]" />}
+            icon={<Sparkles className="h-4 w-4 text-[var(--cp-copper-strong)]" />}
             canEdit={isEditing}
             onAdd={() => updateDraft("projects", [...draft.projects, emptyProject()])}
             emptyText="No projects extracted."
@@ -715,6 +824,7 @@ function ProfilePageContent() {
               </div>
             ))}
           </ProfileSection>
+
         </div>
       ) : null}
     </div>

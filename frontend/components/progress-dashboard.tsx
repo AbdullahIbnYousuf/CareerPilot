@@ -54,10 +54,10 @@ interface StatsPayload {
 }
 
 const CHART_TOOLTIP_STYLE = {
-  backgroundColor: "#0E0E12",
-  border: "1px solid rgba(255,255,255,0.06)",
+  backgroundColor: "#211F1D",
+  border: "1px solid rgba(224,164,106,0.22)",
   borderRadius: "8px",
-  color: "#ffffff",
+  color: "#F6F0E8",
   fontSize: "12px",
 };
 
@@ -78,11 +78,11 @@ const EMPTY_STATUS_COUNTS: StatusCounts = {
 };
 
 const statusItems = [
-  { key: "saved", label: "Saved", icon: Briefcase, color: "text-slate-400", bg: "bg-slate-400/10" },
-  { key: "applied", label: "Applied", icon: Send, color: "text-blue-400", bg: "bg-blue-400/10" },
-  { key: "interviewing", label: "Interviewing", icon: Users, color: "text-amber-400", bg: "bg-amber-400/10" },
-  { key: "offer", label: "Offer", icon: Trophy, color: "text-emerald-400", bg: "bg-emerald-400/10" },
-  { key: "rejected", label: "Rejected", icon: XCircle, color: "text-red-400", bg: "bg-red-400/10" },
+  { key: "saved", label: "Saved", icon: Briefcase, color: "text-[var(--cp-text-muted)]", bg: "bg-[rgba(255,255,255,0.04)]" },
+  { key: "applied", label: "Applied", icon: Send, color: "text-[var(--cp-copper-strong)]", bg: "bg-[rgba(201,130,74,0.12)]" },
+  { key: "interviewing", label: "Interviewing", icon: Users, color: "text-[var(--cp-champagne)]", bg: "bg-[rgba(242,214,162,0.10)]" },
+  { key: "offer", label: "Offer", icon: Trophy, color: "text-emerald-300", bg: "bg-emerald-400/10" },
+  { key: "rejected", label: "Rejected", icon: XCircle, color: "text-red-300", bg: "bg-red-400/10" },
 ] as const;
 
 export function ProgressDashboard() {
@@ -209,7 +209,7 @@ export function ProgressDashboard() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-[#7C74DB]" />
+        <Loader2 className="h-6 w-6 animate-spin text-[var(--cp-copper-strong)]" />
       </div>
     );
   }
@@ -233,7 +233,7 @@ export function ProgressDashboard() {
       label: "Saved high-fit jobs",
       value: attention.high_fit_saved,
       detail: "Ready to apply",
-      tone: "text-[#AFA9EC]",
+      tone: "text-[var(--cp-champagne)]",
     },
     {
       label: "Overdue tasks",
@@ -251,7 +251,7 @@ export function ProgressDashboard() {
       label: "Active goals",
       value: attention.active_goals,
       detail: `${attention.completed_goals} completed`,
-      tone: "text-blue-300",
+      tone: "text-[var(--cp-copper-strong)]",
     },
   ];
 
@@ -262,10 +262,10 @@ export function ProgressDashboard() {
           {nudges.map((nudge) => (
             <div
               key={nudge.id}
-              className="flex flex-col gap-3 rounded-xl border border-[#534AB7]/20 bg-[#534AB7]/10 p-4 text-white/90 shadow-md"
+            className="flex flex-col gap-3 rounded-xl border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.10)] p-4 text-white/90 shadow-md"
             >
               <div className="flex items-start gap-3">
-                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-[#AFA9EC]" />
+                <Bell className="mt-0.5 h-4 w-4 shrink-0 text-[var(--cp-champagne)]" />
                 <p className="flex-1 text-sm">{nudge.message}</p>
                 <button
                   className="shrink-0 text-xs text-white/40 underline transition-colors hover:text-white"
@@ -277,13 +277,13 @@ export function ProgressDashboard() {
 
               {/* Linked Jobs list */}
               {nudge.jobs && nudge.jobs.length > 0 && (
-                <div className="border-t border-[#534AB7]/20 pt-3">
+                <div className="border-t border-[var(--cp-border-medium)] pt-3">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-white/45 mb-2">Suggested Roles</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                     {nudge.jobs.slice(0, 3).map((job) => (
                       <div 
                         key={job.id} 
-                        className="flex items-center justify-between rounded-xl bg-white/[0.02] border border-white/[0.04] p-3 hover:bg-white/[0.04] transition-all"
+                        className="flex items-center justify-between rounded-xl border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3 transition-all hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.06)]"
                       >
                         <div className="min-w-0 flex-1 pr-2">
                           <p className="text-xs font-semibold text-white/90 truncate">{job.title}</p>
@@ -291,8 +291,8 @@ export function ProgressDashboard() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           {job.fit_score !== undefined && job.fit_score !== null && (
-                            <span className={`text-[10px] font-bold ${
-                              job.fit_score >= 70 ? "text-emerald-400" : job.fit_score >= 40 ? "text-amber-400" : "text-red-400"
+                              <span className={`text-[10px] font-bold ${
+                              job.fit_score >= 70 ? "text-emerald-300" : job.fit_score >= 40 ? "text-[var(--cp-champagne)]" : "text-red-300"
                             }`}>
                               {job.fit_score}%
                             </span>
@@ -302,7 +302,7 @@ export function ProgressDashboard() {
                               href={job.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-[#534AB7]/20 text-[#AFA9EC] hover:bg-[#534AB7]/30 transition-all border border-[#534AB7]/20"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.12)] text-[var(--cp-champagne)] transition-all hover:border-[var(--cp-border-strong)] hover:bg-[rgba(201,130,74,0.18)]"
                             >
                               <ExternalLink className="h-3 w-3" />
                             </a>
@@ -324,14 +324,14 @@ export function ProgressDashboard() {
           value={snapshot?.applications_sent ?? 0}
           helper="Saved roles do not count"
           icon={Send}
-          iconClassName="text-blue-300"
+          iconClassName="text-[var(--cp-copper-strong)]"
         />
         <MetricCard
           title="Active Pipeline"
           value={activeApplications}
           helper="Applied, interviewing, or offer"
           icon={Briefcase}
-          iconClassName="text-[#AFA9EC]"
+          iconClassName="text-[var(--cp-champagne)]"
         />
         <MetricCard
           title="Task Completion"
@@ -346,7 +346,7 @@ export function ProgressDashboard() {
           value={`${snapshot?.streak_days ?? 0}d`}
           helper="Consecutive days with a done task"
           icon={Flame}
-          iconClassName="text-orange-300"
+          iconClassName="text-[var(--cp-copper-strong)]"
         />
       </div>
 
@@ -360,11 +360,11 @@ export function ProgressDashboard() {
               : `${skillGrowth.profile_skills_count} profile skills tracked`
           }
           icon={Sparkles}
-          iconClassName="text-violet-300"
+          iconClassName="text-[var(--cp-champagne)]"
         />
       </div>
 
-      <Card className="border border-white/[0.06] bg-[#0E0E12] shadow-xl shadow-black/30">
+      <Card className="border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] shadow-xl shadow-black/30">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-bold text-white">
             <AlertTriangle className="h-4 w-4 text-amber-300" />
@@ -377,7 +377,7 @@ export function ProgressDashboard() {
               {attentionItems.map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-lg border border-white/[0.04] bg-white/[0.02] p-3"
+                  className="rounded-lg border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-3"
                 >
                   <div className={`text-2xl font-bold ${item.tone}`}>
                     {item.value}
@@ -408,7 +408,7 @@ export function ProgressDashboard() {
       </Card>
 
       {totalApplications === 0 && (
-        <div className="rounded-lg border border-[#534AB7]/20 bg-[#534AB7]/10 p-4">
+        <div className="rounded-lg border border-[var(--cp-border-medium)] bg-[rgba(201,130,74,0.10)] p-4">
           <p className="text-sm font-semibold text-white">No applications tracked yet.</p>
           <p className="mt-1 text-xs text-white/45">
             Save a job from the Job Hunter page or move a saved role into Applied to start building dashboard history.
@@ -416,7 +416,7 @@ export function ProgressDashboard() {
         </div>
       )}
 
-      <Card className="border border-white/[0.06] bg-[#0E0E12] shadow-xl shadow-black/30">
+      <Card className="border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] shadow-xl shadow-black/30">
         <CardHeader>
           <CardTitle className="text-base font-bold text-white">Application Pipeline</CardTitle>
         </CardHeader>
@@ -428,7 +428,7 @@ export function ProgressDashboard() {
               return (
                 <div
                   key={item.key}
-                  className="flex flex-col items-center gap-1.5 rounded-lg border border-white/[0.04] bg-white/[0.02] p-4 transition-all hover:bg-white/[0.04]"
+                  className="flex flex-col items-center gap-1.5 rounded-lg border border-[var(--cp-border-soft)] bg-[var(--cp-surface-elevated)] p-4 transition-all hover:border-[var(--cp-border-medium)] hover:bg-[rgba(201,130,74,0.06)]"
                 >
                   <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${item.bg}`}>
                     <Icon className={`h-4 w-4 ${item.color}`} />
@@ -461,7 +461,7 @@ export function ProgressDashboard() {
                   allowDecimals={false}
                 />
                 <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                <Bar dataKey="applications_sent" name="Applications" fill="#7C74DB" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="applications_sent" name="Applications" fill="#C9824A" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -487,7 +487,7 @@ export function ProgressDashboard() {
                   allowDecimals={false}
                 />
                 <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                <Bar dataKey="count" name="Applications" fill="#AFA9EC" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" name="Applications" fill="#E0A46A" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -513,7 +513,7 @@ export function ProgressDashboard() {
                   allowDecimals={false}
                 />
                 <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                <Bar dataKey="count" name="Jobs" fill="#534AB7" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" name="Jobs" fill="#F2D6A2" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -541,7 +541,7 @@ function MetricCard({
   progress?: number;
 }) {
   return (
-    <Card className="border border-white/[0.06] bg-[#0E0E12] shadow-xl shadow-black/30">
+    <Card className="border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] shadow-xl shadow-black/30">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-sm font-semibold text-white/60">{title}</CardTitle>
         <Icon className={`h-4 w-4 ${iconClassName}`} />
@@ -550,9 +550,9 @@ function MetricCard({
         <div className="text-3xl font-bold text-white">{value}</div>
         <p className="mt-1 text-xs text-white/30">{helper}</p>
         {typeof progress === "number" && (
-          <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+          <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#534AB7] to-[#7C74DB] transition-all duration-700"
+              className="h-full rounded-full bg-gradient-to-r from-[var(--cp-copper-deep)] to-[var(--cp-copper-strong)] transition-all duration-700"
               style={{ width: `${Math.max(0, Math.min(progress, 100))}%` }}
             />
           </div>
@@ -572,10 +572,10 @@ function DashboardChartCard({
   children: ReactNode;
 }) {
   return (
-    <Card className="border border-white/[0.06] bg-[#0E0E12] shadow-xl shadow-black/30">
+    <Card className="border border-[var(--cp-border-soft)] bg-[var(--cp-surface)] shadow-xl shadow-black/30">
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-bold text-white">
-          <Icon className="h-4 w-4 text-[#7C74DB]" />
+          <Icon className="h-4 w-4 text-[var(--cp-copper-strong)]" />
           {title}
         </CardTitle>
       </CardHeader>
