@@ -18,11 +18,14 @@ backend/venv/
 !.env.example
 !**/.env.example
 
-# IDE
+# IDE tools
 .vscode/
 .idea/
 *.swp
 *.swo
+.kiro/
+.antigravitycli/
+.antigravity/
 
 # OS
 .DS_Store
