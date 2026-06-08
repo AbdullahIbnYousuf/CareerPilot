@@ -149,6 +149,7 @@ export interface ProfileEducation {
   field: string;
   start_year: string;
   end_year: string;
+  cgpa?: string;
   details: string;
 }
 

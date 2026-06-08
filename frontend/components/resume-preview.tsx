@@ -265,6 +265,7 @@ function EducationSection({ items }: { items: ProfileEducation[] }) {
       item.field,
       item.start_year,
       item.end_year,
+      item.cgpa,
       item.details,
     ].some(cleanString),
   );
@@ -276,10 +277,16 @@ function EducationSection({ items }: { items: ProfileEducation[] }) {
         const title = cleanString(item.institution) || "Education";
         const degree = joinNonEmpty([item.degree, item.field], ", ");
         const dates = formatDateRange(item.start_year, item.end_year);
+        const cgpa = cleanString(item.cgpa);
         const details = bulletize(item.details, 3);
 
         return (
           <ResumeItem key={`${title}-${index}`} title={title} meta={degree} dates={dates}>
+            {cgpa && (
+              <p className="mt-0.5 text-[9.5px] leading-snug text-slate-600">
+                <span className="font-semibold">CGPA:</span> {cgpa}
+              </p>
+            )}
             {details.length > 0 && <BulletList items={details} />}
           </ResumeItem>
         );

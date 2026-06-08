@@ -55,6 +55,7 @@ const emptyEducation = (): ProfileEducation => ({
   field: "",
   start_year: "",
   end_year: "",
+  cgpa: "",
   details: "",
 });
 
@@ -761,6 +762,13 @@ function ProfilePageContent() {
                     />
                   </div>
                 </div>
+                <Input
+                  value={item.cgpa ?? ""}
+                  disabled={!isEditing}
+                  placeholder="CGPA (e.g. 3.85 / 4.00)"
+                  onChange={(event) => updateEducation(index, "cgpa", event.target.value)}
+                  className="bg-white/[0.04] border-white/[0.08] text-white disabled:opacity-70"
+                />
                 <Textarea
                   value={item.details}
                   disabled={!isEditing}
