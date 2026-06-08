@@ -6,13 +6,6 @@ Handles business logic for conversational assistant:
   - Saves message logs
   - Streams conversational response from Groq Llama 3.3 70B using session history and RAG context
 """
-Chat Service — CareerPilot (Pillar 3: AI Assistant)
-
-Handles business logic for conversational assistant:
-  - Fetches message history
-  - Saves message logs
-  - Streams conversational response from Groq Llama 3.3 70B using session history and RAG context
-"""
 
 import os
 import json
