@@ -83,19 +83,6 @@ export default function DashboardLayout({
 
         {/* Footer — logout */}
         <div className="px-3 pb-6 pt-4 border-t border-[var(--cp-border-soft)]">
-          <div className="mb-3 flex items-center gap-3 rounded-xl border border-[var(--cp-border-soft)] bg-[rgba(255,255,255,0.025)] px-3 py-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[rgba(201,130,74,0.14)] text-xs font-bold text-[var(--cp-champagne)]">
-              CP
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-semibold text-[var(--cp-text-soft)]">
-                Workspace
-              </p>
-              <p className="truncate text-[10px] text-[var(--cp-text-subtle)]">
-                Premium pathfinder
-              </p>
-            </div>
-          </div>
           <Button
             variant="ghost"
             className="w-full justify-start gap-3 rounded-xl px-4 py-3"
